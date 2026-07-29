@@ -7,7 +7,7 @@ No hay modelos, texturas ni sonidos descargados de terceros en esta etapa.
 - `icon.webp`: icono low-poly de un astronauta cápsula azul esquivando un
   meteorito naranja sobre una plataforma turquesa, generado específicamente
   para OneProyect y reducido a 512×512 WebP (23 KiB).
-- Los tres efectos de sonido se sintetizan una sola vez al iniciar mediante
+- Los cuatro efectos de sonido se sintetizan una sola vez al iniciar mediante
   `scripts/gameplay/sound_bank.gd`; no agregan archivos de audio al APK.
 
 Prompt resumido del icono:

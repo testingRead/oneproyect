@@ -10,10 +10,14 @@ gama baja. Usa Godot 4.7.1, GDScript y el renderer Compatibility/OpenGL.
 - Android: joystick izquierdo, arrastre en la mitad derecha para cámara y botón
   **SALTO**. Pausa y reinicio están en la barra superior.
 
-La primera arena, **Plaza Caos**, ejecuta rondas de lluvia de meteoritos con
-marcas de advertencia, refugios, daño, impulso físico y un pool fijo de objetos.
+La primera arena, **Plaza Caos**, alterna dos desastres:
+
+- lluvia de meteoritos con marcas, refugios, daño e impulso físico;
+- pulso sísmico, un único anillo reutilizable que debe saltarse o evitarse
+  subiendo a la plataforma central.
+
 Los techos bloquean físicamente las explosiones: refugiarse es una mecánica real,
-no solamente decorativa.
+no solamente decorativa. Ninguno de los dos modos crea nodos durante la ronda.
 El contador superior muestra FPS y tiempo aproximado por frame.
 
 ## Multijugador de prueba

@@ -43,6 +43,8 @@ func _run() -> void:
 	var disaster: DisasterController = game.get_node("World/DisasterController")
 	var meteors := disaster.find_children("Meteor*", "Node3D", false, false)
 	_require(meteors.size() == EXPECTED_METEOR_POOL, "Meteor pool must be preallocated")
+	var shockwaves := disaster.find_children("ShockwaveRing", "Node3D", false, false)
+	_require(shockwaves.size() == 1, "Exactly one reusable shockwave must be preallocated")
 
 	var player: GrayboxPlayer = game.get_node("World/Player")
 	var start_z := player.global_position.z
@@ -80,6 +82,29 @@ func _run() -> void:
 		await physics_frame
 	_require(player.get_health() == GrayboxPlayer.MAX_HEALTH, "Shelter roof must block meteor blast")
 
+	var shockwave: ShockwaveRing = shockwaves[0]
+	player.heal_full()
+	player.global_position = Vector3(4.0, 1.25, 0.0)
+	player.velocity = Vector3.ZERO
+	shockwave.launch(0.05, 18, 8.5)
+	for frame in 125:
+		await physics_frame
+	var wave_exposed_health := player.get_health()
+	_require(wave_exposed_health < GrayboxPlayer.MAX_HEALTH, "Grounded player must be hit by shockwave")
+
+	player.heal_full()
+	player.global_position = Vector3(2.0, 2.1, 0.0)
+	player.velocity = Vector3.ZERO
+	for frame in 10:
+		await physics_frame
+	shockwave.launch(0.05, 18, 8.5)
+	for frame in 125:
+		await physics_frame
+	_require(
+		player.get_health() == GrayboxPlayer.MAX_HEALTH,
+		"Elevated center platform must protect from shockwave"
+	)
+
 	var remote: RemoteAvatar = REMOTE_AVATAR_SCENE.instantiate()
 	game.get_node("World/RemotePlayers").add_child(remote)
 	remote.configure("Prueba", 2, Vector3.ZERO)
@@ -90,11 +115,13 @@ func _run() -> void:
 	)
 	remote.queue_free()
 
-	print("SMOKE_OK lights=%d meshes=%d meteors=%d exposed_health=%d sheltered_health=%d" % [
+	print("SMOKE_OK lights=%d meshes=%d meteors=%d meteor_health=%d shelter_health=%d wave_health=%d elevated_health=%d" % [
 		lights.size(),
 		meshes.size(),
 		meteors.size(),
 		exposed_health,
+		GrayboxPlayer.MAX_HEALTH,
+		wave_exposed_health,
 		player.get_health(),
 	])
 	quit(0)

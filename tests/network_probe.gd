@@ -10,6 +10,7 @@ var online := false
 var saw_remote := false
 var saw_snapshot := false
 var saw_meteor := false
+var saw_shockwave := false
 var saw_round_state := false
 
 
@@ -41,6 +42,9 @@ func _setup() -> void:
 	network.meteor_received.connect(func(_target: Vector3, _drift: Vector2, _damage: int, _force: float) -> void:
 		saw_meteor = true
 	)
+	network.shockwave_received.connect(func() -> void:
+		saw_shockwave = true
+	)
 	network.round_state_received.connect(func(_state: int, _round: int, _time: float) -> void:
 		saw_round_state = true
 	)
@@ -62,16 +66,18 @@ func _run() -> void:
 				network.send_snapshot(Vector3(2.0, 1.2, -3.0), 0.75)
 				if network.is_simulation_host() and not sent_events and elapsed > 1.0:
 					network.broadcast_meteor(Vector3(1.0, 0.06, 1.0), Vector2.ZERO, 22, 10.5)
+					network.broadcast_shockwave()
 					network.broadcast_round_state(1, 3, 20.0)
 					sent_events = true
 					events_sent_at = elapsed
 					saw_meteor = true
+					saw_shockwave = true
 					saw_round_state = true
 			else:
 				network.send_snapshot(Vector3(-2.0, 1.2, 3.0), -0.75)
 		if _is_complete(sent_events, elapsed - events_sent_at):
 			print(
-				"NETWORK_PROBE_OK role=%s players=%d host=%s remote=%s snapshot=%s meteor=%s round=%s"
+				"NETWORK_PROBE_OK role=%s players=%d host=%s remote=%s snapshot=%s meteor=%s shockwave=%s round=%s"
 				% [
 					role,
 					network.get_player_count(),
@@ -79,6 +85,7 @@ func _run() -> void:
 					saw_remote,
 					saw_snapshot,
 					saw_meteor,
+					saw_shockwave,
 					saw_round_state,
 				]
 			)
@@ -91,7 +98,7 @@ func _run() -> void:
 func _is_complete(sent_events: bool, event_age: float) -> bool:
 	if role == "host":
 		return online and saw_remote and saw_snapshot and sent_events and event_age >= 1.0
-	return online and saw_remote and saw_snapshot and saw_meteor and saw_round_state
+	return online and saw_remote and saw_snapshot and saw_meteor and saw_shockwave and saw_round_state
 
 
 func _on_status(_text: String, is_online: bool) -> void:

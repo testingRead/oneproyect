@@ -3,6 +3,7 @@ extends Node
 
 @onready var warning_player: AudioStreamPlayer = $Warning
 @onready var impact_player: AudioStreamPlayer = $Impact
+@onready var shockwave_player: AudioStreamPlayer = $Shockwave
 @onready var success_player: AudioStreamPlayer = $Success
 
 const MIX_RATE := 11025
@@ -11,6 +12,7 @@ const MIX_RATE := 11025
 func _ready() -> void:
 	warning_player.stream = _make_tone(620.0, 0.16, 0.55, 0.82)
 	impact_player.stream = _make_impact(0.34, 0.72)
+	shockwave_player.stream = _make_shockwave()
 	success_player.stream = _make_success()
 
 
@@ -20,6 +22,10 @@ func play_warning() -> void:
 
 func play_impact() -> void:
 	impact_player.play()
+
+
+func play_shockwave() -> void:
+	shockwave_player.play()
 
 
 func play_success() -> void:
@@ -65,6 +71,21 @@ func _make_success() -> AudioStreamWAV:
 		var note_time: float = fmod(time, 0.18)
 		var envelope: float = clampf(1.0 - note_time / 0.2, 0.0, 1.0)
 		var sample: float = sin(TAU * note * time) * envelope * 0.48
+		data[frame] = int(clampf(sample * 127.0 + 128.0, 0.0, 255.0))
+	return _build_stream(data)
+
+
+func _make_shockwave() -> AudioStreamWAV:
+	var duration := 0.58
+	var frame_count := int(MIX_RATE * duration)
+	var data := PackedByteArray()
+	data.resize(frame_count)
+	for frame in frame_count:
+		var progress := float(frame) / frame_count
+		var time := float(frame) / MIX_RATE
+		var frequency := lerpf(145.0, 46.0, progress)
+		var envelope := pow(1.0 - progress, 1.45)
+		var sample := sin(TAU * frequency * time) * envelope * 0.62
 		data[frame] = int(clampf(sample * 127.0 + 128.0, 0.0, 255.0))
 	return _build_stream(data)
 

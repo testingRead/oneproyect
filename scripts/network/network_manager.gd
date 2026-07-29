@@ -7,6 +7,7 @@ signal remote_player_joined(peer_id: int, display_name: String, color_index: int
 signal remote_player_left(peer_id: int)
 signal remote_snapshot(peer_id: int, position: Vector3, facing_yaw: float)
 signal meteor_received(target: Vector3, drift: Vector2, damage: int, blast_force: float)
+signal shockwave_received
 signal round_state_received(state: int, round_number: int, time_left: float)
 signal simulation_host_changed(peer_id: int)
 
@@ -133,6 +134,13 @@ func broadcast_round_state(state: int, round_number: int, time_left: float) -> v
 	_rpc_submit_round_state.rpc_id(1, state, round_number, time_left)
 
 
+func broadcast_shockwave() -> void:
+	if not is_simulation_host():
+		return
+	shockwave_received.emit()
+	_rpc_submit_shockwave.rpc_id(1)
+
+
 @rpc("any_peer", "call_remote", "reliable", 0)
 func _rpc_register_player(requested_name: String, requested_color: int, requested_host_score: int) -> void:
 	if not multiplayer.is_server():
@@ -236,6 +244,23 @@ func _rpc_submit_meteor(target: Vector3, drift: Vector2, damage: int, blast_forc
 @rpc("authority", "call_remote", "reliable", 0)
 func _rpc_receive_meteor(target: Vector3, drift: Vector2, damage: int, blast_force: float) -> void:
 	meteor_received.emit(target, drift, damage, blast_force)
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_submit_shockwave() -> void:
+	if not multiplayer.is_server():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if sender != _simulation_host_id:
+		return
+	for peer_id in _players:
+		if peer_id != sender:
+			_rpc_receive_shockwave.rpc_id(peer_id)
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_receive_shockwave() -> void:
+	shockwave_received.emit()
 
 
 @rpc("any_peer", "call_remote", "reliable", 0)

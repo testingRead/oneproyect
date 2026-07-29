@@ -342,6 +342,9 @@ max_polyphony = 3
 volume_db = -5.0
 max_polyphony = 4
 
+[node name="Shockwave" type="AudioStreamPlayer" parent="SoundBank"]
+volume_db = -7.0
+
 [node name="Success" type="AudioStreamPlayer" parent="SoundBank"]
 volume_db = -6.0
 

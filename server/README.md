@@ -19,5 +19,5 @@ para el VPS actual:
 - directorio del juego de sólo lectura.
 
 La prueba `tests/network_probe.gd` levanta dos clientes completos. CI exige que
-ambos intercambien nombres, posiciones, un meteorito y el estado de ronda antes
-de generar los APK.
+ambos intercambien nombres, posiciones, un meteorito, una onda sísmica y el
+estado de ronda antes de generar los APK.
