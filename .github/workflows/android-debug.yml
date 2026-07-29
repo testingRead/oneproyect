@@ -83,6 +83,13 @@ jobs:
           set -euo pipefail
           "$HOME/.cache/oneproyect-godot/godot" --headless --editor --path "$GITHUB_WORKSPACE" --quit
 
+      - name: Run gameplay smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$HOME/.cache/oneproyect-godot/godot" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/smoke_test.gd
+
       - name: Prepare stable debug signing
         shell: bash
         env:
@@ -137,7 +144,7 @@ jobs:
             build/android/oneproyect-debug-arm64.apk
             build/android/oneproyect-debug-arm64.apk.sha256
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
 
       - name: Publish ARM32 APK artifact
         uses: actions/upload-artifact@v4
@@ -147,4 +154,4 @@ jobs:
             build/android/oneproyect-debug-arm32.apk
             build/android/oneproyect-debug-arm32.apk.sha256
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1

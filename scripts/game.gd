@@ -1,13 +1,17 @@
 extends Node3D
 
 @onready var player: GrayboxPlayer = $World/Player
+@onready var disaster: DisasterController = $World/DisasterController
+@onready var sounds: SoundBank = $SoundBank
 @onready var fps_label: Label = $HUD/TopBar/FPS
-@onready var status_label: Label = $HUD/Status
+@onready var health_label: Label = $HUD/TopBar/Health
+@onready var round_title: Label = $HUD/RoundPanel/Title
+@onready var round_detail: Label = $HUD/RoundPanel/Detail
+@onready var round_clock: Label = $HUD/RoundPanel/Clock
 @onready var pause_panel: Control = $HUD/PausePanel
 @onready var pause_button: Button = $HUD/TopBar/Pause
 @onready var touch_debug: Label = $HUD/TouchDebug
 
-var _completed := false
 var _stats_elapsed := 0.0
 
 
@@ -20,8 +24,14 @@ func _ready() -> void:
 	$HUD/TopBar/Restart.pressed.connect(restart_level)
 	$HUD/PausePanel/Center/Resume.pressed.connect(toggle_pause)
 	$HUD/PausePanel/Center/Restart.pressed.connect(restart_level)
-	$World/Goal.body_entered.connect(_on_goal_body_entered)
-	status_label.text = "OBJETIVO: LLEGA AL CILINDRO VERDE"
+	player.health_changed.connect(_on_health_changed)
+	player.defeated.connect(_on_player_defeated)
+	disaster.state_changed.connect(_on_disaster_state_changed)
+	disaster.clock_changed.connect(_on_disaster_clock_changed)
+	disaster.round_survived.connect(_on_round_survived)
+	disaster.meteor_warning.connect(sounds.play_warning)
+	disaster.meteor_impact.connect(sounds.play_impact)
+	_on_health_changed(100, 100)
 
 
 func _process(delta: float) -> void:
@@ -43,8 +53,6 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func toggle_pause() -> void:
-	if _completed:
-		return
 	get_tree().paused = not get_tree().paused
 	pause_panel.visible = get_tree().paused
 	pause_button.text = "SEGUIR" if get_tree().paused else "PAUSA"
@@ -54,30 +62,43 @@ func toggle_pause() -> void:
 
 func restart_level() -> void:
 	get_tree().paused = false
-	_completed = false
 	pause_panel.visible = false
 	pause_button.text = "PAUSA"
 	$HUD/PausePanel/Center/Title.text = "EN PAUSA"
 	$HUD/PausePanel/Center/Resume.visible = true
-	status_label.text = "OBJETIVO: LLEGA AL CILINDRO VERDE"
 	player.reset_to_spawn()
+	disaster.restart_cycle()
 	if not OS.has_feature("mobile"):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-
-
-func _on_goal_body_entered(body: Node3D) -> void:
-	if body != player or _completed:
-		return
-	_completed = true
-	status_label.text = "¡OBJETIVO COMPLETADO!  PULSA REINICIAR"
-	get_tree().paused = true
-	pause_panel.visible = true
-	$HUD/PausePanel/Center/Title.text = "¡OBJETIVO COMPLETADO!"
-	$HUD/PausePanel/Center/Resume.visible = false
-	if not OS.has_feature("mobile"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
 func _on_touch_move(value: Vector2) -> void:
 	player.set_touch_move(value)
 	touch_debug.text = "JOY  %.2f  %.2f" % [value.x, value.y]
+
+
+func _on_health_changed(current: int, maximum: int) -> void:
+	health_label.text = "VIDA  %d/%d" % [current, maximum]
+	if current <= 35:
+		health_label.modulate = Color(1.0, 0.4, 0.32)
+	else:
+		health_label.modulate = Color.WHITE
+
+
+func _on_player_defeated() -> void:
+	round_detail.text = "¡Te derribaron! Regresas a la plaza"
+	player.reset_to_spawn()
+
+
+func _on_disaster_state_changed(title: String, detail: String) -> void:
+	round_title.text = title
+	round_detail.text = detail
+
+
+func _on_disaster_clock_changed(seconds_left: int) -> void:
+	round_clock.text = "%02d" % seconds_left
+
+
+func _on_round_survived(_round_number: int) -> void:
+	sounds.play_success()
+	player.heal_full()

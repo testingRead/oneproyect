@@ -11,18 +11,29 @@ extends CharacterBody3D
 @onready var visual: Node3D = $Visual
 @onready var camera_rig: Node3D = $CameraRig
 
+signal health_changed(current: int, maximum: int)
+signal defeated
+
+const MAX_HEALTH := 100
+
 var _touch_move := Vector2.ZERO
 var _jump_requested := false
 var _spawn_transform: Transform3D
+var _health := MAX_HEALTH
+var _invulnerability := 0.0
 
 
 func _ready() -> void:
 	_spawn_transform = global_transform
+	floor_snap_length = 0.35
+	add_to_group("players")
+	health_changed.emit(_health, MAX_HEALTH)
 	if not OS.has_feature("mobile"):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _physics_process(delta: float) -> void:
+	_invulnerability = maxf(0.0, _invulnerability - delta)
 	var desktop_move := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var movement_input := _touch_move if _touch_move.length_squared() > desktop_move.length_squared() else desktop_move
 	var yaw_basis := Basis(Vector3.UP, camera_rig.rotation.y)
@@ -72,6 +83,35 @@ func reset_to_spawn() -> void:
 	velocity = Vector3.ZERO
 	_touch_move = Vector2.ZERO
 	camera_rig.rotation = Vector3(-0.22, 0.0, 0.0)
+	heal_full()
+
+
+func heal_full() -> void:
+	_health = MAX_HEALTH
+	_invulnerability = 0.0
+	health_changed.emit(_health, MAX_HEALTH)
+
+
+func get_health() -> int:
+	return _health
+
+
+func apply_damage_and_knockback(origin: Vector3, force: float, damage: int) -> void:
+	if _invulnerability > 0.0:
+		return
+	var away := global_position - origin
+	away.y = 0.0
+	if away.length_squared() < 0.01:
+		away = Vector3.FORWARD
+	away = away.normalized()
+	velocity.x += away.x * force
+	velocity.z += away.z * force
+	velocity.y = maxf(velocity.y, force * 0.62)
+	_health = maxi(0, _health - damage)
+	_invulnerability = 0.45
+	health_changed.emit(_health, MAX_HEALTH)
+	if _health == 0:
+		defeated.emit()
 
 
 func _apply_look(delta: Vector2) -> void:

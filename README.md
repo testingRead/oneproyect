@@ -1,7 +1,7 @@
 # OneProyect
 
-Graybox 3D para Android orientado a teléfonos de gama baja. Usa Godot 4.7.1,
-GDScript y el renderer Compatibility/OpenGL.
+Juego 3D de supervivencia a desastres para Android orientado a teléfonos de
+gama baja. Usa Godot 4.7.1, GDScript y el renderer Compatibility/OpenGL.
 
 ## Controles
 
@@ -10,8 +10,9 @@ GDScript y el renderer Compatibility/OpenGL.
 - Android: joystick izquierdo, arrastre en la mitad derecha para cámara y botón
   **SALTO**. Pausa y reinicio están en la barra superior.
 
-El objetivo inicial es alcanzar el cilindro verde. El contador superior muestra
-FPS y tiempo aproximado por frame.
+La primera arena, **Plaza Caos**, ejecuta rondas de lluvia de meteoritos con
+marcas de advertencia, refugios, daño, impulso físico y un pool fijo de objetos.
+El contador superior muestra FPS y tiempo aproximado por frame.
 
 ## Exportación reproducible
 
@@ -25,3 +26,5 @@ Se ejecuta en pushes a `main`/`agent/graybox` y manualmente desde GitHub Actions
 Las builds de prueba usan una firma estable guardada únicamente en GitHub
 Actions Secrets, por lo que las siguientes versiones podrán instalarse como
 actualizaciones sin cambiar la identidad de la aplicación.
+
+Los artifacts se conservan solamente 1 día para limitar almacenamiento.

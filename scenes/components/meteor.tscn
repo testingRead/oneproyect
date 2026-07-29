@@ -1,0 +1,84 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/meteor_slot.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="MatWarning"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.24, 0.05, 0.52)
+no_depth_test = true
+
+[sub_resource type="CylinderMesh" id="MeshWarning"]
+material = SubResource("MatWarning")
+top_radius = 1.65
+bottom_radius = 1.65
+height = 0.025
+radial_segments = 20
+
+[sub_resource type="StandardMaterial3D" id="MatMeteor"]
+albedo_color = Color(0.16, 0.12, 0.11, 1)
+roughness = 0.96
+
+[sub_resource type="SphereMesh" id="MeshMeteor"]
+material = SubResource("MatMeteor")
+radius = 0.72
+height = 1.44
+radial_segments = 10
+rings = 5
+
+[sub_resource type="SphereShape3D" id="ShapeMeteor"]
+radius = 0.72
+
+[sub_resource type="SphereShape3D" id="ShapeBlast"]
+radius = 2.75
+
+[sub_resource type="StandardMaterial3D" id="MatShockwave"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.55, 0.12, 0.58)
+no_depth_test = true
+
+[sub_resource type="CylinderMesh" id="MeshShockwave"]
+material = SubResource("MatShockwave")
+top_radius = 2.25
+bottom_radius = 2.25
+height = 0.06
+radial_segments = 20
+
+[node name="MeteorSlot" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="WarningMarker" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.035, 0)
+mesh = SubResource("MeshWarning")
+cast_shadow = 0
+
+[node name="Meteor" type="RigidBody3D" parent="."]
+position = Vector3(0, 12, 0)
+mass = 3.0
+collision_layer = 0
+collision_mask = 1
+contact_monitor = true
+max_contacts_reported = 4
+continuous_cd = true
+
+[node name="Mesh" type="MeshInstance3D" parent="Meteor"]
+mesh = SubResource("MeshMeteor")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="Meteor"]
+shape = SubResource("ShapeMeteor")
+
+[node name="BlastArea" type="Area3D" parent="."]
+position = Vector3(0, 0.5, 0)
+collision_layer = 0
+collision_mask = 1
+monitoring = true
+
+[node name="Collision" type="CollisionShape3D" parent="BlastArea"]
+shape = SubResource("ShapeBlast")
+
+[node name="Shockwave" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.08, 0)
+mesh = SubResource("MeshShockwave")
+cast_shadow = 0
