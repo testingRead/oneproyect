@@ -1,0 +1,105 @@
+name: Android debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - agent/graybox
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-debug-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.7.1"
+  GODOT_STATUS: "stable"
+  GODOT_BINARY_SHA256: "c7ff14fd28472c8d4f193043de30278dcf7e5241a1dcf7566b02e27addaa33ba"
+  GODOT_TEMPLATES_SHA256: "86409db6200b6f8fd3230989c2d2002851f3dd18acf11d7bdbafddf5a0dd0f72"
+
+jobs:
+  build:
+    name: Export debug APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache pinned Godot tools
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/oneproyect-godot
+            ~/.local/share/godot/export_templates/4.7.1.stable
+          key: godot-linux-4.7.1-stable-v1
+
+      - name: Install pinned Godot editor and templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIST_DIR="$HOME/.cache/oneproyect-godot"
+          TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}"
+          RELEASE="${GODOT_VERSION}-${GODOT_STATUS}"
+          BINARY_ZIP="Godot_v${RELEASE}_linux.x86_64.zip"
+          TEMPLATE_TPZ="Godot_v${RELEASE}_export_templates.tpz"
+          BASE_URL="https://github.com/godotengine/godot-builds/releases/download/${RELEASE}"
+          mkdir -p "$DIST_DIR" "$TEMPLATE_DIR"
+
+          if [[ ! -x "$DIST_DIR/godot" ]]; then
+            curl --fail --location --retry 3 --output "$DIST_DIR/$BINARY_ZIP" "$BASE_URL/$BINARY_ZIP"
+            echo "${GODOT_BINARY_SHA256}  $DIST_DIR/$BINARY_ZIP" | sha256sum --check -
+            unzip -q -o "$DIST_DIR/$BINARY_ZIP" -d "$DIST_DIR/unpacked"
+            mv "$DIST_DIR/unpacked/Godot_v${RELEASE}_linux.x86_64" "$DIST_DIR/godot"
+            chmod +x "$DIST_DIR/godot"
+            rm -r "$DIST_DIR/unpacked"
+          fi
+
+          if [[ ! -f "$TEMPLATE_DIR/android_debug.apk" ]]; then
+            curl --fail --location --retry 3 --output "$DIST_DIR/$TEMPLATE_TPZ" "$BASE_URL/$TEMPLATE_TPZ"
+            echo "${GODOT_TEMPLATES_SHA256}  $DIST_DIR/$TEMPLATE_TPZ" | sha256sum --check -
+            mkdir -p "$DIST_DIR/templates-unpacked"
+            unzip -q -o "$DIST_DIR/$TEMPLATE_TPZ" -d "$DIST_DIR/templates-unpacked"
+            cp -a "$DIST_DIR/templates-unpacked/templates/." "$TEMPLATE_DIR/"
+            rm -r "$DIST_DIR/templates-unpacked"
+          fi
+
+          "$DIST_DIR/godot" --version
+
+      - name: Import and validate project
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$HOME/.cache/oneproyect-godot/godot" --headless --editor --path "$GITHUB_WORKSPACE" --quit
+
+      - name: Export Android debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/android
+          "$HOME/.cache/oneproyect-godot/godot" --headless --path "$GITHUB_WORKSPACE" \
+            --export-debug "Android Debug" build/android/oneproyect-debug.apk
+          test -s build/android/oneproyect-debug.apk
+          ls -lh build/android/oneproyect-debug.apk
+          sha256sum build/android/oneproyect-debug.apk > build/android/oneproyect-debug.apk.sha256
+
+      - name: Publish APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oneproyect-android-debug-${{ github.run_number }}
+          path: |
+            build/android/oneproyect-debug.apk
+            build/android/oneproyect-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 14

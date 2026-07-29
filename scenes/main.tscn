@@ -1,0 +1,276 @@
+[gd_scene load_steps=20 format=3]
+
+[ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
+[ext_resource type="Script" path="res://scripts/player.gd" id="2_player"]
+[ext_resource type="Script" path="res://scripts/virtual_joystick.gd" id="3_joystick"]
+[ext_resource type="Script" path="res://scripts/look_pad.gd" id="4_look"]
+[ext_resource type="Script" path="res://scripts/touch_action_button.gd" id="5_button"]
+
+[sub_resource type="StandardMaterial3D" id="MatFloor"]
+albedo_color = Color(0.23, 0.27, 0.32, 1)
+roughness = 1.0
+
+[sub_resource type="BoxMesh" id="MeshFloor"]
+material = SubResource("MatFloor")
+size = Vector3(20, 0.5, 20)
+
+[sub_resource type="BoxShape3D" id="ShapeFloor"]
+size = Vector3(20, 0.5, 20)
+
+[sub_resource type="StandardMaterial3D" id="MatObstacle"]
+albedo_color = Color(0.43, 0.47, 0.52, 1)
+roughness = 1.0
+
+[sub_resource type="BoxMesh" id="MeshObstacle"]
+material = SubResource("MatObstacle")
+size = Vector3(2.5, 1.5, 2.5)
+
+[sub_resource type="BoxShape3D" id="ShapeObstacle"]
+size = Vector3(2.5, 1.5, 2.5)
+
+[sub_resource type="StandardMaterial3D" id="MatPlayer"]
+albedo_color = Color(0.2, 0.55, 0.95, 1)
+roughness = 0.9
+
+[sub_resource type="CapsuleMesh" id="MeshPlayer"]
+material = SubResource("MatPlayer")
+radius = 0.5
+height = 1.8
+radial_segments = 12
+rings = 4
+
+[sub_resource type="CapsuleShape3D" id="ShapePlayer"]
+radius = 0.5
+height = 1.8
+
+[sub_resource type="StandardMaterial3D" id="MatGoal"]
+albedo_color = Color(0.16, 0.9, 0.35, 1)
+roughness = 0.8
+
+[sub_resource type="CylinderMesh" id="MeshGoal"]
+material = SubResource("MatGoal")
+top_radius = 0.8
+bottom_radius = 0.8
+height = 0.15
+radial_segments = 16
+
+[sub_resource type="CylinderShape3D" id="ShapeGoal"]
+radius = 1.1
+height = 1.5
+
+[sub_resource type="Environment" id="EnvironmentMain"]
+background_mode = 1
+background_color = Color(0.055, 0.067, 0.082, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.72, 0.78, 0.88, 1)
+ambient_light_energy = 0.65
+reflected_light_source = 2
+tonemap_mode = 0
+
+[node name="Main" type="Node3D"]
+script = ExtResource("1_game")
+
+[node name="World" type="Node3D" parent="."]
+process_mode = 1
+
+[node name="Environment" type="WorldEnvironment" parent="World"]
+environment = SubResource("EnvironmentMain")
+
+[node name="Sun" type="DirectionalLight3D" parent="World"]
+rotation_degrees = Vector3(-55, -30, 0)
+light_energy = 0.75
+shadow_enabled = false
+
+[node name="Floor" type="StaticBody3D" parent="World"]
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Floor"]
+mesh = SubResource("MeshFloor")
+
+[node name="Collision" type="CollisionShape3D" parent="World/Floor"]
+shape = SubResource("ShapeFloor")
+
+[node name="ObstacleA" type="StaticBody3D" parent="World"]
+position = Vector3(-3.5, 0.75, -2.5)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/ObstacleA"]
+mesh = SubResource("MeshObstacle")
+
+[node name="Collision" type="CollisionShape3D" parent="World/ObstacleA"]
+shape = SubResource("ShapeObstacle")
+
+[node name="ObstacleB" type="StaticBody3D" parent="World"]
+position = Vector3(3.5, 0.75, -5.0)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/ObstacleB"]
+mesh = SubResource("MeshObstacle")
+
+[node name="Collision" type="CollisionShape3D" parent="World/ObstacleB"]
+shape = SubResource("ShapeObstacle")
+
+[node name="Player" type="CharacterBody3D" parent="World"]
+position = Vector3(0, 1.2, 6)
+script = ExtResource("2_player")
+
+[node name="Collision" type="CollisionShape3D" parent="World/Player"]
+shape = SubResource("ShapePlayer")
+
+[node name="Visual" type="Node3D" parent="World/Player"]
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Player/Visual"]
+mesh = SubResource("MeshPlayer")
+
+[node name="CameraRig" type="Node3D" parent="World/Player"]
+rotation = Vector3(-0.22, 0, 0)
+
+[node name="SpringArm" type="SpringArm3D" parent="World/Player/CameraRig"]
+spring_length = 5.5
+margin = 0.15
+collision_mask = 1
+
+[node name="Camera" type="Camera3D" parent="World/Player/CameraRig/SpringArm"]
+current = true
+fov = 68.0
+near = 0.1
+far = 60.0
+
+[node name="Goal" type="Area3D" parent="World"]
+position = Vector3(0, 0.4, -7.5)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Goal"]
+mesh = SubResource("MeshGoal")
+
+[node name="Collision" type="CollisionShape3D" parent="World/Goal"]
+position = Vector3(0, 0.5, 0)
+shape = SubResource("ShapeGoal")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+process_mode = 3
+
+[node name="LookPad" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 6
+anchor_left = 0.5
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 0
+grow_vertical = 2
+script = ExtResource("4_look")
+
+[node name="Joystick" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 3
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 32.0
+offset_top = -236.0
+offset_right = 236.0
+offset_bottom = -32.0
+grow_vertical = 0
+script = ExtResource("3_joystick")
+
+[node name="Jump" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -204.0
+offset_top = -204.0
+offset_right = -48.0
+offset_bottom = -48.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("5_button")
+
+[node name="TopBar" type="HBoxContainer" parent="HUD"]
+layout_mode = 3
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 18.0
+offset_top = 16.0
+offset_right = -18.0
+offset_bottom = 58.0
+grow_horizontal = 2
+theme_override_constants/separation = 12
+
+[node name="FPS" type="Label" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.9, 1, 1)
+theme_override_font_sizes/font_size = 19
+text = "60 FPS  16.7 ms"
+
+[node name="Spacer" type="Control" parent="HUD/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Restart" type="Button" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(130, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "REINICIAR"
+[node name="Pause" type="Button" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(110, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "PAUSA"
+
+[node name="Status" type="Label" parent="HUD"]
+layout_mode = 3
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 72.0
+offset_bottom = 108.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.85, 1, 0.88, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.8)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 22
+text = "OBJETIVO"
+horizontal_alignment = 1
+
+[node name="PausePanel" type="ColorRect" parent="HUD"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.02, 0.025, 0.035, 0.86)
+mouse_filter = 0
+
+[node name="Center" type="VBoxContainer" parent="HUD/PausePanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -170.0
+offset_top = -100.0
+offset_right = 170.0
+offset_bottom = 100.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="HUD/PausePanel/Center"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "EN PAUSA"
+horizontal_alignment = 1
+
+[node name="Resume" type="Button" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 54)
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "CONTINUAR"
+
+[node name="Restart" type="Button" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 54)
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "REINICIAR"
