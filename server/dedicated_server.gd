@@ -254,6 +254,7 @@ func _rpc_leave_room() -> void:
 		return
 	var removed: RefCounted = room.session_manager.remove_by_peer_id(sender)
 	if removed != null:
+		room.release_player_cache(removed.player_id)
 		for session: RefCounted in room.session_manager.sessions:
 			if session.connected and _peer_can_receive(session.peer_id):
 				_rpc_player_left.rpc_id(session.peer_id, removed.player_id, false)
@@ -629,6 +630,7 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	)
 	if session == null:
 		return
+	room.call_deferred("_refresh_host")
 	call_deferred("_notify_session_suspended", room, session.player_id)
 	call_deferred("_broadcast_room_waiting", room)
 	call_deferred("_broadcast_lobby_rooms")
@@ -683,6 +685,7 @@ func _on_shockwave_started(room: Node) -> void:
 
 
 func _on_session_expired(room: Node, player_id: int) -> void:
+	room.release_player_cache(player_id)
 	var connected_peers := multiplayer.get_peers()
 	for session: RefCounted in room.session_manager.sessions:
 		if (

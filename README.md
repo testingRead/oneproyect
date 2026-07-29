@@ -115,3 +115,5 @@ La ruta recomendada para exportar directamente en el teléfono está documentada
 en [docs/ANDROID_LOCAL_BUILD.md](docs/ANDROID_LOCAL_BUILD.md).
 Las decisiones de escalado y persistencia están en
 [docs/QUALITY_AND_PROGRESSION.md](docs/QUALITY_AND_PROGRESSION.md).
+Las mediciones y el plan de capacidad del servidor están en
+[docs/SERVER_CAPACITY.md](docs/SERVER_CAPACITY.md).

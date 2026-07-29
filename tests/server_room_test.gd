@@ -2,6 +2,8 @@ extends SceneTree
 
 const NET := preload("res://shared/net_constants.gd")
 const CODEC := preload("res://shared/net_codec.gd")
+
+var _failed := false
 const ROOM_SCRIPT := preload("res://server/room_state.gd")
 const ROOM_MANAGER_SCRIPT := preload("res://server/room_manager.gd")
 
@@ -144,6 +146,15 @@ func _run() -> void:
 		CODEC.snapshot_ack_sequence(recipient_snapshot) == 3,
 		"Recipient snapshot must retain a compact owner confirmation"
 	)
+	_require(
+		room._snapshot_buffers.has(first.player_id),
+		"Recipient snapshot buffer must be cached while the player remains"
+	)
+	room.release_player_cache(first.player_id)
+	_require(
+		not room._snapshot_buffers.has(first.player_id),
+		"Leaving players must release their long-lived snapshot buffer"
+	)
 	for expected_round in [2, 3]:
 		room.phase_end_tick = room.server_tick + 1
 		room.tick()
@@ -248,11 +259,11 @@ func _run() -> void:
 			NET.RECONNECT_TICKS,
 		]
 	)
-	quit(0)
+	quit(1 if _failed else 0)
 
 
 func _require(condition: bool, message: String) -> void:
 	if condition:
 		return
+	_failed = true
 	push_error("SERVER_ROOM_FAIL: " + message)
-	quit(1)

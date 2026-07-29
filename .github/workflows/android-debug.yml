@@ -93,6 +93,11 @@ jobs:
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/server_room_test.gd
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/server_capacity_benchmark.gd \
+            > "$RUNNER_TEMP/oneproyect-capacity.log"
+          grep -q "SERVER_CAPACITY rooms=50 players=250" \
+            "$RUNNER_TEMP/oneproyect-capacity.log"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/menu_smoke_test.gd
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/smoke_test.gd

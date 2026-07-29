@@ -43,7 +43,8 @@ func _ready() -> void:
 
 func tick() -> void:
 	server_tick += 1
-	session_manager.purge_expired(server_tick)
+	if server_tick % NET.SERVER_TICK_RATE == 0:
+		session_manager.purge_expired(server_tick)
 	_refresh_host()
 	if (
 		phase == NET.RoomPhase.WAITING
@@ -111,6 +112,10 @@ func build_snapshot_for(recipient_player_id: int) -> PackedByteArray:
 func apply_owned_state(peer_id: int, packet: PackedByteArray) -> bool:
 	var session: RefCounted = session_manager.find_by_peer_id(peer_id)
 	return session != null and session.accept_owned_state(packet, server_tick)
+
+
+func release_player_cache(player_id: int) -> void:
+	_snapshot_buffers.erase(player_id)
 
 
 func apply_push(peer_id: int, target_player_id: int, direction: Vector3) -> bool:
