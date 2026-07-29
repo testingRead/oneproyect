@@ -235,7 +235,7 @@ jobs:
           }
           trap report_export_failure ERR
           GODOT="$HOME/.cache/oneproyect-godot/godot"
-          SERVER_BIN="$GITHUB_WORKSPACE/build/server/oneproyect-server.x86_64"
+          SERVER_BIN="$GITHUB_WORKSPACE/build/server/oneproyect-server"
           SERVER_PCK="$GITHUB_WORKSPACE/build/server/oneproyect-server.pck"
           SERVER_TEMPLATE="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}/linux_release.x86_64"
           SERVER_LOG="$RUNNER_TEMP/oneproyect-exported-server.log"
@@ -260,7 +260,7 @@ jobs:
             false
           fi
           phase="start_exported_server"
-          "$SERVER_BIN" --headless -- --server --port=19998 > "$SERVER_LOG" 2>&1 &
+          "$SERVER_BIN" --headless --main-pack "$SERVER_PCK" -- --server --port=19998 > "$SERVER_LOG" 2>&1 &
           server_pid=$!
           cleanup_server_export() {
             kill "$server_pid" 2>/dev/null || true
