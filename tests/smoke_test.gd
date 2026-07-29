@@ -42,6 +42,11 @@ func _run() -> void:
 		and menu.find_child("ReadyRoom", true, false) is Button,
 		"Waiting room must expose character selection and ready confirmation"
 	)
+	_require(
+		menu.find_child("ModeExclusion", true, false) is OptionButton
+		and menu.find_child("ModeExclusion", true, false).item_count == 5,
+		"Waiting room must expose one optional minigame veto"
+	)
 	menu.queue_free()
 	await process_frame
 
@@ -51,13 +56,21 @@ func _run() -> void:
 	root.add_child(game)
 	await process_frame
 	await physics_frame
+	# Profile settings persist between runs. Force the baseline before checking
+	# the low-end rendering budget so this test is deterministic.
+	game.set("_quality_level", 0)
+	game.call("_apply_quality")
+	var player: GrayboxPlayer = game.get_node("World/Player")
 
 	var lights := game.find_children("*", "Light3D", true, false)
 	_require(lights.size() <= 1, "Low-end budget allows at most one light")
 	for light: Light3D in lights:
 		_require(not light.shadow_enabled, "Low-end light must not cast shadows")
 	var meshes := game.get_node("World").find_children("*", "MeshInstance3D", true, false)
-	_require(meshes.size() <= 68, "Low-end world mesh-node budget exceeded")
+	var visible_meshes := 0
+	for mesh: MeshInstance3D in meshes:
+		visible_meshes += int(mesh.is_visible_in_tree())
+	_require(visible_meshes <= 86, "Low-end visible mesh budget exceeded")
 	_require(
 		ProjectSettings.get_setting("rendering/renderer/rendering_method") == "gl_compatibility",
 		"Project must use the Compatibility renderer"
@@ -74,12 +87,13 @@ func _run() -> void:
 		"Shared ACTIVE phase must never be rendered as RESULT"
 	)
 	_require(
-		disaster.get_registered_mode_ids() == [&"meteors", &"shockwave", &"flood"],
+		disaster.get_registered_mode_ids()
+		== [&"meteors", &"shockwave", &"flood", &"shooter"],
 		"Round controller must discover independent minigame modules in scene order"
 	)
 	var map_host: Node3D = game.get_node("World/ModeMapHost")
 	_require(
-		map_host.get_registered_map_ids() == [&"plaza_caos"],
+		map_host.get_registered_map_ids() == [&"plaza_caos", &"campo_tiro"],
 		"Map host must discover data-driven common maps"
 	)
 	var initial_plan := disaster.get_upcoming_plan()
@@ -96,7 +110,11 @@ func _run() -> void:
 		"Round selection must produce a complete reusable experience plan"
 	)
 	_require(
-		initial_plan.map_id == &"plaza_caos",
+		(
+			initial_plan.map_id == &"campo_tiro"
+			if initial_plan.mode_id == &"shooter"
+			else initial_plan.map_id == &"plaza_caos"
+		),
 		"Common mode must select only a tag-compatible map"
 	)
 	var feature_host: Node = game.get_node("ExperienceFeatureHost")
@@ -117,6 +135,20 @@ func _run() -> void:
 		and test_feature.feature_context.is_empty(),
 		"Features omitted by the next plan must deactivate without rebuilding the game"
 	)
+	var shooter_plan := initial_plan.duplicate(true)
+	shooter_plan.mode_id = &"shooter"
+	shooter_plan.map_id = &"campo_tiro"
+	shooter_plan.feature_ids = PackedStringArray(["shooter_controls"])
+	feature_host.apply_experience(shooter_plan)
+	_require(
+		game.get_node("HUD/Shoot").visible and player.is_first_person(),
+		"Shooter feature must provide its own touch control and camera profile"
+	)
+	feature_host.clear_experience()
+	_require(
+		not game.get_node("HUD/Shoot").visible,
+		"Shooter controls must disappear when another minigame starts"
+	)
 	disaster.set_physics_process(false)
 	var meteors := disaster.get_node("MeteorMode").find_children("Meteor*", "", false, false)
 	_require(meteors.size() == EXPECTED_METEOR_POOL, "Meteor pool must be preallocated")
@@ -130,7 +162,6 @@ func _run() -> void:
 	var floods := disaster.get_node("FloodMode").find_children("FloodHazard", "", false, false)
 	_require(floods.size() == 1, "Exactly one reusable flood surface must be preallocated")
 
-	var player: GrayboxPlayer = game.get_node("World/Player")
 	_require(player.get_node("Visual/Head") != null, "Player must have a recognizable low-poly head")
 	_require(player.get_node("Visual/LeftArm") != null, "Player must have low-poly limbs")
 	_require(
@@ -227,8 +258,14 @@ func _run() -> void:
 	game._on_quality_selected(1)
 	suit_material = player.get_node("Visual/Body").material_override as StandardMaterial3D
 	_require(suit_material.albedo_texture != null, "Quality profile must apply shared texture")
+	_require(game.get_node("World/Sun").shadow_enabled, "Medium quality must inherit former High shadows")
 	game._on_quality_selected(2)
 	_require(game.get_node("World/Sun").shadow_enabled, "High quality must enable the optional shadow")
+	_require(
+		player.get_node("Visual/Head").mesh is SphereMesh
+		and game.get_node("World/Environment").environment.fog_enabled,
+		"High quality must use rounded characters and atmospheric fog"
+	)
 	game._on_quality_selected(0)
 	_require(not game.get_node("World/Sun").shadow_enabled, "Low quality must disable shadows")
 
@@ -422,6 +459,17 @@ func _run() -> void:
 	map_host.activate_selection(&"default", &"plaza_caos")
 	await physics_frame
 	_require(game.get_node("World/Arena").visible, "Default arena must restore after a custom mode")
+	map_host.activate_selection(&"shooter", &"campo_tiro")
+	await physics_frame
+	var shooter_map := game.get_node("World/ModeMapHost/ModeMap_campo_tiro")
+	_require(
+		not game.get_node("World/Arena").visible
+		and shooter_map.find_children("PhysicsProp*", "RigidBody3D", true, false).size() == 10
+		and player.global_position.distance_to(Vector3(0.0, 1.2, 19.0)) < 0.1,
+		"Shooter map must replace the plaza with separated spawns and physical props"
+	)
+	map_host.activate_selection(&"default", &"plaza_caos")
+	await physics_frame
 
 	disaster.round_started.emit(99)
 	disaster.round_survived.emit(99)
@@ -455,7 +503,11 @@ func _run() -> void:
 			"Random selector must not repeat the same mode consecutively"
 		)
 		_require(
-			random_plan.map_id == &"plaza_caos",
+			(
+				random_plan.map_id == &"campo_tiro"
+				if random_plan.mode_id == &"shooter"
+				else random_plan.map_id == &"plaza_caos"
+			),
 			"Random selector must preserve mode/map compatibility"
 		)
 		disaster._activate_plan(random_plan)

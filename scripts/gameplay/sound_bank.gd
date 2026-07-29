@@ -5,6 +5,7 @@ extends Node
 @onready var impact_player: AudioStreamPlayer = $Impact
 @onready var shockwave_player: AudioStreamPlayer = $Shockwave
 @onready var success_player: AudioStreamPlayer = $Success
+@onready var shot_player: AudioStreamPlayer = $Shot
 
 const MIX_RATE := 11025
 
@@ -16,6 +17,7 @@ func _ready() -> void:
 	impact_player.stream = _make_impact(0.34, 0.72)
 	shockwave_player.stream = _make_shockwave()
 	success_player.stream = _make_success()
+	shot_player.stream = _make_shot()
 
 
 func play_warning() -> void:
@@ -38,6 +40,11 @@ func play_success() -> void:
 		success_player.play()
 
 
+func play_shot() -> void:
+	if _enabled:
+		shot_player.play()
+
+
 func set_enabled(enabled: bool) -> void:
 	_enabled = enabled
 	if not enabled:
@@ -45,6 +52,7 @@ func set_enabled(enabled: bool) -> void:
 		impact_player.stop()
 		shockwave_player.stop()
 		success_player.stop()
+		shot_player.stop()
 
 
 func is_enabled() -> bool:
@@ -105,6 +113,24 @@ func _make_shockwave() -> AudioStreamWAV:
 		var frequency := lerpf(145.0, 46.0, progress)
 		var envelope := pow(1.0 - progress, 1.45)
 		var sample := sin(TAU * frequency * time) * envelope * 0.62
+		data[frame] = int(clampf(sample * 127.0 + 128.0, 0.0, 255.0))
+	return _build_stream(data)
+
+
+func _make_shot() -> AudioStreamWAV:
+	var duration := 0.14
+	var frame_count := int(MIX_RATE * duration)
+	var data := PackedByteArray()
+	data.resize(frame_count)
+	var noise_state := 918273
+	for frame in frame_count:
+		noise_state = (noise_state * 1103515245 + 12345) & 0x7fffffff
+		var progress := float(frame) / frame_count
+		var time := float(frame) / MIX_RATE
+		var crack := sin(TAU * lerpf(820.0, 170.0, progress) * time)
+		var noise := float(noise_state % 2001 - 1000) / 1000.0
+		var envelope := pow(1.0 - progress, 3.2)
+		var sample := (crack * 0.62 + noise * 0.38) * envelope * 0.72
 		data[frame] = int(clampf(sample * 127.0 + 128.0, 0.0, 255.0))
 	return _build_stream(data)
 

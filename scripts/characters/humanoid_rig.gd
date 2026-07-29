@@ -30,6 +30,21 @@ const BODY_PART_NAMES := [
 	"RightEar",
 	"Tail",
 ]
+const ROUNDED_SPHERE_PARTS := ["Head", "LeftHand", "RightHand"]
+const ROUNDED_CAPSULE_PARTS := [
+	"Body",
+	"LeftArm",
+	"RightArm",
+	"LeftLeg",
+	"RightLeg",
+	"LeftEar",
+	"RightEar",
+	"Tail",
+]
+
+static var _rounded_sphere: SphereMesh
+static var _rounded_capsule: CapsuleMesh
+static var _rounded_cap: CylinderMesh
 
 
 static func apply_variant(root: Node3D, index: int) -> Color:
@@ -208,6 +223,46 @@ static func set_shadow_quality(root: Node3D, enabled: bool) -> void:
 	)
 	for part_name in BODY_PART_NAMES + ["Cap", "Backpack"]:
 		(root.get_node(part_name) as GeometryInstance3D).cast_shadow = shadow_mode
+
+
+static func set_model_quality(root: Node3D, rounded: bool) -> void:
+	_ensure_rounded_meshes()
+	for part_name in ROUNDED_SPHERE_PARTS + ROUNDED_CAPSULE_PARTS:
+		var part := root.get_node(part_name) as MeshInstance3D
+		if not part.has_meta(&"low_mesh"):
+			part.set_meta(&"low_mesh", part.mesh)
+		if rounded:
+			part.mesh = (
+				_rounded_sphere
+				if part_name in ROUNDED_SPHERE_PARTS
+				else _rounded_capsule
+			)
+		else:
+			part.mesh = part.get_meta(&"low_mesh") as Mesh
+	var cap := root.get_node("Cap") as MeshInstance3D
+	if not cap.has_meta(&"low_mesh"):
+		cap.set_meta(&"low_mesh", cap.mesh)
+	cap.mesh = _rounded_cap if rounded else cap.get_meta(&"low_mesh") as Mesh
+
+
+static func _ensure_rounded_meshes() -> void:
+	if _rounded_sphere != null:
+		return
+	_rounded_sphere = SphereMesh.new()
+	_rounded_sphere.radius = 0.5
+	_rounded_sphere.height = 1.0
+	_rounded_sphere.radial_segments = 16
+	_rounded_sphere.rings = 8
+	_rounded_capsule = CapsuleMesh.new()
+	_rounded_capsule.radius = 0.5
+	_rounded_capsule.height = 1.0
+	_rounded_capsule.radial_segments = 16
+	_rounded_capsule.rings = 8
+	_rounded_cap = CylinderMesh.new()
+	_rounded_cap.top_radius = 0.36
+	_rounded_cap.bottom_radius = 0.48
+	_rounded_cap.height = 0.18
+	_rounded_cap.radial_segments = 20
 
 
 static func _has_limb(mask: int, limb: int) -> bool:

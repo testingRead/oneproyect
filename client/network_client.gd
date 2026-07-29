@@ -30,6 +30,13 @@ signal round_state_received(
 )
 signal simulation_host_changed(peer_id: int)
 signal push_received(sender_id: int, direction: Vector3, force: float)
+signal shot_received(
+	shooter_player_id: int,
+	target_player_id: int,
+	origin: Vector3,
+	hit_position: Vector3,
+	damage: int
+)
 signal session_resumed(player_id: int)
 signal remote_session_suspended(player_id: int)
 signal lobby_ready(maximum_rooms: int, maximum_players: int)
@@ -80,6 +87,7 @@ var display_name := ""
 var color_index := 0
 var profile_victories := 0
 var profile_experience := 0
+var excluded_mode_id := -1
 
 var _players: Dictionary = {}
 var _online := false
@@ -181,9 +189,15 @@ func start_room() -> void:
 		_rpc_start_room.rpc_id(1)
 
 
-func set_room_profile(ready: bool) -> void:
+func set_room_profile(ready: bool, mode_exclusion: int = excluded_mode_id) -> void:
 	if _session_accepted:
-		_rpc_set_room_profile.rpc_id(1, clampi(color_index, 0, 4), ready)
+		excluded_mode_id = clampi(mode_exclusion, -1, 3)
+		_rpc_set_room_profile.rpc_id(
+			1,
+			clampi(color_index, 0, 4),
+			ready,
+			excluded_mode_id
+		)
 
 
 func set_room_rules(total_rounds: int) -> void:
@@ -348,6 +362,12 @@ func send_push(target_player_id: int, direction: Vector3, _force := 5.2) -> void
 	_rpc_submit_push.rpc_id(1, target_player_id, direction)
 
 
+func send_shot(origin: Vector3, direction: Vector3) -> void:
+	if not is_online() or not origin.is_finite() or not direction.is_finite():
+		return
+	_rpc_submit_shot.rpc_id(1, origin, direction.normalized())
+
+
 func send_snapshot(_position: Vector3, _facing_yaw: float, _body_mask := 0) -> void:
 	pass
 
@@ -433,7 +453,11 @@ func _rpc_start_room() -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable", 0)
-func _rpc_set_room_profile(_character_index: int, _ready: bool) -> void:
+func _rpc_set_room_profile(
+	_character_index: int,
+	_ready: bool,
+	_excluded_mode_id: int
+) -> void:
 	pass
 
 
@@ -459,6 +483,11 @@ func _rpc_submit_owned_state(_packet: PackedByteArray) -> void:
 
 @rpc("any_peer", "call_remote", "reliable", 2)
 func _rpc_submit_push(_target_player_id: int, _direction: Vector3) -> void:
+	pass
+
+
+@rpc("any_peer", "call_remote", "reliable", 2)
+func _rpc_submit_shot(_origin: Vector3, _direction: Vector3) -> void:
 	pass
 
 
@@ -770,6 +799,23 @@ func _rpc_receive_standings(
 @rpc("authority", "call_remote", "reliable", 2)
 func _rpc_receive_push(sender_player_id: int, direction: Vector3, force: float) -> void:
 	push_received.emit(sender_player_id, direction, force)
+
+
+@rpc("authority", "call_remote", "reliable", 2)
+func _rpc_receive_shot(
+	shooter_player_id: int,
+	target_player_id: int,
+	origin: Vector3,
+	hit_position: Vector3,
+	damage: int
+) -> void:
+	shot_received.emit(
+		shooter_player_id,
+		target_player_id,
+		origin,
+		hit_position,
+		damage
+	)
 
 
 func _start_client_peer(address: String) -> Error:

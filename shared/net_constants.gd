@@ -1,7 +1,7 @@
 class_name NetConstants
 extends RefCounted
 
-const PROTOCOL_VERSION := 5
+const PROTOCOL_VERSION := 7
 const DEFAULT_PORT := 9999
 const MAX_ROOMS := 5
 const MAX_PLAYERS_PER_ROOM := 5
@@ -28,7 +28,7 @@ const SNAPSHOT_PACKET_SIZE := (
 	SNAPSHOT_HEADER_SIZE + MAX_PLAYERS_PER_ROOM * SNAPSHOT_PLAYER_SIZE
 )
 
-const ARENA_HALF_EXTENT := 12.2
+const ARENA_HALF_EXTENT := 25.2
 const FLOOR_HEIGHT := 1.2
 const ALL_BODY_PARTS_MASK := 0b111111111111
 const DEFAULT_MATCH_ROUNDS := 5
@@ -46,6 +46,7 @@ enum ModeId {
 	METEORS,
 	SHOCKWAVE,
 	FLOOD,
+	SHOOTER,
 }
 
 enum PlayerFlags {
@@ -61,6 +62,8 @@ static func mode_name(mode_id: int) -> String:
 			return "shockwave"
 		ModeId.FLOOD:
 			return "flood"
+		ModeId.SHOOTER:
+			return "shooter"
 		_:
 			return "meteors"
 
@@ -71,5 +74,27 @@ static func mode_duration_ticks(mode_id: int) -> int:
 			return 34 * SERVER_TICK_RATE
 		ModeId.FLOOD:
 			return 36 * SERVER_TICK_RATE
+		ModeId.SHOOTER:
+			return 46 * SERVER_TICK_RATE
 		_:
 			return 42 * SERVER_TICK_RATE
+
+
+static func mode_map_name(mode_id: int) -> String:
+	return "campo_tiro" if mode_id == ModeId.SHOOTER else "plaza_caos"
+
+
+static func mode_feature_ids(mode_id: int) -> PackedStringArray:
+	return (
+		PackedStringArray(["shooter_controls"])
+		if mode_id == ModeId.SHOOTER
+		else PackedStringArray()
+	)
+
+
+static func mode_player_profile(mode_id: int) -> String:
+	return "shooter" if mode_id == ModeId.SHOOTER else "default"
+
+
+static func mode_spawn_policy(mode_id: int) -> String:
+	return "separated" if mode_id == ModeId.SHOOTER else "spread"

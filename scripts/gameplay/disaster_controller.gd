@@ -8,6 +8,7 @@ signal clock_changed(seconds_left: int)
 signal round_survived(round_number: int)
 signal round_started(round_number: int)
 signal experience_selected(plan: Dictionary)
+signal experience_ended
 signal meteor_warning
 signal meteor_impact
 signal shockwave_warning
@@ -115,6 +116,12 @@ func spawn_network_shockwave() -> void:
 	var mode := _find_mode_with_method(&"spawn_network_shockwave")
 	if mode != null:
 		mode.call("spawn_network_shockwave")
+
+
+func spawn_network_shot(origin: Vector3, hit_position: Vector3) -> void:
+	var mode := _find_mode_by_id(&"shooter")
+	if mode != null and mode.has_method("spawn_network_shot"):
+		mode.call("spawn_network_shot", origin, hit_position)
 
 
 func apply_network_state(
@@ -363,6 +370,7 @@ func _make_plan(
 func _finish_all_modes() -> void:
 	for mode in _modes:
 		mode.finish_round()
+	experience_ended.emit()
 
 
 func _emit_mode_text(mode: Node3D, upcoming: bool) -> void:

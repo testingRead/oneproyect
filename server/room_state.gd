@@ -28,6 +28,10 @@ var match_id := 0
 var _snapshot_buffers: Dictionary = {}
 var _random := RandomNumberGenerator.new()
 var _next_mode_event_tick := 0
+var resolved_shooter_player_id := 0
+var resolved_target_player_id := 0
+var resolved_hit_position := Vector3.ZERO
+var resolved_shot_damage := 0
 
 
 func _ready() -> void:
@@ -111,7 +115,14 @@ func build_snapshot_for(recipient_player_id: int) -> PackedByteArray:
 
 func apply_owned_state(peer_id: int, packet: PackedByteArray) -> bool:
 	var session: RefCounted = session_manager.find_by_peer_id(peer_id)
-	return session != null and session.accept_owned_state(packet, server_tick)
+	return (
+		session != null
+		and session.accept_owned_state(
+			packet,
+			server_tick,
+			phase == NET.RoomPhase.ACTIVE and mode_id == NET.ModeId.SHOOTER
+		)
+	)
 
 
 func release_player_cache(player_id: int) -> void:
@@ -137,6 +148,64 @@ func apply_push(peer_id: int, target_player_id: int, direction: Vector3) -> bool
 	target.velocity.x += safe_direction.x * 5.2
 	target.velocity.z += safe_direction.z * 5.2
 	target.velocity.y = maxf(target.velocity.y, 2.2)
+	return true
+
+
+func apply_shot(peer_id: int, origin: Vector3, direction: Vector3) -> bool:
+	if phase != NET.RoomPhase.ACTIVE or mode_id != NET.ModeId.SHOOTER:
+		return false
+	var source: RefCounted = session_manager.find_by_peer_id(peer_id)
+	if source == null or not source.connected or not source.active:
+		return false
+	if server_tick - source.last_shot_tick < 5:
+		return false
+	if (
+		not origin.is_finite()
+		or not direction.is_finite()
+		or direction.length_squared() < 0.5
+		or origin.distance_to(source.position) > 3.0
+	):
+		return false
+	var ray := direction.normalized()
+	var best_target: RefCounted
+	var best_distance := 33.0
+	for candidate: RefCounted in session_manager.sessions:
+		if (
+			candidate == source
+			or not candidate.connected
+			or not candidate.active
+		):
+			continue
+		var target_center: Vector3 = candidate.position + Vector3(0.0, 0.4, 0.0)
+		var offset := target_center - origin
+		var distance_along := offset.dot(ray)
+		if distance_along <= 0.0 or distance_along >= best_distance:
+			continue
+		var closest := origin + ray * distance_along
+		if closest.distance_squared_to(target_center) > 0.75:
+			continue
+		best_distance = distance_along
+		best_target = candidate
+	source.last_shot_tick = server_tick
+	resolved_shooter_player_id = source.player_id
+	resolved_target_player_id = 0
+	resolved_hit_position = origin + ray * 32.0
+	resolved_shot_damage = 0
+	if best_target == null:
+		return true
+	resolved_target_player_id = best_target.player_id
+	resolved_hit_position = origin + ray * best_distance
+	resolved_shot_damage = 28
+	best_target.health = maxi(0, best_target.health - resolved_shot_damage)
+	best_target.active = best_target.health > 0
+	if not best_target.active:
+		standings_changed.emit()
+		var survivors := 0
+		for candidate: RefCounted in session_manager.sessions:
+			if candidate.connected and candidate.active:
+				survivors += 1
+		if survivors <= 1 and session_manager.connected_count() >= 2:
+			phase_end_tick = mini(phase_end_tick, server_tick + 1)
 	return true
 
 
@@ -168,6 +237,7 @@ func start_rounds(ignore_ready := false) -> bool:
 	match_id = int(_random.randi() & 0x7fffffff)
 	if match_id == 0:
 		match_id = 1
+	mode_id = _pick_next_mode(-1)
 	for session: RefCounted in session_manager.sessions:
 		session.score = 0
 		session.round_points = 0
@@ -272,13 +342,41 @@ func _advance_phase() -> void:
 			_prepare_next_round()
 			phase = NET.RoomPhase.COUNTDOWN
 			var previous_mode := mode_id
-			while mode_id == previous_mode:
-				mode_id = int(_random.randi_range(0, 2))
+			mode_id = _pick_next_mode(previous_mode)
 			round_seed = int(_random.randi() & 0x7fffffff)
 			phase_end_tick = server_tick + 5 * NET.SERVER_TICK_RATE
 	phase_changed.emit()
 	if publish_standings:
 		standings_changed.emit()
+
+
+func _pick_next_mode(previous_mode: int) -> int:
+	# Every player may veto one mode, but the room excludes only the most voted
+	# one. With four registered modes this guarantees at least three candidates.
+	var veto_counts := PackedInt32Array([0, 0, 0, 0])
+	for session: RefCounted in session_manager.sessions:
+		if session.connected and session.excluded_mode_id >= 0:
+			veto_counts[session.excluded_mode_id] += 1
+	var excluded_mode := -1
+	var highest_votes := 0
+	var tied := PackedInt32Array()
+	for candidate in veto_counts.size():
+		if veto_counts[candidate] > highest_votes:
+			highest_votes = veto_counts[candidate]
+			tied = PackedInt32Array([candidate])
+		elif veto_counts[candidate] == highest_votes and highest_votes > 0:
+			tied.append(candidate)
+	if not tied.is_empty():
+		excluded_mode = tied[_random.randi_range(0, tied.size() - 1)]
+	var candidates := PackedInt32Array()
+	for candidate in 4:
+		if candidate != excluded_mode and candidate != previous_mode:
+			candidates.append(candidate)
+	if candidates.is_empty():
+		for candidate in 4:
+			if candidate != excluded_mode:
+				candidates.append(candidate)
+	return candidates[_random.randi_range(0, candidates.size() - 1)]
 
 
 func _score_round() -> void:
@@ -325,9 +423,9 @@ func _tick_mode_events() -> void:
 	match mode_id:
 		NET.ModeId.METEORS:
 			var target := Vector3(
-				_random.randf_range(-10.8, 10.8),
+				_random.randf_range(-23.2, 23.2),
 				0.06,
-				_random.randf_range(-10.8, 10.8)
+				_random.randf_range(-23.2, 23.2)
 			)
 			var drift := Vector2(
 				_random.randf_range(-1.1, 1.1),

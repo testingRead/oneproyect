@@ -265,6 +265,23 @@ func get_aim_forward() -> Vector3:
 	return forward.normalized()
 
 
+func get_shoot_origin() -> Vector3:
+	return $CameraRig/SpringArm/Camera.global_position
+
+
+func get_shoot_direction() -> Vector3:
+	return (
+		-$CameraRig/SpringArm/Camera.global_basis.z
+	).normalized()
+
+
+func apply_shot_damage(damage: int, hit_position: Vector3) -> void:
+	if _defeated_state:
+		return
+	_invulnerability = 0.0
+	_take_damage(maxi(1, damage), _find_closest_limb(hit_position), hit_position)
+
+
 func apply_external_push(direction: Vector3, force := 5.2) -> void:
 	var safe_direction := direction
 	safe_direction.y = 0.0
@@ -316,6 +333,10 @@ func set_character_variant(index: int) -> void:
 
 func set_texture_detail(enabled: bool) -> void:
 	HUMANOID_RIG.set_texture_detail(visual, enabled)
+
+
+func set_model_quality(rounded: bool) -> void:
+	HUMANOID_RIG.set_model_quality(visual, rounded)
 
 
 func apply_damage_and_knockback(origin: Vector3, force: float, damage: int) -> void:

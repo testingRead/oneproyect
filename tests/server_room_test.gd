@@ -30,6 +30,63 @@ func _run() -> void:
 	_require(manager.create_room(3) != null, "A released room ID must be reusable")
 	manager.queue_free()
 
+	var shooter_room: Node = ROOM_SCRIPT.new()
+	shooter_room.name = "ShooterRoomTest"
+	root.add_child(shooter_room)
+	await process_frame
+	var shooter: RefCounted = shooter_room.session_manager.register_session(
+		50, "cccccccccccccccc", "", "Cata", 0, 0, 0, 0
+	)
+	var target: RefCounted = shooter_room.session_manager.register_session(
+		51, "dddddddddddddddd", "", "Dani", 1, 0, 0, 0
+	)
+	shooter.position = Vector3(0.0, 1.2, 0.0)
+	target.position = Vector3(0.0, 1.2, -5.0)
+	shooter_room.phase = NET.RoomPhase.ACTIVE
+	shooter_room.mode_id = NET.ModeId.SHOOTER
+	shooter_room.phase_end_tick = 1000
+	_require(
+		shooter_room.apply_shot(
+			50,
+			Vector3(0.0, 1.6, 0.0),
+			Vector3(0.0, 0.0, -1.0)
+		),
+		"Shooter ray must be accepted during its dedicated mode"
+	)
+	_require(
+		target.health == 72
+		and shooter_room.resolved_target_player_id == target.player_id,
+		"Server must resolve and damage the closest player on the ray"
+	)
+	var forged_heal := CODEC.create_owned_state_buffer()
+	CODEC.write_owned_state(
+		forged_heal,
+		1,
+		target.position,
+		Vector3.ZERO,
+		0.0,
+		100,
+		NET.ALL_BODY_PARTS_MASK
+	)
+	_require(
+		shooter_room.apply_owned_state(51, forged_heal) and target.health == 72,
+		"Shooter clients must not overwrite authoritative damage with owned state"
+	)
+	for shot_index in 3:
+		shooter_room.server_tick += 5
+		shooter_room.apply_shot(
+			50,
+			Vector3(0.0, 1.6, 0.0),
+			Vector3(0.0, 0.0, -1.0)
+		)
+	_require(
+		target.health == 0
+		and not target.active
+		and shooter_room.phase_end_tick <= shooter_room.server_tick + 1,
+		"Individual shooter must eliminate once and end when one player remains"
+	)
+	shooter_room.queue_free()
+
 	var room: Node = ROOM_SCRIPT.new()
 	room.name = "RoomTest"
 	root.add_child(room)
@@ -67,6 +124,13 @@ func _run() -> void:
 	)
 	first.ready = true
 	second.ready = true
+	first.excluded_mode_id = NET.ModeId.SHOOTER
+	second.excluded_mode_id = NET.ModeId.SHOOTER
+	for sample in 16:
+		_require(
+			room.call("_pick_next_mode", -1) != NET.ModeId.SHOOTER,
+			"The strongest room veto must leave three valid modes"
+		)
 	_require(room.set_total_rounds(3), "Host must be able to select a supported match length")
 	_require(room.start_rounds(), "Host-ready room must enter countdown with two players")
 	_require(room.total_rounds == 3, "Selected match length must survive match startup")

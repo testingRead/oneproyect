@@ -3,6 +3,7 @@ extends Control
 const NET := preload("res://shared/net_constants.gd")
 const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.gd")
 const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn")
+const LOADING_SCENE := preload("res://scenes/loading_screen.tscn")
 const GAME_SCENE := "res://scenes/main.tscn"
 const PROFILE_PATH := "user://profile.cfg"
 
@@ -25,6 +26,7 @@ var _character_viewport: SubViewport
 var _ready_button: Button
 var _start_button: Button
 var _rounds_button: OptionButton
+var _exclusion_button: OptionButton
 var _room_buttons: Array[Button] = []
 var _room_ids := PackedInt32Array()
 var _room_count := 0
@@ -172,13 +174,14 @@ func _build_lobby_screen(parent: Control) -> VBoxContainer:
 
 func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	var screen := _new_screen("WaitingRoom")
+	screen.add_theme_constant_override("separation", 7)
 	parent.add_child(screen)
 	_waiting_title = _title("SALA", 34, Color(0.35, 0.95, 0.9))
 	_waiting_title.name = "WaitingTitle"
 	screen.add_child(_waiting_title)
 	_waiting_detail = _label("Esperando jugadores…", 18)
 	_waiting_detail.name = "WaitingPlayers"
-	_waiting_detail.custom_minimum_size.y = 160.0
+	_waiting_detail.custom_minimum_size.y = 115.0
 	_waiting_detail.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	screen.add_child(_waiting_detail)
 	var character_row := HBoxContainer.new()
@@ -217,6 +220,23 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	_rounds_button.select(NET.MATCH_ROUND_OPTIONS.find(NET.DEFAULT_MATCH_ROUNDS))
 	_rounds_button.item_selected.connect(_on_round_count_selected)
 	screen.add_child(_rounds_button)
+	_exclusion_button = OptionButton.new()
+	_exclusion_button.name = "ModeExclusion"
+	_exclusion_button.custom_minimum_size = Vector2(0.0, 48.0)
+	_exclusion_button.add_theme_font_size_override("font_size", 17)
+	_exclusion_button.add_item("VETO: NINGUNO", -1)
+	_exclusion_button.add_item("VETO: METEORITOS", NET.ModeId.METEORS)
+	_exclusion_button.add_item("VETO: ONDA", NET.ModeId.SHOCKWAVE)
+	_exclusion_button.add_item("VETO: INUNDACIÓN", NET.ModeId.FLOOD)
+	_exclusion_button.add_item("VETO: SHOOTER", NET.ModeId.SHOOTER)
+	_exclusion_button.item_selected.connect(_on_exclusion_selected)
+	screen.add_child(_exclusion_button)
+	var veto_rule := _label(
+		"Un voto por jugador · el servidor siempre conserva 3 modos válidos.",
+		14
+	)
+	veto_rule.modulate = Color(0.62, 0.78, 0.9)
+	screen.add_child(veto_rule)
 	_ready_button = _button("MARCAR LISTO", "ReadyRoom")
 	_ready_button.pressed.connect(_toggle_ready)
 	screen.add_child(_ready_button)
@@ -245,7 +265,7 @@ func _play_local() -> void:
 	_save_name()
 	network.disconnect_session()
 	_loading_game = true
-	get_tree().change_scene_to_file(GAME_SCENE)
+	_show_loading("PREPARANDO PARTIDA LOCAL")
 
 
 func _open_multiplayer() -> void:
@@ -362,6 +382,7 @@ func _on_room_waiting(
 		"\n".join(player_states),
 	]
 	_character_button.disabled = local_ready
+	_exclusion_button.disabled = local_ready
 	_rounds_button.disabled = not is_host
 	var rounds_index := NET.MATCH_ROUND_OPTIONS.find(total_rounds)
 	if rounds_index >= 0:
@@ -385,10 +406,17 @@ func _on_room_started(_room_id: int) -> void:
 		return
 	_loading_game = true
 	_character_button.disabled = true
+	_exclusion_button.disabled = true
 	_ready_button.disabled = true
 	_start_button.disabled = true
 	_waiting_detail.text = "Iniciando partida…"
-	get_tree().change_scene_to_file(GAME_SCENE)
+	_show_loading("SINCRONIZANDO MINIJUEGO")
+
+
+func _show_loading(status: String) -> void:
+	var loading := LOADING_SCENE.instantiate() as OneProjectLoadingScreen
+	get_tree().root.add_child(loading)
+	loading.begin(GAME_SCENE, status)
 
 
 func _on_room_error(reason: String) -> void:
@@ -516,6 +544,14 @@ func _on_round_count_selected(index: int) -> void:
 	network.set_room_rules(_rounds_button.get_item_id(index))
 
 
+func _on_exclusion_selected(index: int) -> void:
+	if _local_ready or _loading_game:
+		return
+	network.excluded_mode_id = _exclusion_button.get_item_id(index)
+	if network.is_online():
+		network.set_room_profile(false, network.excluded_mode_id)
+
+
 func _save_character() -> void:
 	var config := ConfigFile.new()
 	config.load(PROFILE_PATH)
@@ -525,7 +561,7 @@ func _save_character() -> void:
 
 func _build_character_preview() -> SubViewportContainer:
 	var container := SubViewportContainer.new()
-	container.custom_minimum_size = Vector2(112.0, 96.0)
+	container.custom_minimum_size = Vector2(112.0, 84.0)
 	container.stretch = true
 	var viewport := SubViewport.new()
 	viewport.size = Vector2i(224, 192)

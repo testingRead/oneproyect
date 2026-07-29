@@ -1,4 +1,4 @@
-[gd_scene load_steps=48 format=3]
+[gd_scene load_steps=52 format=3]
 
 [ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
 [ext_resource type="Script" path="res://scripts/player.gd" id="2_player"]
@@ -16,6 +16,10 @@
 [ext_resource type="Script" path="res://scripts/minigames/mode_map_host.gd" id="15_map_host"]
 [ext_resource type="Resource" path="res://data/maps/plaza_caos.tres" id="16_plaza_map"]
 [ext_resource type="Script" path="res://scripts/features/experience_feature_host.gd" id="17_feature_host"]
+[ext_resource type="Script" path="res://scripts/visual/arena_enricher.gd" id="18_arena"]
+[ext_resource type="Script" path="res://scripts/minigames/shooter_minigame.gd" id="19_shooter_mode"]
+[ext_resource type="Resource" path="res://data/maps/campo_tiro.tres" id="20_shooter_map"]
+[ext_resource type="Script" path="res://scripts/features/shooter_controls_feature.gd" id="21_shooter_feature"]
 
 [sub_resource type="StandardMaterial3D" id="MatFloor"]
 albedo_texture = ExtResource("8_floor")
@@ -24,10 +28,10 @@ uv1_scale = Vector3(1.3, 1.3, 1.3)
 
 [sub_resource type="BoxMesh" id="MeshFloor"]
 material = SubResource("MatFloor")
-size = Vector3(26, 0.5, 26)
+size = Vector3(52, 0.5, 52)
 
 [sub_resource type="BoxShape3D" id="ShapeFloor"]
-size = Vector3(26, 0.5, 26)
+size = Vector3(52, 0.5, 52)
 
 [sub_resource type="StandardMaterial3D" id="MatWall"]
 albedo_color = Color(0.14, 0.2, 0.27, 1)
@@ -35,10 +39,10 @@ roughness = 0.92
 
 [sub_resource type="BoxMesh" id="MeshWall"]
 material = SubResource("MatWall")
-size = Vector3(26, 1.5, 0.55)
+size = Vector3(52, 1.5, 0.55)
 
 [sub_resource type="BoxShape3D" id="ShapeWall"]
-size = Vector3(26, 1.5, 0.55)
+size = Vector3(52, 1.5, 0.55)
 
 [sub_resource type="StandardMaterial3D" id="MatPlatform"]
 albedo_color = Color(0.18, 0.49, 0.57, 1)
@@ -163,6 +167,7 @@ light_energy = 0.82
 shadow_enabled = false
 
 [node name="Arena" type="Node3D" parent="World"]
+script = ExtResource("18_arena")
 
 [node name="PlayerSpawn" type="Marker3D" parent="World/Arena" groups=["player_spawn"]]
 position = Vector3(0, 1.2, 8)
@@ -178,7 +183,7 @@ cast_shadow = 0
 shape = SubResource("ShapeFloor")
 
 [node name="NorthWall" type="StaticBody3D" parent="World/Arena"]
-position = Vector3(0, 0.75, -13)
+position = Vector3(0, 0.75, -26)
 
 [node name="Mesh" type="MeshInstance3D" parent="World/Arena/NorthWall"]
 mesh = SubResource("MeshWall")
@@ -188,7 +193,7 @@ cast_shadow = 0
 shape = SubResource("ShapeWall")
 
 [node name="SouthWall" type="StaticBody3D" parent="World/Arena"]
-position = Vector3(0, 0.75, 13)
+position = Vector3(0, 0.75, 26)
 
 [node name="Mesh" type="MeshInstance3D" parent="World/Arena/SouthWall"]
 mesh = SubResource("MeshWall")
@@ -198,7 +203,7 @@ cast_shadow = 0
 shape = SubResource("ShapeWall")
 
 [node name="EastWall" type="StaticBody3D" parent="World/Arena"]
-position = Vector3(13, 0.75, 0)
+position = Vector3(26, 0.75, 0)
 rotation_degrees = Vector3(0, 90, 0)
 
 [node name="Mesh" type="MeshInstance3D" parent="World/Arena/EastWall"]
@@ -209,7 +214,7 @@ cast_shadow = 0
 shape = SubResource("ShapeWall")
 
 [node name="WestWall" type="StaticBody3D" parent="World/Arena"]
-position = Vector3(-13, 0.75, 0)
+position = Vector3(-26, 0.75, 0)
 rotation_degrees = Vector3(0, 90, 0)
 
 [node name="Mesh" type="MeshInstance3D" parent="World/Arena/WestWall"]
@@ -525,7 +530,7 @@ collision_mask = 1
 current = true
 fov = 70.0
 near = 0.1
-far = 58.0
+far = 112.0
 
 [node name="DisasterController" type="Node3D" parent="World"]
 script = ExtResource("6_disaster")
@@ -539,10 +544,13 @@ script = ExtResource("13_shockwave_mode")
 [node name="FloodMode" type="Node3D" parent="World/DisasterController"]
 script = ExtResource("14_flood_mode")
 
+[node name="ShooterMode" type="Node3D" parent="World/DisasterController"]
+script = ExtResource("19_shooter_mode")
+
 [node name="ModeMapHost" type="Node3D" parent="World"]
 script = ExtResource("15_map_host")
 default_map_path = NodePath("../Arena")
-map_definitions = Array[Resource]([ExtResource("16_plaza_map")])
+map_definitions = Array[Resource]([ExtResource("16_plaza_map"), ExtResource("20_shooter_map")])
 
 [node name="RemotePlayers" type="Node3D" parent="World"]
 
@@ -558,6 +566,9 @@ player_path = NodePath("../World/Player")
 world_path = NodePath("../World")
 hud_path = NodePath("../HUD")
 
+[node name="ShooterControls" type="Node" parent="ExperienceFeatureHost"]
+script = ExtResource("21_shooter_feature")
+
 [node name="Warning" type="AudioStreamPlayer" parent="SoundBank"]
 volume_db = -8.0
 max_polyphony = 3
@@ -571,6 +582,10 @@ volume_db = -7.0
 
 [node name="Success" type="AudioStreamPlayer" parent="SoundBank"]
 volume_db = -6.0
+
+[node name="Shot" type="AudioStreamPlayer" parent="SoundBank"]
+volume_db = -7.0
+max_polyphony = 4
 
 [node name="HUD" type="CanvasLayer" parent="."]
 process_mode = 3
@@ -643,6 +658,24 @@ grow_vertical = 0
 script = ExtResource("5_button")
 label = "EMPUJAR"
 accent = Color(0.15, 0.72, 0.68, 0.88)
+
+[node name="Shoot" type="Control" parent="HUD"]
+visible = false
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -522.0
+offset_top = -174.0
+offset_right = -374.0
+offset_bottom = -48.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("5_button")
+label = "DISPARAR"
+accent = Color(0.9, 0.2, 0.12, 0.92)
 
 [node name="TopBar" type="HBoxContainer" parent="HUD"]
 layout_mode = 3

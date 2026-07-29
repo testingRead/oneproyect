@@ -11,7 +11,7 @@ cull_mode = 2
 
 [sub_resource type="BoxMesh" id="MeshFlood"]
 material = SubResource("MatFlood")
-size = Vector3(25.4, 0.09, 25.4)
+size = Vector3(51.4, 0.09, 51.4)
 
 [node name="FloodHazard" type="Node3D"]
 script = ExtResource("1")

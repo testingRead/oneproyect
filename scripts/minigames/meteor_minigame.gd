@@ -7,7 +7,7 @@ signal meteor_impact
 const METEOR_SCENE := preload("res://scenes/components/meteor.tscn")
 
 @export var pool_size := 8
-@export var arena_half_extent := 10.8
+@export var arena_half_extent := 23.2
 
 @onready var network: Variant = get_node("/root/Network")
 

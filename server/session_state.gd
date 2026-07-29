@@ -3,7 +3,7 @@ extends RefCounted
 
 const NET := preload("res://shared/net_constants.gd")
 const CODEC := preload("res://shared/net_codec.gd")
-const MAX_RELAY_POSITION := 40.0
+const MAX_RELAY_POSITION := 80.0
 const MAX_RELAY_SPEED := 80.0
 
 var player_id := 0
@@ -16,6 +16,7 @@ var color_index := 0
 var profile_victories := 0
 var profile_experience := 0
 var ready := false
+var excluded_mode_id := -1
 var connected := false
 var reconnect_until_tick := 0
 
@@ -29,9 +30,14 @@ var round_points := 0
 var body_mask := NET.ALL_BODY_PARTS_MASK
 var last_state_sequence := 0
 var last_state_tick := 0
+var last_shot_tick := -1000
 
 
-func accept_owned_state(packet: PackedByteArray, server_tick: int) -> bool:
+func accept_owned_state(
+	packet: PackedByteArray,
+	server_tick: int,
+	lock_authoritative_health := false
+) -> bool:
 	if not connected or not CODEC.is_valid_owned_state(packet):
 		return false
 	var sequence := CODEC.owned_state_sequence(packet)
@@ -56,7 +62,11 @@ func accept_owned_state(packet: PackedByteArray, server_tick: int) -> bool:
 	var reported_health := clampi(CODEC.owned_state_health(packet), 0, 100)
 	# Once eliminated, a client cannot revive itself until the room opens
 	# the next round. Physics remain client-owned; this is only a round rule.
-	health = 0 if not active else reported_health
+	health = (
+		mini(health, reported_health)
+		if lock_authoritative_health and active
+		else (0 if not active else reported_health)
+	)
 	body_mask = CODEC.owned_state_body_mask(packet) & NET.ALL_BODY_PARTS_MASK
 	active = health > 0
 	return true
@@ -67,6 +77,7 @@ func prepare_next_round() -> void:
 	active = true
 	round_points = 0
 	body_mask = NET.ALL_BODY_PARTS_MASK
+	last_shot_tick = -1000
 
 
 func player_flags() -> int:

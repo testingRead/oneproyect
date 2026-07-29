@@ -10,8 +10,8 @@ enum Phase {
 	EXPANDING,
 }
 
-const MAX_RADIUS := 13.6
-const EXPANSION_SPEED := 8.4
+const MAX_RADIUS := 27.2
+const EXPANSION_SPEED := 12.0
 const SAFE_HEIGHT := 1.55
 
 @onready var ring: MeshInstance3D = $Ring

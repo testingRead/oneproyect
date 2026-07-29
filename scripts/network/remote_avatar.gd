@@ -79,3 +79,7 @@ func set_shadow_quality(enabled: bool) -> void:
 
 func set_texture_detail(enabled: bool) -> void:
 	HUMANOID_RIG.set_texture_detail(self, enabled)
+
+
+func set_model_quality(rounded: bool) -> void:
+	HUMANOID_RIG.set_model_quality(self, rounded)

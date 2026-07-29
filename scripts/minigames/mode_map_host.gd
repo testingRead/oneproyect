@@ -19,15 +19,24 @@ var _active_map: Node3D
 var _active_map_id: StringName = &""
 var _cached_maps: Dictionary = {}
 var _definition_by_id: Dictionary = {}
+var _quality_level := 0
 
 
 func _ready() -> void:
+	add_to_group(&"quality_receiver")
 	_default_map = get_node_or_null(default_map_path) as Node3D
 	_active_map = _default_map
 	_active_map_id = default_map_id
 	if _default_map == null:
 		push_error("ModeMapHost requires a default map")
 	_ensure_registry()
+
+
+func set_quality_level(level: int) -> void:
+	_quality_level = clampi(level, 0, 2)
+	for map_root: Node3D in _cached_maps.values():
+		if map_root.has_method("set_quality_level"):
+			map_root.call("set_quality_level", _quality_level)
 
 
 func get_compatible_map_ids(
@@ -123,6 +132,8 @@ func _get_or_create_map(map_id: StringName, map_scene: PackedScene) -> Node3D:
 	instance.name = "ModeMap_%s" % map_id
 	add_child(instance)
 	_cached_maps[map_id] = instance
+	if instance.has_method("set_quality_level"):
+		instance.call("set_quality_level", _quality_level)
 	_set_map_enabled(instance, false)
 	return instance
 
@@ -173,10 +184,21 @@ func _set_collisions_recursive(node: Node, enabled: bool) -> void:
 
 
 func _find_spawn(node: Node) -> Node3D:
+	var spawns: Array[Node3D] = []
+	_collect_spawns(node, spawns)
+	if spawns.is_empty():
+		return null
+	var network: Variant = get_node_or_null("/root/Network")
+	var player_id := (
+		int(network.get_local_player_id())
+		if network != null and network.has_method("get_local_player_id")
+		else 1
+	)
+	return spawns[(maxi(1, player_id) - 1) % spawns.size()]
+
+
+func _collect_spawns(node: Node, output: Array[Node3D]) -> void:
 	if node is Node3D and node.is_in_group(&"player_spawn"):
-		return node as Node3D
+		output.append(node as Node3D)
 	for child in node.get_children():
-		var found := _find_spawn(child)
-		if found != null:
-			return found
-	return null
+		_collect_spawns(child, output)

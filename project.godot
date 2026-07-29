@@ -10,6 +10,9 @@ run/main_scene="res://scenes/bootstrap.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://assets/icon.webp"
 boot_splash/bg_color=Color(0.055, 0.067, 0.082, 1)
+boot_splash/image="res://assets/boot_splash.png"
+boot_splash/fullsize=true
+boot_splash/use_filter=true
 run/max_fps=60
 
 [display]
@@ -51,6 +54,10 @@ jump={
 push={
 "deadzone": 0.3,
 "events": [Object(InputEventKey,"physical_keycode":69)]
+}
+shoot={
+"deadzone": 0.3,
+"events": [Object(InputEventMouseButton,"button_index":1), Object(InputEventKey,"physical_keycode":70)]
 }
 pause={
 "deadzone": 0.3,

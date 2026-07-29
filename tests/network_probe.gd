@@ -91,8 +91,12 @@ func _setup() -> void:
 		_spectator: String
 	) -> void:
 		saw_round_state = (
-			mode_id in ["meteors", "shockwave", "flood"]
-			and map_id == "plaza_caos"
+			mode_id in ["meteors", "shockwave", "flood", "shooter"]
+			and (
+				map_id == "campo_tiro"
+				if mode_id == "shooter"
+				else map_id == "plaza_caos"
+			)
 		)
 	)
 	network.session_resumed.connect(func(player_id: int) -> void:

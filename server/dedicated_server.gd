@@ -217,7 +217,11 @@ func _rpc_start_room() -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable", 0)
-func _rpc_set_room_profile(character_index: int, ready: bool) -> void:
+func _rpc_set_room_profile(
+	character_index: int,
+	ready: bool,
+	excluded_mode_id: int
+) -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	var room: Node = room_manager.find_room_for_peer(sender)
 	if room == null:
@@ -231,6 +235,7 @@ func _rpc_set_room_profile(character_index: int, ready: bool) -> void:
 		_rpc_room_action_failed.rpc_id(sender, "not_in_room")
 		return
 	session.color_index = clampi(character_index, 0, 4)
+	session.excluded_mode_id = clampi(excluded_mode_id, -1, 3)
 	session.ready = ready
 	_broadcast_player_profile(room, session)
 	_broadcast_room_waiting(room)
@@ -399,6 +404,24 @@ func _rpc_submit_push(target_player_id: int, direction: Vector3) -> void:
 		)
 
 
+@rpc("any_peer", "call_remote", "reliable", 2)
+func _rpc_submit_shot(origin: Vector3, direction: Vector3) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	var room: Node = room_manager.find_room_for_peer(sender)
+	if room == null or not room.apply_shot(sender, origin, direction):
+		return
+	for session: RefCounted in room.session_manager.sessions:
+		if session.connected and _peer_can_receive(session.peer_id):
+			_rpc_receive_shot.rpc_id(
+				session.peer_id,
+				room.resolved_shooter_player_id,
+				room.resolved_target_player_id,
+				origin,
+				room.resolved_hit_position,
+				room.resolved_shot_damage
+			)
+
+
 @rpc("authority", "call_remote", "reliable", 0)
 func _rpc_session_accepted(
 	_player_id: int,
@@ -503,6 +526,17 @@ func _rpc_receive_shockwave() -> void:
 	pass
 
 
+@rpc("authority", "call_remote", "reliable", 2)
+func _rpc_receive_shot(
+	_shooter_player_id: int,
+	_target_player_id: int,
+	_origin: Vector3,
+	_hit_position: Vector3,
+	_damage: int
+) -> void:
+	pass
+
+
 @rpc("authority", "call_remote", "reliable", 0)
 func _rpc_receive_round_state(
 	_state: int,
@@ -566,11 +600,11 @@ func _broadcast_round_state_to_peer(room: Node, peer_id: int) -> void:
 		room.round_number,
 		room.seconds_left(),
 		NET.mode_name(room.mode_id),
-		"plaza_caos",
+		NET.mode_map_name(room.mode_id),
 		room.round_seed,
-		PackedStringArray(),
-		"default",
-		"spread",
+		NET.mode_feature_ids(room.mode_id),
+		NET.mode_player_profile(room.mode_id),
+		NET.mode_spawn_policy(room.mode_id),
 		"overhead"
 	)
 

@@ -21,6 +21,7 @@ const FPS_LIMITS := [30, 45, 60]
 @onready var network: Variant = get_node("/root/Network")
 @onready var sounds: SoundBank = $SoundBank
 @onready var sun: DirectionalLight3D = $World/Sun
+@onready var world_environment: WorldEnvironment = $World/Environment
 @onready var fps_label: Label = $HUD/TopBar/FPS
 @onready var health_label: Label = $HUD/TopBar/Health
 @onready var round_title: Label = $HUD/RoundPanel/Title
@@ -117,6 +118,7 @@ func _ready() -> void:
 	disaster.shockwave_warning.connect(sounds.play_warning)
 	disaster.shockwave_started.connect(sounds.play_shockwave)
 	disaster.experience_selected.connect(_on_experience_selected)
+	disaster.experience_ended.connect(feature_host.clear_experience)
 	mode_map_host.map_activated.connect(_on_mode_map_activated)
 	network.status_changed.connect(_on_network_status_changed)
 	network.remote_player_joined.connect(_on_remote_player_joined)
@@ -127,6 +129,7 @@ func _ready() -> void:
 	network.round_state_received.connect(disaster.apply_network_state)
 	network.simulation_host_changed.connect(_on_simulation_host_changed)
 	network.push_received.connect(_on_push_received)
+	network.shot_received.connect(_on_shot_received)
 	network.standings_received.connect(_on_standings_received)
 	network.room_reopened.connect(_on_room_reopened)
 	return_room_button.pressed.connect(_return_to_same_room)
@@ -366,6 +369,19 @@ func _on_push_received(_sender_id: int, direction: Vector3, force: float) -> voi
 	player.apply_external_push(direction, force)
 
 
+func _on_shot_received(
+	_shooter_player_id: int,
+	target_player_id: int,
+	origin: Vector3,
+	hit_position: Vector3,
+	damage: int
+) -> void:
+	disaster.spawn_network_shot(origin, hit_position)
+	sounds.play_shot()
+	if target_player_id == network.get_local_player_id() and damage > 0:
+		player.apply_shot_damage(damage, hit_position)
+
+
 func _toggle_online() -> void:
 	if _returning_to_menu:
 		return
@@ -527,8 +543,9 @@ func _on_remote_player_joined(peer_id: int, player_name: String, player_color: i
 	avatar.name = "Peer%d" % peer_id
 	remote_players.add_child(avatar)
 	avatar.configure(player_name, player_color, Vector3(0.0, 1.2, 8.0))
-	avatar.set_shadow_quality(_quality_level >= 2)
+	avatar.set_shadow_quality(_quality_level >= 1)
 	avatar.set_texture_detail(_quality_level >= 1)
+	avatar.set_model_quality(_quality_level >= 2)
 	_remote_avatars[peer_id] = avatar
 
 
@@ -769,25 +786,44 @@ func _apply_quality() -> void:
 		0:
 			viewport.msaa_3d = Viewport.MSAA_DISABLED
 			sun.shadow_enabled = false
+			world_environment.environment.fog_enabled = false
+			world_environment.environment.ambient_light_energy = 0.78
 		1:
-			viewport.msaa_3d = Viewport.MSAA_2X
-			sun.shadow_enabled = false
+			viewport.msaa_3d = Viewport.MSAA_4X
+			sun.shadow_enabled = true
+			sun.directional_shadow_max_distance = 42.0
+			world_environment.environment.fog_enabled = false
+			world_environment.environment.ambient_light_energy = 0.88
 		_:
 			viewport.msaa_3d = Viewport.MSAA_4X
 			sun.shadow_enabled = true
+			sun.directional_shadow_max_distance = 72.0
+			world_environment.environment.fog_enabled = true
+			world_environment.environment.fog_light_color = Color(0.31, 0.42, 0.52)
+			world_environment.environment.fog_light_energy = 0.72
+			world_environment.environment.fog_density = 0.012
+			world_environment.environment.fog_height = 1.0
+			world_environment.environment.fog_height_density = 0.08
+			world_environment.environment.ambient_light_energy = 1.0
 	for mesh in get_tree().get_nodes_in_group("quality_shadow"):
 		var geometry := mesh as GeometryInstance3D
 		if geometry != null:
 			geometry.cast_shadow = (
 				GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-				if _quality_level >= 2
+				if _quality_level >= 1
 				else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			)
 	for avatar: RemoteAvatar in _remote_avatars.values():
-		avatar.set_shadow_quality(_quality_level >= 2)
+		avatar.set_shadow_quality(_quality_level >= 1)
 		avatar.set_texture_detail(_quality_level >= 1)
+		avatar.set_model_quality(_quality_level >= 2)
 	player.set_texture_detail(_quality_level >= 1)
+	player.set_model_quality(_quality_level >= 2)
 	preview_avatar.set_texture_detail(_quality_level >= 1)
+	preview_avatar.set_model_quality(_quality_level >= 2)
+	for receiver in get_tree().get_nodes_in_group(&"quality_receiver"):
+		if receiver.has_method("set_quality_level"):
+			receiver.call("set_quality_level", _quality_level)
 	quality_button.select(_quality_level)
 
 
@@ -828,6 +864,7 @@ func _update_character_button() -> void:
 	preview_avatar.set_process(false)
 	preview_avatar.set_shadow_quality(false)
 	preview_avatar.set_texture_detail(_quality_level >= 1)
+	preview_avatar.set_model_quality(_quality_level >= 2)
 
 
 func _populate_option_lists() -> void:

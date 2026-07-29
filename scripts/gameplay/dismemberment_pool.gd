@@ -8,11 +8,19 @@ var _bodies: Array[RigidBody3D] = []
 var _meshes: Array[MeshInstance3D] = []
 var _shapes: Array[BoxShape3D] = []
 var _lifetimes := PackedFloat32Array()
+var _low_mesh: BoxMesh
+var _high_mesh: CapsuleMesh
 
 
 func _ready() -> void:
-	var shared_mesh := BoxMesh.new()
-	shared_mesh.size = Vector3.ONE
+	add_to_group(&"quality_receiver")
+	_low_mesh = BoxMesh.new()
+	_low_mesh.size = Vector3.ONE
+	_high_mesh = CapsuleMesh.new()
+	_high_mesh.radius = 0.5
+	_high_mesh.height = 1.0
+	_high_mesh.radial_segments = 14
+	_high_mesh.rings = 7
 	for index in POOL_SIZE:
 		var body := RigidBody3D.new()
 		body.name = "Part%02d" % index
@@ -21,7 +29,7 @@ func _ready() -> void:
 		body.collision_mask = 0
 		body.mass = 0.35
 		var mesh_instance := MeshInstance3D.new()
-		mesh_instance.mesh = shared_mesh
+		mesh_instance.mesh = _low_mesh
 		mesh_instance.visible = false
 		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var material := StandardMaterial3D.new()
@@ -38,6 +46,17 @@ func _ready() -> void:
 		_meshes.append(mesh_instance)
 		_shapes.append(shape)
 		_lifetimes.append(0.0)
+
+
+func set_quality_level(level: int) -> void:
+	var rounded := level >= 2
+	for mesh in _meshes:
+		mesh.mesh = _high_mesh if rounded else _low_mesh
+		mesh.cast_shadow = (
+			GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			if level >= 1
+			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		)
 
 
 func _physics_process(delta: float) -> void:
