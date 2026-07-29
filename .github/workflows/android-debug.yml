@@ -98,6 +98,16 @@ jobs:
           grep -q "SERVER_CAPACITY rooms=50 players=250" \
             "$RUNNER_TEMP/oneproyect-capacity.log"
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/server_memory_benchmark.gd \
+            > "$RUNNER_TEMP/oneproyect-memory.log"
+          grep -q "SERVER_MEMORY rooms=100 players=500" \
+            "$RUNNER_TEMP/oneproyect-memory.log"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/minigame_capacity_benchmark.gd \
+            > "$RUNNER_TEMP/oneproyect-minigames.log"
+          grep -q "MINIGAME_CAPACITY workload=shooter rooms=20 players=100" \
+            "$RUNNER_TEMP/oneproyect-minigames.log"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/menu_smoke_test.gd
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/smoke_test.gd

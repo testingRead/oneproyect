@@ -6,6 +6,7 @@ const NET := preload("res://shared/net_constants.gd")
 @onready var room_manager: Node = $RoomManager
 
 var server_port := NET.DEFAULT_PORT
+var max_rooms := NET.MAX_ROOMS
 var _accumulator := 0.0
 var _metrics_elapsed := 0.0
 var _metrics_cpu_usec := 0
@@ -21,6 +22,13 @@ func _ready() -> void:
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--port="):
 			server_port = clampi(int(argument.trim_prefix("--port=")), 1024, 65535)
+		elif argument.begins_with("--max-rooms="):
+			max_rooms = clampi(
+				int(argument.trim_prefix("--max-rooms=")),
+				1,
+				100
+			)
+	room_manager.max_rooms = max_rooms
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	room_manager.phase_changed.connect(_on_phase_changed)
@@ -32,7 +40,7 @@ func _ready() -> void:
 	peer.set_bind_ip("*")
 	var error := peer.create_server(
 		server_port,
-		NET.MAX_SERVER_CONNECTIONS,
+		max_rooms * NET.MAX_PLAYERS_PER_ROOM,
 		NET.ENET_CHANNEL_COUNT,
 		0,
 		0
@@ -46,7 +54,7 @@ func _ready() -> void:
 		"ONEPROYECT_SERVER_READY udp=%d max_rooms=%d max_players=%d tick_rate=%d snapshot_rate=%d"
 		% [
 			server_port,
-			NET.MAX_ROOMS,
+			max_rooms,
 			NET.MAX_PLAYERS_PER_ROOM,
 			NET.SERVER_TICK_RATE,
 			NET.SNAPSHOT_RATE,
@@ -106,7 +114,7 @@ func _rpc_enter_lobby() -> void:
 		_rpc_room_action_failed.rpc_id(sender, "already_in_room")
 		return
 	_lobby_peers[sender] = true
-	_rpc_lobby_ready.rpc_id(sender, NET.MAX_ROOMS, NET.MAX_PLAYERS_PER_ROOM)
+	_rpc_lobby_ready.rpc_id(sender, max_rooms, NET.MAX_PLAYERS_PER_ROOM)
 	_send_room_list(sender)
 
 

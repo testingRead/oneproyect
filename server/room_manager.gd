@@ -18,6 +18,7 @@ signal standings_changed(room: Node)
 const ROOM_SCRIPT := preload("res://server/room_state.gd")
 
 var rooms: Array[Node] = []
+var max_rooms := NET.MAX_ROOMS
 
 
 func _ready() -> void:
@@ -25,7 +26,7 @@ func _ready() -> void:
 
 
 func create_room(room_id := 0) -> Node:
-	if rooms.size() >= NET.MAX_ROOMS:
+	if rooms.size() >= max_rooms:
 		return null
 	if room_id <= 0:
 		room_id = _next_available_room_id()
@@ -97,7 +98,7 @@ func find_room_for_peer(peer_id: int) -> Node:
 
 
 func _next_available_room_id() -> int:
-	for room_id in range(1, NET.MAX_ROOMS + 1):
+	for room_id in range(1, max_rooms + 1):
 		if find_room(room_id) == null:
 			return room_id
 	return 0
