@@ -23,6 +23,7 @@ func _ready() -> void:
 	upcoming_detail = "Busca refugio y mira las marcas del suelo"
 	active_title = "LLUVIA DE METEORITOS"
 	active_detail = "¡Usa los refugios y sobrevive!"
+	required_map_tags = PackedStringArray(["common", "survival", "open_sky"])
 	_random.seed = 20260729
 	for index in pool_size:
 		var meteor: MeteorSlot = METEOR_SCENE.instantiate()

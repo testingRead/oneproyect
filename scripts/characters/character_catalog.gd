@@ -5,7 +5,7 @@ const GOLDEN_CHARACTER_COST := 5
 const NAMES := [
 	"EXPLORADOR",
 	"GUARDABOSQUES",
-	"CORREDORA",
+	"LINCE",
 	"TÉCNICO",
 	"DORADO",
 ]

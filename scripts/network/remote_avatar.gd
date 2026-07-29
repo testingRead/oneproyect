@@ -2,7 +2,7 @@ class_name RemoteAvatar
 extends Node3D
 
 const HUMANOID_RIG := preload("res://scripts/characters/humanoid_rig.gd")
-const ALL_LIMBS_MASK := 0b1111111
+const ALL_LIMBS_MASK := HUMANOID_RIG.ALL_BODY_PARTS_MASK
 
 @onready var name_label: Label3D = $Name
 

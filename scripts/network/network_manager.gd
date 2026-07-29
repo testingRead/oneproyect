@@ -8,7 +8,18 @@ signal remote_player_left(peer_id: int)
 signal remote_snapshot(peer_id: int, position: Vector3, facing_yaw: float, limb_mask: int)
 signal meteor_received(target: Vector3, drift: Vector2, damage: int, blast_force: float)
 signal shockwave_received
-signal round_state_received(state: int, round_number: int, time_left: float)
+signal round_state_received(
+	state: int,
+	round_number: int,
+	time_left: float,
+	mode_id: String,
+	map_id: String,
+	round_seed: int,
+	feature_ids: PackedStringArray,
+	player_profile_id: String,
+	spawn_policy_id: String,
+	spectator_policy_id: String
+)
 signal simulation_host_changed(peer_id: int)
 signal push_received(sender_id: int, direction: Vector3, force: float)
 
@@ -116,7 +127,7 @@ func get_player_count() -> int:
 	return _players.size()
 
 
-func send_snapshot(position: Vector3, facing_yaw: float, limb_mask := 0b1111111) -> void:
+func send_snapshot(position: Vector3, facing_yaw: float, limb_mask := 0b111111111111) -> void:
 	if not is_online():
 		return
 	_rpc_submit_snapshot.rpc_id(1, position, facing_yaw, limb_mask)
@@ -129,10 +140,33 @@ func broadcast_meteor(target: Vector3, drift: Vector2, damage: int, blast_force:
 	_rpc_submit_meteor.rpc_id(1, target, drift, damage, blast_force)
 
 
-func broadcast_round_state(state: int, round_number: int, time_left: float) -> void:
+func broadcast_round_state(
+	state: int,
+	round_number: int,
+	time_left: float,
+	mode_id: String,
+	map_id: String,
+	round_seed: int,
+	feature_ids: PackedStringArray,
+	player_profile_id: String,
+	spawn_policy_id: String,
+	spectator_policy_id: String
+) -> void:
 	if not is_simulation_host():
 		return
-	_rpc_submit_round_state.rpc_id(1, state, round_number, time_left)
+	_rpc_submit_round_state.rpc_id(
+		1,
+		state,
+		round_number,
+		time_left,
+		mode_id,
+		map_id,
+		round_seed,
+		feature_ids,
+		player_profile_id,
+		spawn_policy_id,
+		spectator_policy_id
+	)
 
 
 func broadcast_shockwave() -> void:
@@ -181,7 +215,14 @@ func _rpc_register_player(requested_name: String, requested_color: int, requeste
 			sender,
 			_last_round_state.state,
 			_last_round_state.round_number,
-			_last_round_state.time_left
+			_last_round_state.time_left,
+			_last_round_state.mode_id,
+			_last_round_state.map_id,
+			_last_round_state.round_seed,
+			_last_round_state.feature_ids,
+			_last_round_state.player_profile_id,
+			_last_round_state.spawn_policy_id,
+			_last_round_state.spectator_policy_id
 		)
 	peers_changed.emit(_players.size(), MAX_PLAYERS)
 	print(
@@ -220,7 +261,7 @@ func _rpc_submit_snapshot(position: Vector3, facing_yaw: float, limb_mask: int) 
 	var sender := multiplayer.get_remote_sender_id()
 	if not _players.has(sender) or not position.is_finite() or position.length() > MAX_POSITION:
 		return
-	var safe_limb_mask := limb_mask & 0b1111111
+	var safe_limb_mask := limb_mask & 0b111111111111
 	for peer_id in _players:
 		if peer_id != sender:
 			_rpc_receive_snapshot.rpc_id(
@@ -311,7 +352,18 @@ func _rpc_receive_push(sender_id: int, direction: Vector3, force: float) -> void
 
 
 @rpc("any_peer", "call_remote", "reliable", 0)
-func _rpc_submit_round_state(state: int, round_number: int, time_left: float) -> void:
+func _rpc_submit_round_state(
+	state: int,
+	round_number: int,
+	time_left: float,
+	mode_id: String,
+	map_id: String,
+	round_seed: int,
+	feature_ids: PackedStringArray,
+	player_profile_id: String,
+	spawn_policy_id: String,
+	spectator_policy_id: String
+) -> void:
 	if not multiplayer.is_server():
 		return
 	var sender := multiplayer.get_remote_sender_id()
@@ -320,19 +372,78 @@ func _rpc_submit_round_state(state: int, round_number: int, time_left: float) ->
 	var safe_state := clampi(state, 0, 2)
 	var safe_round := clampi(round_number, 0, 999)
 	var safe_time := clampf(time_left, 0.0, 90.0)
+	var safe_mode_id := _sanitize_identifier(mode_id)
+	var safe_map_id := _sanitize_identifier(map_id)
+	if safe_mode_id.is_empty() or safe_map_id.is_empty():
+		return
+	var safe_feature_ids := PackedStringArray()
+	for feature_id in feature_ids:
+		if safe_feature_ids.size() >= 8:
+			break
+		var safe_feature_id := _sanitize_identifier(feature_id)
+		if not safe_feature_id.is_empty() and safe_feature_id not in safe_feature_ids:
+			safe_feature_ids.append(safe_feature_id)
+	var safe_player_profile_id := _sanitize_identifier(player_profile_id)
+	var safe_spawn_policy_id := _sanitize_identifier(spawn_policy_id)
+	var safe_spectator_policy_id := _sanitize_identifier(spectator_policy_id)
 	_last_round_state = {
 		"state": safe_state,
 		"round_number": safe_round,
 		"time_left": safe_time,
+		"mode_id": safe_mode_id,
+		"map_id": safe_map_id,
+		"round_seed": maxi(0, round_seed),
+		"feature_ids": safe_feature_ids,
+		"player_profile_id": safe_player_profile_id,
+		"spawn_policy_id": safe_spawn_policy_id,
+		"spectator_policy_id": safe_spectator_policy_id,
 	}
 	for peer_id in _players:
 		if peer_id != sender:
-			_rpc_receive_round_state.rpc_id(peer_id, safe_state, safe_round, safe_time)
+			_rpc_receive_round_state.rpc_id(
+				peer_id,
+				safe_state,
+				safe_round,
+				safe_time,
+				safe_mode_id,
+				safe_map_id,
+				maxi(0, round_seed),
+				safe_feature_ids,
+				safe_player_profile_id,
+				safe_spawn_policy_id,
+				safe_spectator_policy_id
+			)
 
 
 @rpc("authority", "call_remote", "reliable", 0)
-func _rpc_receive_round_state(state: int, round_number: int, time_left: float) -> void:
-	round_state_received.emit(state, round_number, time_left)
+func _rpc_receive_round_state(
+	state: int,
+	round_number: int,
+	time_left: float,
+	mode_id: String,
+	map_id: String,
+	round_seed: int,
+	feature_ids: PackedStringArray,
+	player_profile_id: String,
+	spawn_policy_id: String,
+	spectator_policy_id: String
+) -> void:
+	round_state_received.emit(
+		state,
+		round_number,
+		time_left,
+		mode_id,
+		map_id,
+		round_seed,
+		feature_ids,
+		player_profile_id,
+		spawn_policy_id,
+		spectator_policy_id
+	)
+
+
+func _sanitize_identifier(value: String) -> String:
+	return value.strip_edges().substr(0, 32)
 
 
 func _on_connected_to_server() -> void:

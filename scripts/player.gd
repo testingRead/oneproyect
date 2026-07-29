@@ -26,8 +26,9 @@ signal limb_detached(
 )
 
 const MAX_HEALTH := 100
-const ALL_LIMBS_MASK := 0b1111111
+const ALL_LIMBS_MASK := HUMANOID_RIG.ALL_BODY_PARTS_MASK
 const LIMB_MAX_HEALTH := [24, 34, 34, 20, 20, 38, 38]
+const ACCESSORY_MAX_HEALTH := 12
 const LIMB_VISUAL_PATHS := [
 	NodePath("Visual/Head"),
 	NodePath("Visual/LeftArm"),
@@ -57,6 +58,22 @@ enum Limb {
 	RIGHT_LEG,
 }
 
+enum Accessory {
+	CAP = 7,
+	BACKPACK,
+	LEFT_EAR,
+	RIGHT_EAR,
+	TAIL,
+}
+
+const ACCESSORY_VISUAL_PATHS := {
+	Accessory.CAP: NodePath("Visual/Cap"),
+	Accessory.BACKPACK: NodePath("Visual/Backpack"),
+	Accessory.LEFT_EAR: NodePath("Visual/LeftEar"),
+	Accessory.RIGHT_EAR: NodePath("Visual/RightEar"),
+	Accessory.TAIL: NodePath("Visual/Tail"),
+}
+
 var _touch_move := Vector2.ZERO
 var _jump_requested := false
 var _spawn_transform: Transform3D
@@ -71,6 +88,8 @@ var _push_animation := 0.0
 var _hurt_animation := 0.0
 var _limb_health := PackedInt32Array()
 var _limb_mask := ALL_LIMBS_MASK
+var _head_accessory_health := ACCESSORY_MAX_HEALTH
+var _torso_accessory_health := ACCESSORY_MAX_HEALTH
 var _character_color: Color = CHARACTER_CATALOG.COLORS[0]
 var _character_variant_index := 0
 
@@ -299,7 +318,21 @@ func _take_damage(damage: int, limb: int, origin: Vector3) -> void:
 	_invulnerability = 0.45
 	_hurt_animation = 0.25
 	if limb >= Limb.HEAD:
+		if limb == Limb.HEAD:
+			_damage_accessory_group(
+				[Accessory.CAP, Accessory.LEFT_EAR, Accessory.RIGHT_EAR],
+				safe_damage,
+				origin,
+				true
+			)
 		_damage_limb(limb, safe_damage, origin)
+	else:
+		_damage_accessory_group(
+			[Accessory.BACKPACK, Accessory.TAIL],
+			safe_damage,
+			origin,
+			false
+		)
 	health_changed.emit(_health, MAX_HEALTH)
 	damaged.emit(safe_damage, _health)
 	if _health == 0:
@@ -331,6 +364,9 @@ func _find_closest_limb(origin: Vector3) -> int:
 
 
 func _detach_limb(limb: int, origin: Vector3) -> void:
+	if limb == Limb.HEAD:
+		for accessory in [Accessory.CAP, Accessory.LEFT_EAR, Accessory.RIGHT_EAR]:
+			_detach_accessory(accessory, origin)
 	_detach_single_limb(limb, origin)
 	if limb == Limb.LEFT_ARM:
 		_detach_single_limb(Limb.LEFT_HAND, origin)
@@ -355,13 +391,54 @@ func _detach_single_limb(limb: int, origin: Vector3) -> void:
 	collision.set_deferred("disabled", true)
 	if limb == Limb.HEAD:
 		$Visual/Visor.visible = false
-		$Visual/Cap.visible = false
-	limb_detached.emit(piece_transform, mesh.scale, _character_color, impulse)
+	limb_detached.emit(piece_transform, mesh.scale, _get_mesh_color(mesh), impulse)
+
+
+func _damage_accessory_group(
+	accessories: Array,
+	damage: int,
+	origin: Vector3,
+	head_group: bool
+) -> void:
+	var has_visible_accessory := false
+	for accessory: int in accessories:
+		var mesh := get_node(ACCESSORY_VISUAL_PATHS[accessory]) as MeshInstance3D
+		has_visible_accessory = has_visible_accessory or mesh.visible
+	if not has_visible_accessory:
+		return
+	if head_group:
+		_head_accessory_health = maxi(0, _head_accessory_health - damage)
+		if _head_accessory_health > 0:
+			return
+	else:
+		_torso_accessory_health = maxi(0, _torso_accessory_health - damage)
+		if _torso_accessory_health > 0:
+			return
+	for accessory: int in accessories:
+		_detach_accessory(accessory, origin)
+
+
+func _detach_accessory(accessory: int, origin: Vector3) -> void:
+	if not _is_limb_attached(accessory):
+		return
+	var mesh := get_node(ACCESSORY_VISUAL_PATHS[accessory]) as MeshInstance3D
+	if not mesh.visible:
+		return
+	_limb_mask &= ~(1 << accessory)
+	var piece_transform := Transform3D(mesh.global_basis.orthonormalized(), mesh.global_position)
+	var impulse := mesh.global_position - origin
+	if impulse.length_squared() < 0.01:
+		impulse = Vector3.UP
+	impulse = impulse.normalized() * 1.8 + Vector3.UP * 1.35
+	mesh.visible = false
+	limb_detached.emit(piece_transform, mesh.scale, _get_mesh_color(mesh), impulse)
 
 
 func _reset_limbs() -> void:
 	_limb_mask = ALL_LIMBS_MASK
 	_limb_health = PackedInt32Array(LIMB_MAX_HEALTH)
+	_head_accessory_health = ACCESSORY_MAX_HEALTH
+	_torso_accessory_health = ACCESSORY_MAX_HEALTH
 	for limb in LIMB_VISUAL_PATHS.size():
 		var hitbox := get_node(LIMB_HITBOX_PATHS[limb]) as Area3D
 		(hitbox.get_node("Shape") as CollisionShape3D).set_deferred("disabled", false)
@@ -370,6 +447,13 @@ func _reset_limbs() -> void:
 
 func _is_limb_attached(limb: int) -> bool:
 	return (_limb_mask & (1 << limb)) != 0
+
+
+func _get_mesh_color(mesh: MeshInstance3D) -> Color:
+	var material := mesh.material_override as StandardMaterial3D
+	if material == null:
+		material = mesh.get_active_material(0) as StandardMaterial3D
+	return material.albedo_color if material != null else _character_color
 
 
 func _get_leg_movement_scale() -> float:

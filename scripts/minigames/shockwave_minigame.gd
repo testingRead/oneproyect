@@ -19,6 +19,7 @@ func _ready() -> void:
 	upcoming_detail = "Sube al centro o salta por encima del anillo"
 	active_title = "PULSO SÍSMICO"
 	active_detail = "¡Salta el anillo celeste o busca altura!"
+	required_map_tags = PackedStringArray(["common", "elevation"])
 	_shockwave = SHOCKWAVE_SCENE.instantiate()
 	add_child(_shockwave)
 	_shockwave.warning_started.connect(shockwave_warning.emit)

@@ -14,6 +14,7 @@ const FPS_LIMITS := [30, 45, 60]
 @onready var remote_players: Node3D = $World/RemotePlayers
 @onready var detached_parts: Node3D = $World/DetachedParts
 @onready var mode_map_host: Node3D = $World/ModeMapHost
+@onready var feature_host: Node = $ExperienceFeatureHost
 @onready var network: Variant = get_node("/root/Network")
 @onready var sounds: SoundBank = $SoundBank
 @onready var sun: DirectionalLight3D = $World/Sun
@@ -92,7 +93,7 @@ func _ready() -> void:
 	disaster.meteor_impact.connect(sounds.play_impact)
 	disaster.shockwave_warning.connect(sounds.play_warning)
 	disaster.shockwave_started.connect(sounds.play_shockwave)
-	disaster.mode_selected.connect(mode_map_host.activate_mode)
+	disaster.experience_selected.connect(_on_experience_selected)
 	mode_map_host.map_activated.connect(_on_mode_map_activated)
 	network.status_changed.connect(_on_network_status_changed)
 	network.remote_player_joined.connect(_on_remote_player_joined)
@@ -234,8 +235,17 @@ func _on_round_started(_round_number: int) -> void:
 	_participating_round = true
 
 
+func _on_experience_selected(plan: Dictionary) -> void:
+	mode_map_host.activate_selection(
+		StringName(plan.get("mode_id", &"")),
+		StringName(plan.get("map_id", &""))
+	)
+	feature_host.apply_experience(plan)
+
+
 func _on_mode_map_activated(
 	_mode_id: StringName,
+	_map_id: StringName,
 	spawn_transform: Transform3D,
 	has_spawn: bool
 ) -> void:

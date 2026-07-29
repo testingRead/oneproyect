@@ -1,10 +1,28 @@
 # Exportación local en el POCO
 
+## Estado comprobado del teléfono
+
+El POCO X7 Pro ya funciona como worker ARM64 de validación:
+
+- Godot oficial 4.7.1 ARM64 está fijado en
+  `$HOME/toolchains/godot-4.7.1/godot`;
+- Java, Gradle, Android SDK, `aapt2`, `apksigner`, `adb`, Clang y Cargo están
+  disponibles;
+- el proyecto público vive en `$HOME/projects/oneproyect`;
+- el smoke test headless funciona dentro de Debian/proot con la caché `.godot`
+  importada.
+
+El editor/importador Linux ARM64 presenta un fallo nativo bajo proot. No se usa
+para importar recursos, pero el runtime ya importado sí funciona con
+`--single-threaded-scene`. Falta validar la exportación APK con las export
+templates oficiales; hasta entonces GitHub Actions sigue siendo la fuente
+reproducible.
+
 ## Conclusión
 
-Termux no ofrece un comando oficial de Godot para exportar este proyecto. La
-ruta local soportada es usar Termux para Git y el **Editor Android de Godot
-4.7.1** para importar, ejecutar y exportar el APK.
+Termux no empaqueta Godot en su repositorio, pero el binario Linux ARM64 oficial
+permite ejecutar pruebas dentro de proot. La ruta Android soportada para editar
+visualmente sigue siendo el **Editor Android de Godot 4.7.1**.
 
 El editor Android aún no está instalado en el POCO. Termux sí está preparado:
 Git funciona, `termux-open` está disponible, el almacenamiento compartido está

@@ -14,6 +14,7 @@ var saw_limb_mask := false
 var saw_meteor := false
 var saw_shockwave := false
 var saw_round_state := false
+var saw_round_plan := false
 var saw_push := false
 var remote_peer_id := 0
 
@@ -51,7 +52,9 @@ func _setup() -> void:
 		limb_mask: int
 	) -> void:
 		saw_snapshot = true
-		saw_limb_mask = limb_mask == (95 if role == "host" else 63)
+		saw_limb_mask = limb_mask == (
+			(95 | (1 << 11)) if role == "host" else (63 | (1 << 10))
+		)
 	)
 	network.meteor_received.connect(func(_target: Vector3, _drift: Vector2, _damage: int, _force: float) -> void:
 		saw_meteor = true
@@ -59,8 +62,28 @@ func _setup() -> void:
 	network.shockwave_received.connect(func() -> void:
 		saw_shockwave = true
 	)
-	network.round_state_received.connect(func(_state: int, _round: int, _time: float) -> void:
+	network.round_state_received.connect(func(
+		_state: int,
+		_round: int,
+		_time: float,
+		mode_id: String,
+		map_id: String,
+		round_seed: int,
+		feature_ids: PackedStringArray,
+		player_profile_id: String,
+		spawn_policy_id: String,
+		spectator_policy_id: String
+	) -> void:
 		saw_round_state = true
+		saw_round_plan = (
+			mode_id == "meteors"
+			and map_id == "plaza_caos"
+			and round_seed == 2468
+			and feature_ids == PackedStringArray(["test_feature"])
+			and player_profile_id == "default"
+			and spawn_policy_id == "spread"
+			and spectator_policy_id == "overhead"
+		)
 	)
 	network.push_received.connect(func(_sender: int, _direction: Vector3, _force: float) -> void:
 		saw_push = true
@@ -80,23 +103,43 @@ func _run() -> void:
 		elapsed += 1.0 / 60.0
 		if online and network.get_player_count() >= 2:
 			if role == "host":
-				network.send_snapshot(Vector3(2.0, 1.2, -3.0), 0.75, 63)
+				network.send_snapshot(
+					Vector3(2.0, 1.2, -3.0),
+					0.75,
+					63 | (1 << 10)
+				)
 				if network.is_simulation_host() and not sent_events and elapsed > 1.0:
 					network.broadcast_meteor(Vector3(1.0, 0.06, 1.0), Vector2.ZERO, 22, 10.5)
 					network.broadcast_shockwave()
-					network.broadcast_round_state(1, 3, 20.0)
+					network.broadcast_round_state(
+						1,
+						3,
+						20.0,
+						"meteors",
+						"plaza_caos",
+						2468,
+						PackedStringArray(["test_feature"]),
+						"default",
+						"spread",
+						"overhead"
+					)
 					network.send_push(remote_peer_id, Vector3.FORWARD, 5.2)
 					sent_events = true
 					events_sent_at = elapsed
 					saw_meteor = true
 					saw_shockwave = true
 					saw_round_state = true
+					saw_round_plan = true
 					saw_push = true
 			else:
-				network.send_snapshot(Vector3(-2.0, 1.2, 3.0), -0.75, 95)
+				network.send_snapshot(
+					Vector3(-2.0, 1.2, 3.0),
+					-0.75,
+					95 | (1 << 11)
+				)
 		if _is_complete(sent_events, elapsed - events_sent_at):
 			print(
-				"NETWORK_PROBE_OK role=%s players=%d host=%s remote=%s snapshot=%s limbs=%s meteor=%s shockwave=%s round=%s push=%s"
+				"NETWORK_PROBE_OK role=%s players=%d host=%s remote=%s snapshot=%s limbs=%s meteor=%s shockwave=%s round=%s plan=%s push=%s"
 				% [
 					role,
 					network.get_player_count(),
@@ -107,6 +150,7 @@ func _run() -> void:
 					saw_meteor,
 					saw_shockwave,
 					saw_round_state,
+					saw_round_plan,
 					saw_push,
 				]
 			)
@@ -134,6 +178,7 @@ func _is_complete(sent_events: bool, event_age: float) -> bool:
 		and saw_meteor
 		and saw_shockwave
 		and saw_round_state
+		and saw_round_plan
 		and saw_push
 	)
 

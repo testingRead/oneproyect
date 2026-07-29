@@ -3,7 +3,8 @@ extends RefCounted
 
 const CATALOG := preload("res://scripts/characters/character_catalog.gd")
 const SUIT_TEXTURE := preload("res://assets/textures/suit_panels.res")
-const ALL_LIMBS_MASK := 0b1111111
+const ALL_BODY_PARTS_MASK := 0b111111111111
+const ALL_LIMBS_MASK := ALL_BODY_PARTS_MASK
 const HEAD := 0
 const LEFT_ARM := 1
 const RIGHT_ARM := 2
@@ -11,6 +12,24 @@ const LEFT_HAND := 3
 const RIGHT_HAND := 4
 const LEFT_LEG := 5
 const RIGHT_LEG := 6
+const CAP := 7
+const BACKPACK := 8
+const LEFT_EAR := 9
+const RIGHT_EAR := 10
+const TAIL := 11
+const BODY_PART_NAMES := [
+	"Body",
+	"Head",
+	"LeftArm",
+	"RightArm",
+	"LeftHand",
+	"RightHand",
+	"LeftLeg",
+	"RightLeg",
+	"LeftEar",
+	"RightEar",
+	"Tail",
+]
 
 
 static func apply_variant(root: Node3D, index: int) -> Color:
@@ -19,25 +38,18 @@ static func apply_variant(root: Node3D, index: int) -> Color:
 	var body := root.get_node("Body") as MeshInstance3D
 	var material := body.get_active_material(0).duplicate() as StandardMaterial3D
 	material.albedo_color = color
-	for part_name in [
-		"Body",
-		"Head",
-		"LeftArm",
-		"RightArm",
-		"LeftHand",
-		"RightHand",
-		"LeftLeg",
-		"RightLeg",
-	]:
+	for part_name in BODY_PART_NAMES:
 		(root.get_node(part_name) as MeshInstance3D).material_override = material
 	apply_proportions(root, safe_index)
-	apply_limb_mask(root, ALL_LIMBS_MASK, safe_index)
+	apply_limb_mask(root, ALL_BODY_PARTS_MASK, safe_index)
 	return color
 
 
 static func apply_proportions(root: Node3D, index: int) -> void:
 	root.get_node("Body").scale = Vector3(0.76, 0.78, 0.44)
 	root.get_node("Head").scale = Vector3(0.6, 0.56, 0.54)
+	root.get_node("LeftArm").scale = Vector3(0.23, 0.67, 0.32)
+	root.get_node("RightArm").scale = Vector3(0.23, 0.67, 0.32)
 	root.get_node("LeftLeg").scale = Vector3(0.28, 0.77, 0.36)
 	root.get_node("RightLeg").scale = Vector3(0.28, 0.77, 0.36)
 	match index:
@@ -45,12 +57,20 @@ static func apply_proportions(root: Node3D, index: int) -> void:
 			root.get_node("Body").scale.x = 0.84
 			root.get_node("Head").scale = Vector3(0.64, 0.58, 0.56)
 		2:
-			root.get_node("Body").scale.x = 0.68
+			root.get_node("Body").scale = Vector3(0.68, 0.82, 0.42)
+			root.get_node("Head").scale = Vector3(0.66, 0.6, 0.58)
+			root.get_node("LeftArm").scale.x = 0.2
+			root.get_node("RightArm").scale.x = 0.2
 			root.get_node("LeftLeg").scale.x = 0.24
 			root.get_node("RightLeg").scale.x = 0.24
 		3:
-			root.get_node("Body").scale.z = 0.52
-			root.get_node("Head").scale.x = 0.66
+			root.get_node("Body").scale = Vector3(0.9, 0.72, 0.52)
+			root.get_node("Head").scale = Vector3(0.68, 0.54, 0.58)
+			root.get_node("LeftArm").scale.x = 0.27
+			root.get_node("RightArm").scale.x = 0.27
+		4:
+			root.get_node("Body").scale = Vector3(0.82, 0.84, 0.46)
+			root.get_node("Head").scale = Vector3(0.58, 0.58, 0.54)
 
 
 static func animate(
@@ -110,18 +130,43 @@ static func animate(
 	)
 	root.get_node("Head").position.y = 1.04 + bob
 	root.get_node("Visor").position.y = 1.03 + bob
+	root.get_node("Cap").position.y = 1.43 + bob
+	root.get_node("LeftEar").position.y = 1.43 + bob
+	root.get_node("RightEar").position.y = 1.43 + bob
+	root.get_node("Tail").rotation.y = sin(walk_phase * 0.5) * 0.3 * movement_weight
 	return walk_phase
 
 
 static func apply_limb_mask(root: Node3D, mask: int, variant_index: int) -> void:
-	var safe_mask := mask & ALL_LIMBS_MASK
+	var safe_mask := mask & ALL_BODY_PARTS_MASK
 	var head_attached := _has_limb(safe_mask, HEAD)
 	var left_arm_attached := _has_limb(safe_mask, LEFT_ARM)
 	var right_arm_attached := _has_limb(safe_mask, RIGHT_ARM)
 	root.get_node("Head").visible = head_attached
 	root.get_node("Visor").visible = head_attached
-	root.get_node("Cap").visible = head_attached and variant_index % 2 == 0
-	root.get_node("Backpack").visible = variant_index % 2 == 1
+	root.get_node("Cap").visible = (
+		head_attached
+		and variant_index in [0, 4]
+		and _has_limb(safe_mask, CAP)
+	)
+	root.get_node("Backpack").visible = (
+		variant_index in [1, 3]
+		and _has_limb(safe_mask, BACKPACK)
+	)
+	root.get_node("LeftEar").visible = (
+		head_attached
+		and variant_index == 2
+		and _has_limb(safe_mask, LEFT_EAR)
+	)
+	root.get_node("RightEar").visible = (
+		head_attached
+		and variant_index == 2
+		and _has_limb(safe_mask, RIGHT_EAR)
+	)
+	root.get_node("Tail").visible = (
+		variant_index == 2
+		and _has_limb(safe_mask, TAIL)
+	)
 	root.get_node("LeftArm").visible = left_arm_attached
 	root.get_node("RightArm").visible = right_arm_attached
 	root.get_node("LeftHand").visible = (
@@ -149,16 +194,7 @@ static func set_shadow_quality(root: Node3D, enabled: bool) -> void:
 		if enabled
 		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	)
-	for part_name in [
-		"Body",
-		"Head",
-		"LeftArm",
-		"RightArm",
-		"LeftHand",
-		"RightHand",
-		"LeftLeg",
-		"RightLeg",
-	]:
+	for part_name in BODY_PART_NAMES + ["Cap", "Backpack"]:
 		(root.get_node(part_name) as GeometryInstance3D).cast_shadow = shadow_mode
 
 

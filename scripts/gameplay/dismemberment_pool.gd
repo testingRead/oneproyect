@@ -1,7 +1,7 @@
 class_name DismembermentPool
 extends Node3D
 
-const POOL_SIZE := 8
+const POOL_SIZE := 12
 const PART_LIFETIME := 5.0
 
 var _bodies: Array[RigidBody3D] = []

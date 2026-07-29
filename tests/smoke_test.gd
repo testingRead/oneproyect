@@ -3,6 +3,7 @@ extends SceneTree
 const EXPECTED_METEOR_POOL := 8
 const NETWORK_SCRIPT := preload("res://scripts/network/network_manager.gd")
 const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn")
+const GAMEPLAY_FEATURE_SCRIPT := preload("res://scripts/features/gameplay_feature.gd")
 
 
 func _init() -> void:
@@ -30,7 +31,7 @@ func _run() -> void:
 	for light: Light3D in lights:
 		_require(not light.shadow_enabled, "Low-end light must not cast shadows")
 	var meshes := game.get_node("World").find_children("*", "MeshInstance3D", true, false)
-	_require(meshes.size() <= 64, "Low-end world mesh-node budget exceeded")
+	_require(meshes.size() <= 68, "Low-end world mesh-node budget exceeded")
 	_require(
 		ProjectSettings.get_setting("rendering/renderer/rendering_method") == "gl_compatibility",
 		"Project must use the Compatibility renderer"
@@ -44,6 +45,46 @@ func _run() -> void:
 	_require(
 		disaster.get_registered_mode_ids() == [&"meteors", &"shockwave", &"flood"],
 		"Round controller must discover independent minigame modules in scene order"
+	)
+	var map_host: Node3D = game.get_node("World/ModeMapHost")
+	_require(
+		map_host.get_registered_map_ids() == [&"plaza_caos"],
+		"Map host must discover data-driven common maps"
+	)
+	var initial_plan := disaster.get_upcoming_plan()
+	_require(
+		initial_plan.has_all([
+			"mode_id",
+			"map_id",
+			"round_seed",
+			"feature_ids",
+			"player_profile_id",
+			"spawn_policy_id",
+			"spectator_policy_id",
+		]),
+		"Round selection must produce a complete reusable experience plan"
+	)
+	_require(
+		initial_plan.map_id == &"plaza_caos",
+		"Common mode must select only a tag-compatible map"
+	)
+	var feature_host: Node = game.get_node("ExperienceFeatureHost")
+	var test_feature: Node = GAMEPLAY_FEATURE_SCRIPT.new()
+	test_feature.feature_id = &"test_feature"
+	feature_host.register_feature(test_feature)
+	var feature_plan := initial_plan.duplicate(true)
+	feature_plan.feature_ids = PackedStringArray(["test_feature"])
+	feature_host.apply_experience(feature_plan)
+	_require(
+		feature_host.get_active_feature_ids() == [&"test_feature"]
+		and test_feature.feature_context.player == game.get_node("World/Player"),
+		"Experience features must receive reusable player/world/HUD dependencies"
+	)
+	feature_host.apply_experience(initial_plan)
+	_require(
+		feature_host.get_active_feature_ids().is_empty()
+		and test_feature.feature_context.is_empty(),
+		"Features omitted by the next plan must deactivate without rebuilding the game"
 	)
 	var meteors := disaster.get_node("MeteorMode").find_children("Meteor*", "", false, false)
 	_require(meteors.size() == EXPECTED_METEOR_POOL, "Meteor pool must be preallocated")
@@ -135,6 +176,14 @@ func _run() -> void:
 	_require(
 		not player.get_node("Visual/Cap").visible and player.get_node("Visual/Backpack").visible,
 		"Character variants must change their cheap accessory"
+	)
+	player.set_character_variant(2)
+	_require(
+		player.get_node("Visual/LeftEar").visible
+		and player.get_node("Visual/RightEar").visible
+		and player.get_node("Visual/Tail").visible
+		and not player.get_node("Visual/Backpack").visible,
+		"Semi-human variant must have a distinct low-poly silhouette"
 	)
 	player.set_texture_detail(true)
 	var suit_material := player.get_node("Visual/Body").material_override as StandardMaterial3D
@@ -231,6 +280,25 @@ func _run() -> void:
 	flood.stop()
 	player.heal_full()
 
+	player.set_character_variant(2)
+	player.apply_limb_damage(
+		GrayboxPlayer.Limb.HEAD,
+		GrayboxPlayer.ACCESSORY_MAX_HEALTH,
+		player.global_position + Vector3(0.0, 2.0, 0.0)
+	)
+	await physics_frame
+	_require(
+		player.get_node("Visual/Head").visible
+		and not player.get_node("Visual/LeftEar").visible
+		and not player.get_node("Visual/RightEar").visible,
+		"Head accessories must detach before the underlying body part"
+	)
+	_require(
+		(player.get_limb_mask() & (1 << GrayboxPlayer.Accessory.LEFT_EAR)) == 0,
+		"Accessory detachment must use the same compact synchronized body mask"
+	)
+	player.heal_full()
+	player.set_character_variant(0)
 	player.apply_limb_damage(
 		GrayboxPlayer.Limb.LEFT_HAND,
 		20,
@@ -266,13 +334,19 @@ func _run() -> void:
 	remote.configure("Prueba", 2, Vector3.ZERO)
 	_require(remote.get_node("Name").text == "Prueba", "Remote name must be visible")
 	_require(
-		remote.get_node("Cap").visible != remote.get_node("Backpack").visible,
-		"Remote avatar must expose exactly one cheap visual variant"
+		remote.get_node("LeftEar").visible
+		and remote.get_node("RightEar").visible
+		and remote.get_node("Tail").visible,
+		"Remote and preview avatars must reuse the semi-human silhouette"
 	)
-	remote.set_limb_mask(GrayboxPlayer.ALL_LIMBS_MASK & ~(1 << GrayboxPlayer.Limb.RIGHT_LEG))
+	remote.set_limb_mask(
+		GrayboxPlayer.ALL_LIMBS_MASK
+		& ~(1 << GrayboxPlayer.Limb.RIGHT_LEG)
+		& ~(1 << GrayboxPlayer.Accessory.TAIL)
+	)
 	_require(
-		not remote.get_node("RightLeg").visible,
-		"Remote avatar must apply synchronized limb state"
+		not remote.get_node("RightLeg").visible and not remote.get_node("Tail").visible,
+		"Remote avatar must apply synchronized limb and accessory state"
 	)
 	remote.queue_free()
 
@@ -285,8 +359,12 @@ func _run() -> void:
 	var custom_map_scene := PackedScene.new()
 	_require(custom_map_scene.pack(custom_map_root) == OK, "Custom minigame map must pack")
 	custom_map_root.free()
-	var map_host: Node3D = game.get_node("World/ModeMapHost")
-	map_host.activate_mode(&"test_mode", custom_map_scene)
+	map_host.register_runtime_map(
+		&"test_map",
+		custom_map_scene,
+		PackedStringArray(["custom", "test"])
+	)
+	map_host.activate_selection(&"test_mode", &"test_map")
 	await physics_frame
 	_require(
 		not game.get_node("World/Arena").visible and map_host.get_cached_map_count() == 1,
@@ -296,9 +374,9 @@ func _run() -> void:
 		player.global_position.distance_to(Vector3(3.0, 1.2, -2.0)) < 0.1,
 		"Dedicated map spawn marker must relocate the reusable player"
 	)
-	map_host.activate_mode(&"test_mode", custom_map_scene)
+	map_host.activate_selection(&"test_mode", &"test_map")
 	_require(map_host.get_cached_map_count() == 1, "Reusing a mode must not recreate its map")
-	map_host.activate_mode(&"default", null)
+	map_host.activate_selection(&"default", &"plaza_caos")
 	await physics_frame
 	_require(game.get_node("World/Arena").visible, "Default arena must restore after a custom mode")
 
@@ -307,6 +385,20 @@ func _run() -> void:
 	await process_frame
 	var score: Label = game.get_node("HUD/RoundPanel/Score")
 	_require(score.text.contains("RONDAS 1"), "Completed round must update persistent score HUD")
+	var previous_mode_id := StringName(initial_plan.mode_id)
+	disaster._activate_plan(initial_plan)
+	for selection in 8:
+		var random_plan: Dictionary = disaster._select_next_plan()
+		_require(
+			random_plan.mode_id != previous_mode_id,
+			"Random selector must not repeat the same mode consecutively"
+		)
+		_require(
+			random_plan.map_id == &"plaza_caos",
+			"Random selector must preserve mode/map compatibility"
+		)
+		disaster._activate_plan(random_plan)
+		previous_mode_id = StringName(random_plan.mode_id)
 	for frame in 40:
 		await physics_frame
 

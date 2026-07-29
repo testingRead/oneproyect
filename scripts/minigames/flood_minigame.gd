@@ -13,6 +13,7 @@ func _ready() -> void:
 	upcoming_detail = "Prepárate para buscar las zonas más altas"
 	active_title = "INUNDACIÓN ASCENDENTE"
 	active_detail = "¡Sube antes de que el agua te alcance!"
+	required_map_tags = PackedStringArray(["common", "elevation"])
 	_flood = FLOOD_SCENE.instantiate()
 	add_child(_flood)
 

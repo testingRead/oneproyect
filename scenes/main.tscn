@@ -1,4 +1,4 @@
-[gd_scene load_steps=46 format=3]
+[gd_scene load_steps=48 format=3]
 
 [ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
 [ext_resource type="Script" path="res://scripts/player.gd" id="2_player"]
@@ -14,6 +14,8 @@
 [ext_resource type="Script" path="res://scripts/minigames/shockwave_minigame.gd" id="13_shockwave_mode"]
 [ext_resource type="Script" path="res://scripts/minigames/flood_minigame.gd" id="14_flood_mode"]
 [ext_resource type="Script" path="res://scripts/minigames/mode_map_host.gd" id="15_map_host"]
+[ext_resource type="Resource" path="res://data/maps/plaza_caos.tres" id="16_plaza_map"]
+[ext_resource type="Script" path="res://scripts/features/experience_feature_host.gd" id="17_feature_host"]
 
 [sub_resource type="StandardMaterial3D" id="MatFloor"]
 albedo_texture = ExtResource("8_floor")
@@ -486,6 +488,30 @@ position = Vector3(0, 0.35, -0.3)
 mesh = SubResource("MeshPlayerBackpack")
 cast_shadow = 0
 
+[node name="LeftEar" type="MeshInstance3D" parent="World/Player/Visual"]
+visible = false
+position = Vector3(-0.28, 1.43, 0)
+rotation_degrees = Vector3(0, 0, -18)
+scale = Vector3(0.14, 0.3, 0.13)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="RightEar" type="MeshInstance3D" parent="World/Player/Visual"]
+visible = false
+position = Vector3(0.28, 1.43, 0)
+rotation_degrees = Vector3(0, 0, 18)
+scale = Vector3(0.14, 0.3, 0.13)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="Tail" type="MeshInstance3D" parent="World/Player/Visual"]
+visible = false
+position = Vector3(0, 0.16, -0.58)
+rotation_degrees = Vector3(-48, 0, 0)
+scale = Vector3(0.13, 0.58, 0.13)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
 [node name="CameraRig" type="Node3D" parent="World/Player"]
 position = Vector3(0, 0.68, 0)
 rotation = Vector3(-0.22, 0, 0)
@@ -516,6 +542,7 @@ script = ExtResource("14_flood_mode")
 [node name="ModeMapHost" type="Node3D" parent="World"]
 script = ExtResource("15_map_host")
 default_map_path = NodePath("../Arena")
+map_definitions = Array[Resource]([ExtResource("16_plaza_map")])
 
 [node name="RemotePlayers" type="Node3D" parent="World"]
 
@@ -524,6 +551,12 @@ script = ExtResource("11_parts")
 
 [node name="SoundBank" type="Node" parent="."]
 script = ExtResource("7_sound")
+
+[node name="ExperienceFeatureHost" type="Node" parent="."]
+script = ExtResource("17_feature_host")
+player_path = NodePath("../World/Player")
+world_path = NodePath("../World")
+hud_path = NodePath("../HUD")
 
 [node name="Warning" type="AudioStreamPlayer" parent="SoundBank"]
 volume_db = -8.0
