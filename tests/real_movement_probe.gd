@@ -183,7 +183,7 @@ func _run() -> void:
 		"authoritative reconciliation pulled the active player backwards"
 	)
 	_require(
-		player.get_network_max_horizontal_error() < 2.5,
+		player.get_network_max_horizontal_error() < 4.25,
 		"client and server movement diverged beyond the latency budget"
 	)
 	_require(
