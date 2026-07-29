@@ -52,8 +52,9 @@ func pending_count() -> int:
 
 
 func _step(move: Vector2, flags: int) -> void:
+	var floor_height := MOVEMENT.floor_height_at(predicted_position)
 	var on_floor := (
-		predicted_position.y <= NET.FLOOR_HEIGHT + 0.001
+		predicted_position.y <= floor_height + 0.001
 		and predicted_velocity.y <= 0.0
 	)
 	predicted_velocity = MOVEMENT.step_velocity(
@@ -68,6 +69,7 @@ func _step(move: Vector2, flags: int) -> void:
 		predicted_velocity,
 		NET.SERVER_TICK_DELTA
 	)
-	if predicted_position.y <= NET.FLOOR_HEIGHT and predicted_velocity.y < 0.0:
-		predicted_position.y = NET.FLOOR_HEIGHT
+	floor_height = MOVEMENT.floor_height_at(predicted_position)
+	if predicted_position.y <= floor_height and predicted_velocity.y < 0.0:
+		predicted_position.y = floor_height
 		predicted_velocity.y = 0.0

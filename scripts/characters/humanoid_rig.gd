@@ -95,8 +95,10 @@ static func animate(
 		right_arm_target = -0.38
 		left_leg_target = 0.2
 		right_leg_target = -0.2
-	left_arm_target = lerpf(left_arm_target, 1.25, push_weight)
-	right_arm_target = lerpf(right_arm_target, 1.25, push_weight)
+	left_arm_target = lerpf(left_arm_target, -1.18, push_weight)
+	right_arm_target = lerpf(right_arm_target, -1.18, push_weight)
+	left_leg_target = lerpf(left_leg_target, 0.16, push_weight)
+	right_leg_target = lerpf(right_leg_target, -0.16, push_weight)
 	root.get_node("LeftArm").rotation.x = lerpf(
 		root.get_node("LeftArm").rotation.x,
 		left_arm_target,
@@ -126,6 +128,16 @@ static func animate(
 	root.get_node("Body").rotation.z = lerpf(
 		root.get_node("Body").rotation.z,
 		-0.18 * hurt_weight,
+		delta * 18.0
+	)
+	root.get_node("Body").rotation.x = lerpf(
+		root.get_node("Body").rotation.x,
+		-0.12 * push_weight,
+		delta * 18.0
+	)
+	root.get_node("Head").rotation.x = lerpf(
+		root.get_node("Head").rotation.x,
+		0.08 * push_weight,
 		delta * 18.0
 	)
 	root.get_node("Head").position.y = 1.04 + bob

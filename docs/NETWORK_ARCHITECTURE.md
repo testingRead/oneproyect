@@ -69,8 +69,10 @@ corporal y último input procesado.
 
 No existen cámaras, luces, materiales, texturas, audio, partículas, HUD ni
 animación en el árbol dedicado. Los límites autoritativos de la primera etapa
-son una caja y un suelo matemáticos; se añadirán colisiones simplificadas sólo
-cuando afecten resultados.
+son matemáticos: caja exterior, alturas de suelo/plataforma/escalones y cuatro
+pilares circulares. No se cargan `StaticBody3D` ni shapes. Esta aproximación
+evita que el servidor atraviese las piezas principales del mapa y luego
+arrastre al cliente hacia una posición contradictoria.
 
 ## Movimiento
 
@@ -88,6 +90,11 @@ y, al recibir su estado:
 
 Los remotos guardan dos snapshots y se interpolan. Su animación se deduce de la
 velocidad recibida.
+
+El render local usa una zona muerta amplia: errores pequeños no mueven al
+personaje visible, discrepancias medias convergen lentamente y sólo un error
+superior a varios metros provoca teletransporte. La autoridad lógica se
+mantiene para snapshots, empujones, límites y resultados.
 
 ## Reconexión
 

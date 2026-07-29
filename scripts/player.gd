@@ -152,7 +152,7 @@ func _physics_process(delta: float) -> void:
 		Vector2(velocity.x, velocity.z).length(),
 		_walk_phase,
 		is_on_floor(),
-		clampf(_push_animation / 0.24, 0.0, 1.0),
+		clampf(_push_animation / 0.30, 0.0, 1.0),
 		clampf(_hurt_animation / 0.25, 0.0, 1.0)
 	)
 
@@ -189,7 +189,7 @@ func request_push() -> void:
 	):
 		return
 	_push_cooldown = 0.72
-	_push_animation = 0.24
+	_push_animation = 0.30
 	push_requested.emit()
 
 
@@ -250,21 +250,39 @@ func apply_authoritative_state(
 ) -> void:
 	if not position.is_finite() or not authoritative_velocity.is_finite():
 		return
-	var error_distance := global_position.distance_to(position)
-	if error_distance > 2.5:
+	var horizontal_error := Vector2(
+		position.x - global_position.x,
+		position.z - global_position.z
+	)
+	var vertical_error := position.y - global_position.y
+	if horizontal_error.length() > 4.5 or absf(vertical_error) > 3.0:
 		global_position = position
-	elif error_distance > 0.55:
-		global_position = global_position.lerp(position, 0.12)
-	elif error_distance > 0.18:
-		global_position = global_position.lerp(position, 0.045)
+	else:
+		var horizontal_correction := (
+			0.04
+			if horizontal_error.length() > 1.5
+			else 0.015
+			if horizontal_error.length() > 0.65
+			else 0.0
+		)
+		global_position.x += horizontal_error.x * horizontal_correction
+		global_position.z += horizontal_error.y * horizontal_correction
+		var vertical_correction := (
+			0.08
+			if absf(vertical_error) > 1.2
+			else 0.025
+			if absf(vertical_error) > 0.35
+			else 0.0
+		)
+		global_position.y += vertical_error * vertical_correction
 	var velocity_error := Vector2(
 		velocity.x - authoritative_velocity.x,
 		velocity.z - authoritative_velocity.z
 	).length()
-	if velocity_error > 0.8:
-		velocity.x = lerpf(velocity.x, authoritative_velocity.x, 0.12)
-		velocity.z = lerpf(velocity.z, authoritative_velocity.z, 0.12)
-	visual.rotation.y = lerp_angle(visual.rotation.y, facing_yaw, 0.16)
+	if velocity_error > 2.0:
+		velocity.x = lerpf(velocity.x, authoritative_velocity.x, 0.05)
+		velocity.z = lerpf(velocity.z, authoritative_velocity.z, 0.05)
+	visual.rotation.y = lerp_angle(visual.rotation.y, facing_yaw, 0.08)
 	var safe_health := clampi(health, 0, MAX_HEALTH)
 	if safe_health != _health:
 		_health = safe_health

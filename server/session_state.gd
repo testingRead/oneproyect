@@ -57,8 +57,9 @@ func simulate(server_tick: int) -> void:
 	var move := input_move
 	if server_tick - last_input_tick > NET.MAX_INPUT_AGE_TICKS:
 		move = Vector2.ZERO
+	var floor_height := MOVEMENT.floor_height_at(position)
 	var on_floor := (
-		position.y <= NET.FLOOR_HEIGHT + 0.001
+		position.y <= floor_height + 0.001
 		and velocity.y <= 0.0
 	)
 	velocity = MOVEMENT.step_velocity(
@@ -70,8 +71,9 @@ func simulate(server_tick: int) -> void:
 	)
 	_jump_pending = false
 	position = MOVEMENT.step_position(position, velocity, NET.SERVER_TICK_DELTA)
-	if position.y <= NET.FLOOR_HEIGHT and velocity.y < 0.0:
-		position.y = NET.FLOOR_HEIGHT
+	floor_height = MOVEMENT.floor_height_at(position)
+	if position.y <= floor_height and velocity.y < 0.0:
+		position.y = floor_height
 		velocity.y = 0.0
 
 

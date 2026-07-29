@@ -233,8 +233,9 @@ func _run() -> void:
 	_require(push_request_state[0], "Push button must request a short frontal push")
 	await physics_frame
 	_require(
-		player.get_node("Visual/LeftArm").rotation.x > 0.1,
-		"Push action must drive the shared procedural pose"
+		player.get_node("Visual/LeftArm").rotation.x < -0.1
+		and player.get_node("Visual/LeftHand").position.z > 0.05,
+		"Push action must extend both arms toward the facing direction"
 	)
 	player.velocity = Vector3.ZERO
 	player.apply_external_push(Vector3.FORWARD, 5.2)

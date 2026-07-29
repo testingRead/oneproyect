@@ -77,7 +77,10 @@ El VPS escucha en UDP `9999` y es autoritativo únicamente para sesión, fase,
 inputs, movimiento simplificado, daño y eventos que afectan el resultado. No
 carga mapas visuales, cámaras, luces, texturas, animaciones, partículas ni
 audio. Cada cliente conserva la física visual completa, predicción,
-reconciliación, interpolación, efectos y ajustes de calidad.
+reconciliación, interpolación, efectos y ajustes de calidad. La colisión
+autoritativa ligera reproduce matemáticamente los límites, la plataforma
+central, sus accesos y los pilares; así evita correcciones contradictorias sin
+cargar el escenario 3D.
 
 ## Exportación reproducible
 

@@ -2,6 +2,7 @@ extends SceneTree
 
 const NET := preload("res://shared/net_constants.gd")
 const CODEC := preload("res://shared/net_codec.gd")
+const MOVEMENT := preload("res://shared/movement_rules.gd")
 const ROOM_SCRIPT := preload("res://server/room_state.gd")
 const ROOM_MANAGER_SCRIPT := preload("res://server/room_manager.gd")
 
@@ -33,6 +34,24 @@ func _run() -> void:
 	root.add_child(room)
 	await process_frame
 	_require(room.phase == NET.RoomPhase.WAITING, "New rooms must wait in the lobby")
+	var blocked_side := MOVEMENT.step_position(
+		Vector3(3.5, NET.FLOOR_HEIGHT, 2.5),
+		Vector3(-6.0, 0.0, 0.0),
+		0.05
+	)
+	_require(
+		is_equal_approx(blocked_side.x, 3.5),
+		"Authoritative movement must not cross the platform's vertical side"
+	)
+	var climbed_step := MOVEMENT.step_position(
+		Vector3(0.0, MOVEMENT.STEP_FLOOR_HEIGHT, 3.5),
+		Vector3(0.0, 0.0, -6.0),
+		0.05
+	)
+	_require(
+		is_equal_approx(climbed_step.y, MOVEMENT.CENTER_FLOOR_HEIGHT),
+		"Authoritative movement must follow the center access step"
+	)
 
 	var first: RefCounted = room.session_manager.register_session(
 		20,
