@@ -16,6 +16,9 @@ FPS y tiempo aproximado por frame.
 ## Exportación reproducible
 
 El workflow `Android debug APK` fija Godot 4.7.1 y verifica los SHA-256 de los
-binarios y export templates oficiales antes de generar
-`oneproyect-debug.apk`. Se ejecuta en pushes a `main`/`agent/graybox` y manualmente
-desde GitHub Actions.
+binarios y export templates oficiales. Genera APK separados:
+
+- `oneproyect-debug-arm64.apk`: teléfonos modernos, incluido el POCO X7 Pro.
+- `oneproyect-debug-arm32.apk`: teléfonos antiguos de 32 bits.
+
+Se ejecuta en pushes a `main`/`agent/graybox` y manualmente desde GitHub Actions.

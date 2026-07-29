@@ -31,13 +31,13 @@ func _gui_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if event.pressed and _finger_id == -1:
 			_finger_id = event.index
-			_update_value(event.position)
+			_update_value(_viewport_to_local(event.position))
 			accept_event()
 		elif not event.pressed and event.index == _finger_id:
 			_release()
 			accept_event()
 	elif event is InputEventScreenDrag and event.index == _finger_id:
-		_update_value(event.position)
+		_update_value(_viewport_to_local(event.position))
 		accept_event()
 	elif event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
@@ -76,3 +76,7 @@ func _release() -> void:
 	_knob = _center
 	value_changed.emit(_value)
 	queue_redraw()
+
+
+func _viewport_to_local(viewport_position: Vector2) -> Vector2:
+	return get_global_transform_with_canvas().affine_inverse() * viewport_position

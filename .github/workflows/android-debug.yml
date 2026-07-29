@@ -83,23 +83,40 @@ jobs:
           set -euo pipefail
           "$HOME/.cache/oneproyect-godot/godot" --headless --editor --path "$GITHUB_WORKSPACE" --quit
 
-      - name: Export Android debug APK
+      - name: Export Android debug APKs
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
           "$HOME/.cache/oneproyect-godot/godot" --headless --path "$GITHUB_WORKSPACE" \
-            --export-debug "Android Debug" build/android/oneproyect-debug.apk
-          test -s build/android/oneproyect-debug.apk
-          ls -lh build/android/oneproyect-debug.apk
-          sha256sum build/android/oneproyect-debug.apk > build/android/oneproyect-debug.apk.sha256
+            --export-debug "Android Debug ARM64" build/android/oneproyect-debug-arm64.apk
+          "$HOME/.cache/oneproyect-godot/godot" --headless --path "$GITHUB_WORKSPACE" \
+            --export-debug "Android Debug ARM32" build/android/oneproyect-debug-arm32.apk
+          test -s build/android/oneproyect-debug-arm64.apk
+          test -s build/android/oneproyect-debug-arm32.apk
+          ls -lh build/android/oneproyect-debug-arm64.apk build/android/oneproyect-debug-arm32.apk
+          (
+            cd build/android
+            sha256sum oneproyect-debug-arm64.apk > oneproyect-debug-arm64.apk.sha256
+            sha256sum oneproyect-debug-arm32.apk > oneproyect-debug-arm32.apk.sha256
+          )
 
-      - name: Publish APK artifact
+      - name: Publish ARM64 APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: oneproyect-android-debug-${{ github.run_number }}
+          name: oneproyect-android-debug-arm64-${{ github.run_number }}
           path: |
-            build/android/oneproyect-debug.apk
-            build/android/oneproyect-debug.apk.sha256
+            build/android/oneproyect-debug-arm64.apk
+            build/android/oneproyect-debug-arm64.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish ARM32 APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oneproyect-android-debug-arm32-${{ github.run_number }}
+          path: |
+            build/android/oneproyect-debug-arm32.apk
+            build/android/oneproyect-debug-arm32.apk.sha256
           if-no-files-found: error
           retention-days: 14
