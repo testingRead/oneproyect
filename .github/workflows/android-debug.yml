@@ -237,16 +237,11 @@ jobs:
           GODOT="$HOME/.cache/oneproyect-godot/godot"
           SERVER_BIN="$GITHUB_WORKSPACE/build/server/oneproyect-server"
           SERVER_PCK="$GITHUB_WORKSPACE/build/server/oneproyect-server.pck"
-          SERVER_TEMPLATE="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}/linux_release.x86_64"
           SERVER_LOG="$RUNNER_TEMP/oneproyect-exported-server.log"
           mkdir -p "$(dirname "$SERVER_BIN")"
-          phase="export_pack"
+          phase="export_release"
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
-            --export-pack "Linux Dedicated Server" "$SERVER_PCK"
-          phase="install_template"
-          test -s "$SERVER_TEMPLATE"
-          cp "$SERVER_TEMPLATE" "$SERVER_BIN"
-          chmod 755 "$SERVER_BIN"
+            --export-release "Linux Dedicated Server" "$SERVER_BIN"
           phase="validate_files"
           test -s "$SERVER_BIN"
           test -x "$SERVER_BIN"
@@ -272,6 +267,11 @@ jobs:
             fi
             sleep 0.1
           done
+          if ! kill -0 "$server_pid" 2>/dev/null; then
+            server_exit=0
+            wait "$server_pid" || server_exit=$?
+            echo "Exported server exited before ready: code=$server_exit" >> "$SERVER_LOG"
+          fi
           phase="verify_server_ready"
           grep -q "ONEPROYECT_SERVER_READY udp=19998" "$SERVER_LOG"
           phase="verify_server_tree"
