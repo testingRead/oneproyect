@@ -35,8 +35,9 @@ Una desconexión conserva identidad, token, posición, velocidad, vida,
 puntuación y último input durante 60 segundos. Un nuevo `peer_id` con el token
 correcto recupera el mismo `player_id`. El lobby crea hasta cinco salas dentro
 del proceso, cada una con un máximo de cinco sesiones. Sólo el anfitrión puede
-iniciar y se requieren al menos dos jugadores; si éste se desconecta, el rol
-pasa al siguiente jugador conectado.
+iniciar, se requieren al menos dos jugadores y todos deben confirmar `ready`;
+si éste se desconecta, el rol pasa al siguiente jugador conectado. El servidor
+conserva sólo el índice lógico de personaje, nunca su modelo o material.
 
 ## Medición
 

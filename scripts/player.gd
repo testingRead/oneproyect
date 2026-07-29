@@ -251,14 +251,20 @@ func apply_authoritative_state(
 	if not position.is_finite() or not authoritative_velocity.is_finite():
 		return
 	var error_distance := global_position.distance_to(position)
-	global_position = (
-		position
-		if error_distance > 3.0
-		else global_position.lerp(position, 0.32)
-	)
-	velocity.x = lerpf(velocity.x, authoritative_velocity.x, 0.35)
-	velocity.z = lerpf(velocity.z, authoritative_velocity.z, 0.35)
-	visual.rotation.y = lerp_angle(visual.rotation.y, facing_yaw, 0.35)
+	if error_distance > 2.5:
+		global_position = position
+	elif error_distance > 0.55:
+		global_position = global_position.lerp(position, 0.12)
+	elif error_distance > 0.18:
+		global_position = global_position.lerp(position, 0.045)
+	var velocity_error := Vector2(
+		velocity.x - authoritative_velocity.x,
+		velocity.z - authoritative_velocity.z
+	).length()
+	if velocity_error > 0.8:
+		velocity.x = lerpf(velocity.x, authoritative_velocity.x, 0.12)
+		velocity.z = lerpf(velocity.z, authoritative_velocity.z, 0.12)
+	visual.rotation.y = lerp_angle(visual.rotation.y, facing_yaw, 0.16)
 	var safe_health := clampi(health, 0, MAX_HEALTH)
 	if safe_health != _health:
 		_health = safe_health

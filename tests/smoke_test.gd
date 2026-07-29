@@ -37,6 +37,11 @@ func _run() -> void:
 		and menu.find_child("StartRoom", true, false) is Button,
 		"Lobby must expose room creation and host-controlled start"
 	)
+	_require(
+		menu.find_child("RoomCharacter", true, false) is OptionButton
+		and menu.find_child("ReadyRoom", true, false) is Button,
+		"Waiting room must expose character selection and ready confirmation"
+	)
 	menu.queue_free()
 	await process_frame
 

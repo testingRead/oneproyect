@@ -1,6 +1,8 @@
 extends Control
 
 const NET := preload("res://shared/net_constants.gd")
+const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.gd")
+const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn")
 const GAME_SCENE := "res://scenes/main.tscn"
 const PROFILE_PATH := "user://profile.cfg"
 
@@ -16,12 +18,19 @@ var _create_button: Button
 var _refresh_button: Button
 var _waiting_title: Label
 var _waiting_detail: Label
+var _character_button: OptionButton
+var _character_preview: RemoteAvatar
+var _character_viewport: SubViewport
+var _ready_button: Button
 var _start_button: Button
 var _room_buttons: Array[Button] = []
 var _room_ids := PackedInt32Array()
 var _room_count := 0
 var _maximum_rooms := NET.MAX_ROOMS
 var _loading_game := false
+var _local_ready := false
+var _is_host := false
+var _total_victories := 0
 
 
 func _ready() -> void:
@@ -149,15 +158,39 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	_waiting_title = _title("SALA", 34, Color(0.35, 0.95, 0.9))
 	screen.add_child(_waiting_title)
 	_waiting_detail = _label("Esperando jugadores…", 22)
-	_waiting_detail.custom_minimum_size.y = 150.0
+	_waiting_detail.custom_minimum_size.y = 86.0
 	_waiting_detail.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	screen.add_child(_waiting_detail)
+	var character_row := HBoxContainer.new()
+	character_row.add_theme_constant_override("separation", 12)
+	_character_button = OptionButton.new()
+	_character_button.name = "RoomCharacter"
+	_character_button.custom_minimum_size = Vector2(0.0, 52.0)
+	_character_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_character_button.add_theme_font_size_override("font_size", 18)
+	for index in CHARACTER_CATALOG.NAMES.size():
+		var suffix := (
+			" · BLOQUEADO"
+			if index == CHARACTER_CATALOG.NAMES.size() - 1
+			else ""
+		)
+		_character_button.add_item(
+			"%s%s" % [CHARACTER_CATALOG.NAMES[index], suffix],
+			index
+		)
+	_character_button.item_selected.connect(_on_character_selected)
+	character_row.add_child(_character_button)
+	character_row.add_child(_build_character_preview())
+	screen.add_child(character_row)
 	var rule := _label(
-		"Se necesitan al menos 2 jugadores.\nCapacidad máxima: 5.",
-		17
+		"El personaje queda bloqueado al marcar LISTO.",
+		15
 	)
 	rule.modulate = Color(0.72, 0.82, 0.94)
 	screen.add_child(rule)
+	_ready_button = _button("MARCAR LISTO", "ReadyRoom")
+	_ready_button.pressed.connect(_toggle_ready)
+	screen.add_child(_ready_button)
 	_start_button = _button("INICIAR PARTIDA", "StartRoom")
 	_start_button.visible = false
 	_start_button.disabled = true
@@ -256,23 +289,55 @@ func _on_room_list(
 	_lobby_status.text = "Salas disponibles: %d/%d" % [_room_count, _maximum_rooms]
 
 
-func _on_room_waiting(room_id: int, player_count: int, is_host: bool) -> void:
+func _on_room_waiting(
+	room_id: int,
+	player_count: int,
+	is_host: bool,
+	ready_count: int,
+	local_ready: bool,
+	all_ready: bool,
+	player_names: PackedStringArray,
+	ready_flags: PackedByteArray
+) -> void:
 	_show_screen(_waiting_screen)
+	_is_host = is_host
+	_local_ready = local_ready
 	_waiting_title.text = "SALA %d" % room_id
-	_waiting_detail.text = "%d/5 JUGADORES\n%s" % [
+	var player_states := PackedStringArray()
+	for index in mini(player_names.size(), ready_flags.size()):
+		player_states.append(
+			"%s %s" % [
+				player_names[index],
+				"✓" if ready_flags[index] != 0 else "…",
+			]
+		)
+	_waiting_detail.text = "%d/5 JUGADORES · %d LISTOS\n%s" % [
 		player_count,
-		"Puedes iniciar la partida" if is_host and player_count >= 2
-		else "Esperando al anfitrión" if not is_host
-		else "Falta al menos un jugador",
+		ready_count,
+		"  ·  ".join(player_states),
 	]
+	_character_button.disabled = local_ready
+	_ready_button.disabled = false
+	_ready_button.text = "CANCELAR LISTO" if local_ready else "MARCAR LISTO"
 	_start_button.visible = is_host
-	_start_button.disabled = player_count < NET.MIN_PLAYERS_TO_START
+	_start_button.disabled = (
+		player_count < NET.MIN_PLAYERS_TO_START
+		or not all_ready
+	)
+	_start_button.text = (
+		"INICIAR PARTIDA"
+		if all_ready
+		else "ESPERANDO JUGADORES LISTOS"
+	)
 
 
 func _on_room_started(_room_id: int) -> void:
 	if _loading_game:
 		return
 	_loading_game = true
+	_character_button.disabled = true
+	_ready_button.disabled = true
+	_start_button.disabled = true
 	_waiting_detail.text = "Iniciando partida…"
 	get_tree().change_scene_to_file(GAME_SCENE)
 
@@ -284,6 +349,7 @@ func _on_room_error(reason: String) -> void:
 		"room_missing": "La sala ya no existe.",
 		"room_unavailable": "La partida ya comenzó.",
 		"need_two_players": "Se necesitan al menos dos jugadores.",
+		"players_not_ready": "Todos deben marcar LISTO antes de iniciar.",
 		"host_only": "Sólo el anfitrión puede iniciar.",
 	}
 	_lobby_status.text = str(messages.get(reason, "No se pudo completar la acción."))
@@ -298,6 +364,8 @@ func _on_returned_to_lobby() -> void:
 	_create_button.disabled = false
 	_refresh_button.disabled = false
 	network.request_room_list()
+	_local_ready = false
+	_is_host = false
 
 
 func _show_screen(screen: Control) -> void:
@@ -312,7 +380,16 @@ func _load_name() -> void:
 		var saved := str(config.get_value("player", "name", "")).strip_edges().substr(0, 16)
 		if not saved.is_empty():
 			network.display_name = saved
+		network.color_index = CHARACTER_CATALOG.sanitize_index(
+			int(config.get_value("player", "character", network.color_index))
+		)
+		_total_victories = maxi(
+			0,
+			int(config.get_value("player", "total_victories", 0))
+		)
 	_name_input.text = network.display_name
+	_character_button.select(network.color_index)
+	_update_character_preview()
 
 
 func _save_name() -> void:
@@ -325,6 +402,77 @@ func _save_name() -> void:
 	config.load(PROFILE_PATH)
 	config.set_value("player", "name", safe_name)
 	config.save(PROFILE_PATH)
+
+
+func _on_character_selected(index: int) -> void:
+	if _local_ready or _loading_game:
+		_character_button.select(network.color_index)
+		return
+	var next_index := CHARACTER_CATALOG.sanitize_index(index)
+	if (
+		next_index == CHARACTER_CATALOG.NAMES.size() - 1
+		and _total_victories < CHARACTER_CATALOG.GOLDEN_CHARACTER_COST
+	):
+		_character_button.select(network.color_index)
+		_waiting_detail.text = (
+			"DORADO requiere %d victorias multijugador"
+			% CHARACTER_CATALOG.GOLDEN_CHARACTER_COST
+		)
+		return
+	network.color_index = next_index
+	_save_character()
+	_update_character_preview()
+	if network.is_online():
+		network.set_room_profile(false)
+
+
+func _toggle_ready() -> void:
+	if not network.is_online() or _loading_game:
+		return
+	_ready_button.disabled = true
+	network.set_room_profile(not _local_ready)
+
+
+func _save_character() -> void:
+	var config := ConfigFile.new()
+	config.load(PROFILE_PATH)
+	config.set_value("player", "character", network.color_index)
+	config.save(PROFILE_PATH)
+
+
+func _build_character_preview() -> SubViewportContainer:
+	var container := SubViewportContainer.new()
+	container.custom_minimum_size = Vector2(112.0, 96.0)
+	container.stretch = true
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(224, 192)
+	viewport.transparent_bg = true
+	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	_character_viewport = viewport
+	container.add_child(viewport)
+	var camera := Camera3D.new()
+	camera.position = Vector3(0.0, 0.55, 4.0)
+	camera.current = true
+	viewport.add_child(camera)
+	var light := DirectionalLight3D.new()
+	light.rotation_degrees = Vector3(-35.0, -25.0, 0.0)
+	light.shadow_enabled = false
+	viewport.add_child(light)
+	_character_preview = REMOTE_AVATAR_SCENE.instantiate()
+	_character_preview.position = Vector3(0.0, -0.25, 0.0)
+	viewport.add_child(_character_preview)
+	return container
+
+
+func _update_character_preview() -> void:
+	if _character_preview == null:
+		return
+	_character_preview.configure("", network.color_index, Vector3(0.0, -0.25, 0.0))
+	_character_preview.get_node("Name").visible = false
+	_character_preview.set_process(false)
+	_character_preview.set_shadow_quality(false)
+	_character_preview.set_texture_detail(false)
+	_character_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
 func _new_screen(screen_name: String) -> VBoxContainer:

@@ -110,6 +110,11 @@ func _ready() -> void:
 	_load_profile()
 	_on_health_changed(100, 100)
 	if network.is_online():
+		var spawn_position: Vector3 = network.get_local_spawn_position()
+		player.global_position = spawn_position
+		player.velocity = Vector3.ZERO
+		network.set_prediction_origin(spawn_position)
+		network.replay_remote_players()
 		_on_network_status_changed(
 			"EN LÍNEA · SALA %d" % network.get_room_id(),
 			true
@@ -128,12 +133,12 @@ func _process(delta: float) -> void:
 	if network.is_online():
 		_snapshot_elapsed += delta
 		if _snapshot_elapsed >= INPUT_INTERVAL:
+			_snapshot_elapsed -= INPUT_INTERVAL
 			network.submit_input(
 				player.get_network_move(),
 				player.get_visual_yaw(),
 				player.consume_network_jump()
 			)
-			_snapshot_elapsed = 0.0
 	if _damage_flash_strength > 0.0:
 		_damage_flash_strength = maxf(0.0, _damage_flash_strength - delta * 1.7)
 		damage_flash.color.a = _damage_flash_strength * 0.34

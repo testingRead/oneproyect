@@ -44,6 +44,7 @@ func register_session(
 		existing.reconnect_until_tick = 0
 		existing.display_name = _sanitize_name(requested_name, existing.player_id)
 		existing.color_index = clampi(requested_color, 0, 4)
+		existing.ready = false
 		existing.input_move = Vector2.ZERO
 		last_registration_reconnected = true
 		return existing
@@ -59,6 +60,7 @@ func register_session(
 	session.peer_id = peer_id
 	session.display_name = _sanitize_name(requested_name, session.player_id)
 	session.color_index = clampi(requested_color, 0, 4)
+	session.ready = false
 	session.connected = true
 	var slot := sessions.size()
 	session.position = Vector3(
@@ -75,6 +77,7 @@ func mark_disconnected(peer_id: int, server_tick: int) -> RefCounted:
 	if session == null:
 		return null
 	session.connected = false
+	session.ready = false
 	session.peer_id = 0
 	session.input_move = Vector2.ZERO
 	session.velocity.x = 0.0
@@ -132,6 +135,18 @@ func connected_count() -> int:
 	for session in sessions:
 		count += int(session.connected)
 	return count
+
+
+func ready_count() -> int:
+	var count := 0
+	for session in sessions:
+		count += int(session.connected and session.ready)
+	return count
+
+
+func all_connected_ready() -> bool:
+	var connected := connected_count()
+	return connected >= NET.MIN_PLAYERS_TO_START and ready_count() == connected
 
 
 func _create_token() -> String:

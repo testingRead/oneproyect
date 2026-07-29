@@ -12,6 +12,7 @@ var reconnect_token := ""
 var peer_id := 0
 var display_name := "Jugador"
 var color_index := 0
+var ready := false
 var connected := false
 var reconnect_until_tick := 0
 

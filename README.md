@@ -58,13 +58,16 @@ La guía para añadir modos, mapas y personajes sin acoplarlos al núcleo está 
 El arranque muestra dos rutas separadas. **JUGAR LOCAL** abre la arena sin
 conectarse a ningún servidor. **MULTIJUGADOR** abre un lobby ENet/UDP con hasta
 cinco salas simultáneas de cinco personas cada una. El creador es el anfitrión
-de la sala y puede iniciar cuando hay entre dos y cinco jugadores; si se
-desconecta, el siguiente jugador conectado hereda ese rol.
+de la sala y puede iniciar cuando hay entre dos y cinco jugadores y todos han
+marcado **LISTO**; si se desconecta, el siguiente jugador conectado hereda ese
+rol. El personaje se elige en la sala, queda bloqueado al confirmar y no puede
+cambiarse durante la partida.
 
 Cada jugador tiene nombre y color, y los avatares remotos se interpolan a
 partir de 10 actualizaciones de posición por segundo. La misma instantánea
 incluye orientación y estado corporal, sin enviar nodos ni físicas visuales por
-red.
+red. Al cambiar de la sala al mapa, el cliente reconstruye desde el estado
+conservado todos los avatares que ya estaban conectados.
 
 Los empujones se envían como eventos fiables pequeños únicamente al jugador
 objetivo. Las victorias multijugador se guardan por separado de las rondas

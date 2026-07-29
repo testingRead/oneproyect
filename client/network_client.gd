@@ -40,7 +40,16 @@ signal room_list_updated(
 	phases: PackedInt32Array,
 	host_names: PackedStringArray
 )
-signal room_waiting_updated(room_id: int, player_count: int, is_host: bool)
+signal room_waiting_updated(
+	room_id: int,
+	player_count: int,
+	is_host: bool,
+	ready_count: int,
+	local_ready: bool,
+	all_ready: bool,
+	player_names: PackedStringArray,
+	ready_flags: PackedByteArray
+)
 signal room_started(room_id: int)
 signal room_action_failed(reason: String)
 signal returned_to_lobby
@@ -62,6 +71,7 @@ var _manual_disconnect := true
 var _reconnect_pending := false
 var _reconnect_elapsed := 0.0
 var _local_player_id := 0
+var _local_spawn_position := Vector3(0.0, NET.FLOOR_HEIGHT, 8.0)
 var _room_id := 0
 var _input_sequence := 0
 var _input_packet := PackedByteArray()
@@ -150,6 +160,11 @@ func start_room() -> void:
 		_rpc_start_room.rpc_id(1)
 
 
+func set_room_profile(ready: bool) -> void:
+	if _session_accepted:
+		_rpc_set_room_profile.rpc_id(1, clampi(color_index, 0, 4), ready)
+
+
 func leave_room() -> void:
 	if _session_accepted:
 		_rpc_leave_room.rpc_id(1)
@@ -185,6 +200,30 @@ func get_local_player_id() -> int:
 
 func get_room_id() -> int:
 	return _room_id
+
+
+func get_local_spawn_position() -> Vector3:
+	return _local_spawn_position
+
+
+func replay_remote_players() -> void:
+	for player_id: int in _players:
+		if player_id == _local_player_id:
+			continue
+		var player: Dictionary = _players[player_id]
+		if not bool(player.get("connected", false)):
+			continue
+		remote_player_joined.emit(
+			player_id,
+			str(player.get("name", "Jugador")),
+			int(player.get("color", 0))
+		)
+		remote_snapshot.emit(
+			player_id,
+			player.get("position", Vector3(0.0, NET.FLOOR_HEIGHT, 8.0)),
+			float(player.get("yaw", 0.0)),
+			int(player.get("body_mask", NET.ALL_BODY_PARTS_MASK))
+		)
 
 
 func set_prediction_origin(position: Vector3, velocity := Vector3.ZERO) -> void:
@@ -306,6 +345,11 @@ func _rpc_start_room() -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_set_room_profile(_character_index: int, _ready: bool) -> void:
+	pass
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
 func _rpc_leave_room() -> void:
 	pass
 
@@ -372,7 +416,12 @@ func _rpc_room_list(
 func _rpc_room_waiting(
 	room_id: int,
 	player_count: int,
-	host_player_id: int
+	host_player_id: int,
+	ready_count: int,
+	local_ready: bool,
+	all_ready: bool,
+	player_names: PackedStringArray,
+	ready_flags: PackedByteArray
 ) -> void:
 	_room_id = room_id
 	status_changed.emit(
@@ -386,7 +435,12 @@ func _rpc_room_waiting(
 	room_waiting_updated.emit(
 		room_id,
 		player_count,
-		host_player_id == _local_player_id
+		host_player_id == _local_player_id,
+		ready_count,
+		local_ready,
+		all_ready,
+		player_names,
+		ready_flags
 	)
 
 
@@ -426,11 +480,27 @@ func _rpc_player_joined(
 		if already_known
 		else false
 	)
+	var previous_yaw := (
+		float(_players[player_id].get("yaw", 0.0))
+		if already_known
+		else 0.0
+	)
+	var previous_body_mask := (
+		int(_players[player_id].get("body_mask", NET.ALL_BODY_PARTS_MASK))
+		if already_known
+		else NET.ALL_BODY_PARTS_MASK
+	)
 	_players[player_id] = {
 		"name": player_name,
 		"color": player_color,
 		"connected": true,
+		"position": position,
+		"yaw": previous_yaw,
+		"body_mask": previous_body_mask,
 	}
+	if player_id == _local_player_id:
+		_local_spawn_position = position
+		_prediction.reset(position)
 	if player_id != _local_player_id and (not already_known or not was_connected):
 		remote_player_joined.emit(player_id, player_name, player_color)
 		remote_snapshot.emit(player_id, position, 0.0, NET.ALL_BODY_PARTS_MASK)
@@ -477,6 +547,10 @@ func _rpc_receive_snapshot(packet: PackedByteArray) -> void:
 				server_tick
 			)
 		else:
+			if _players.has(player_id):
+				_players[player_id].position = position
+				_players[player_id].yaw = yaw
+				_players[player_id].body_mask = body_mask
 			remote_snapshot.emit(player_id, position, yaw, body_mask)
 
 
@@ -609,6 +683,7 @@ func _reset_runtime_state() -> void:
 	_session_accepted = false
 	_players.clear()
 	_local_player_id = 0
+	_local_spawn_position = Vector3(0.0, NET.FLOOR_HEIGHT, 8.0)
 	_room_id = 0
 	_input_sequence = 0
 	_lobby_mode = false

@@ -13,8 +13,10 @@ var saw_two_players := false
 var started := false
 var requested_create := false
 var requested_join := false
+var requested_ready := false
 var requested_start := false
 var returned_to_lobby := false
+var replayed_remote := false
 
 
 func _init() -> void:
@@ -34,6 +36,7 @@ func _setup() -> void:
 	root.add_child(network)
 	network.server_port = port
 	network.display_name = role.capitalize()
+	network.color_index = 1 if role == "host" else 2
 	network.configure_test_identity(
 		"cccccccccccccccc" if role == "host" else "dddddddddddddddd"
 	)
@@ -85,13 +88,26 @@ func _on_room_list(
 			return
 
 
-func _on_room_waiting(_room_id: int, player_count: int, is_host: bool) -> void:
+func _on_room_waiting(
+	_room_id: int,
+	player_count: int,
+	is_host: bool,
+	_ready_count: int,
+	local_ready: bool,
+	all_ready: bool,
+	_player_names: PackedStringArray,
+	_ready_flags: PackedByteArray
+) -> void:
 	joined = true
 	saw_two_players = saw_two_players or player_count >= NET.MIN_PLAYERS_TO_START
+	if not local_ready and not requested_ready:
+		requested_ready = true
+		network.set_room_profile(true)
 	if (
 		role == "host"
 		and is_host
 		and saw_two_players
+		and all_ready
 		and not requested_start
 	):
 		requested_start = true
@@ -104,6 +120,24 @@ func _run() -> void:
 		await process_frame
 		if joined and saw_two_players and started:
 			var completed_room_id: int = network.get_room_id()
+			var replay_count := [0]
+			network.remote_player_joined.connect(func(
+				_player_id: int,
+				_name: String,
+				_color: int
+			) -> void:
+				var expected_color := 2 if role == "host" else 1
+				if _color != expected_color:
+					_fail("cached remote character selection was not preserved")
+					return
+				replay_count[0] += 1
+			)
+			network.replay_remote_players()
+			await process_frame
+			if replay_count[0] != 1:
+				_fail("late game scene did not reconstruct the cached remote avatar")
+				return
+			replayed_remote = true
 			await create_timer(0.35 if role == "host" else 0.9).timeout
 			network.leave_room()
 			var leave_started := Time.get_ticks_msec()
@@ -116,7 +150,7 @@ func _run() -> void:
 				_fail("server did not acknowledge leaving the room")
 				return
 			print(
-				"LOBBY_PROBE_OK role=%s room=%d players=2 started=true"
+				"LOBBY_PROBE_OK role=%s room=%d players=2 ready=true replay=true"
 				% [role, completed_room_id]
 			)
 			network.disconnect_session()

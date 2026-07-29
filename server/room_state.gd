@@ -49,7 +49,7 @@ func tick() -> void:
 		and auto_start_when_ready
 		and session_manager.connected_count() >= NET.MIN_PLAYERS_TO_START
 	):
-		start_rounds()
+		start_rounds(true)
 	if phase != NET.RoomPhase.WAITING and server_tick >= phase_end_tick:
 		_advance_phase()
 	if phase == NET.RoomPhase.ACTIVE:
@@ -133,10 +133,11 @@ func accepts_new_players() -> bool:
 	)
 
 
-func start_rounds() -> bool:
+func start_rounds(ignore_ready := false) -> bool:
 	if (
 		phase != NET.RoomPhase.WAITING
 		or session_manager.connected_count() < NET.MIN_PLAYERS_TO_START
+		or (not ignore_ready and not session_manager.all_connected_ready())
 	):
 		return false
 	phase = NET.RoomPhase.COUNTDOWN
@@ -152,6 +153,14 @@ func is_host_peer(peer_id: int) -> bool:
 
 func connected_count() -> int:
 	return session_manager.connected_count()
+
+
+func ready_count() -> int:
+	return session_manager.ready_count()
+
+
+func all_connected_ready() -> bool:
+	return session_manager.all_connected_ready()
 
 
 func host_name() -> String:

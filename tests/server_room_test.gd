@@ -56,6 +56,12 @@ func _run() -> void:
 		room.session_manager.connected_count() == NET.MIN_PLAYERS_TO_START,
 		"Room must count the minimum two connected players"
 	)
+	_require(
+		not room.start_rounds(),
+		"Lobby room must reject an arbitrary start before everyone is ready"
+	)
+	first.ready = true
+	second.ready = true
 	_require(room.start_rounds(), "Host-ready room must enter countdown with two players")
 	room.phase_end_tick = room.server_tick + 1
 	room.tick()

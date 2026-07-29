@@ -183,10 +183,36 @@ func _rpc_start_room() -> void:
 	if not room.is_host_peer(sender):
 		_rpc_room_action_failed.rpc_id(sender, "host_only")
 		return
-	if not room.start_rounds():
+	if room.connected_count() < NET.MIN_PLAYERS_TO_START:
 		_rpc_room_action_failed.rpc_id(sender, "need_two_players")
 		return
+	if not room.all_connected_ready():
+		_rpc_room_action_failed.rpc_id(sender, "players_not_ready")
+		return
+	if not room.start_rounds():
+		_rpc_room_action_failed.rpc_id(sender, "room_unavailable")
+		return
 	_broadcast_lobby_rooms()
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_set_room_profile(character_index: int, ready: bool) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	var room: Node = room_manager.find_room_for_peer(sender)
+	if room == null:
+		_rpc_room_action_failed.rpc_id(sender, "not_in_room")
+		return
+	if room.phase != NET.RoomPhase.WAITING:
+		_rpc_room_action_failed.rpc_id(sender, "room_unavailable")
+		return
+	var session: RefCounted = room.session_manager.find_by_peer_id(sender)
+	if session == null:
+		_rpc_room_action_failed.rpc_id(sender, "not_in_room")
+		return
+	session.color_index = clampi(character_index, 0, 4)
+	session.ready = ready
+	_broadcast_player_profile(room, session)
+	_broadcast_room_waiting(room)
 
 
 @rpc("any_peer", "call_remote", "reliable", 0)
@@ -350,7 +376,12 @@ func _rpc_room_list(
 func _rpc_room_waiting(
 	_room_id: int,
 	_player_count: int,
-	_host_player_id: int
+	_host_player_id: int,
+	_ready_count: int,
+	_local_ready: bool,
+	_all_ready: bool,
+	_player_names: PackedStringArray,
+	_ready_flags: PackedByteArray
 ) -> void:
 	pass
 
@@ -582,6 +613,15 @@ func _broadcast_room_waiting(room: Node) -> void:
 		return
 	room._refresh_host()
 	var connected_peers := multiplayer.get_peers()
+	var player_names := PackedStringArray()
+	var ready_flags := PackedByteArray()
+	for session: RefCounted in room.session_manager.sessions:
+		if not session.connected:
+			continue
+		player_names.append(session.display_name)
+		ready_flags.append(1 if session.ready else 0)
+	var ready_count: int = room.ready_count()
+	var all_ready: bool = room.all_connected_ready()
 	for session: RefCounted in room.session_manager.sessions:
 		if (
 			session.connected
@@ -592,7 +632,24 @@ func _broadcast_room_waiting(room: Node) -> void:
 				session.peer_id,
 				room.room_id,
 				room.connected_count(),
-				room.host_player_id
+				room.host_player_id,
+				ready_count,
+				session.ready,
+				all_ready,
+				player_names,
+				ready_flags
+			)
+
+
+func _broadcast_player_profile(room: Node, changed: RefCounted) -> void:
+	for session: RefCounted in room.session_manager.sessions:
+		if session.connected and _peer_can_receive(session.peer_id):
+			_rpc_player_joined.rpc_id(
+				session.peer_id,
+				changed.player_id,
+				changed.display_name,
+				changed.color_index,
+				changed.position
 			)
 
 

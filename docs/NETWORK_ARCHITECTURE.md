@@ -98,6 +98,9 @@ notifica su eliminación.
 
 El lobby admite como máximo cinco salas dentro de un solo proceso y cada sala
 reserva hasta cinco sesiones. El creador puede iniciar con un mínimo de dos
-personas. El proceso ENet admite 25 clientes simultáneos, pero cada
+personas únicamente cuando todos confirmaron que están listos. La variante de
+personaje forma parte del perfil lógico de sala y queda bloqueada al comenzar;
+no se sincronizan meshes ni materiales. El proceso ENet admite 25 clientes
+simultáneos, pero cada
 `SessionManager` aplica por separado el límite de cinco. No hay matchmaking
 público, migración de proceso, P2P, cuentas ni persistencia del lado servidor.
