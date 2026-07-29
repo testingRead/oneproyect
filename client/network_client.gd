@@ -5,7 +5,13 @@ signal status_changed(text: String, online: bool)
 signal peers_changed(current: int, maximum: int)
 signal remote_player_joined(player_id: int, display_name: String, color_index: int)
 signal remote_player_left(player_id: int)
-signal remote_snapshot(player_id: int, position: Vector3, facing_yaw: float, body_mask: int)
+signal remote_snapshot(
+	player_id: int,
+	position: Vector3,
+	velocity: Vector3,
+	facing_yaw: float,
+	body_mask: int
+)
 signal authoritative_state(
 	position: Vector3,
 	velocity: Vector3,
@@ -14,6 +20,18 @@ signal authoritative_state(
 	body_mask: int,
 	ack_sequence: int,
 	server_tick: int
+)
+signal predicted_state(position: Vector3, velocity: Vector3)
+signal raw_authoritative_state(
+	position: Vector3,
+	velocity: Vector3,
+	ack_sequence: int,
+	server_tick: int
+)
+signal prediction_reconciled(
+	correction: Vector3,
+	pending_inputs: int,
+	ack_sequence: int
 )
 signal meteor_received(target: Vector3, drift: Vector2, damage: int, blast_force: float)
 signal shockwave_received
@@ -221,6 +239,7 @@ func replay_remote_players() -> void:
 		remote_snapshot.emit(
 			player_id,
 			player.get("position", Vector3(0.0, NET.FLOOR_HEIGHT, 8.0)),
+			player.get("velocity", Vector3.ZERO),
 			float(player.get("yaw", 0.0)),
 			int(player.get("body_mask", NET.ALL_BODY_PARTS_MASK))
 		)
@@ -257,6 +276,10 @@ func submit_input(move: Vector2, facing_yaw: float, jump: bool) -> void:
 	var safe_move := move.limit_length(1.0) if move.is_finite() else Vector2.ZERO
 	CODEC.write_input(_input_packet, _input_sequence, safe_move, facing_yaw, flags)
 	_prediction.predict(_input_sequence, safe_move, flags)
+	predicted_state.emit(
+		_prediction.predicted_position,
+		_prediction.predicted_velocity
+	)
 	_rpc_submit_input.rpc_id(1, _input_packet)
 
 
@@ -495,6 +518,7 @@ func _rpc_player_joined(
 		"color": player_color,
 		"connected": true,
 		"position": position,
+		"velocity": Vector3.ZERO,
 		"yaw": previous_yaw,
 		"body_mask": previous_body_mask,
 	}
@@ -503,7 +527,13 @@ func _rpc_player_joined(
 		_prediction.reset(position)
 	if player_id != _local_player_id and (not already_known or not was_connected):
 		remote_player_joined.emit(player_id, player_name, player_color)
-		remote_snapshot.emit(player_id, position, 0.0, NET.ALL_BODY_PARTS_MASK)
+		remote_snapshot.emit(
+			player_id,
+			position,
+			Vector3.ZERO,
+			0.0,
+			NET.ALL_BODY_PARTS_MASK
+		)
 	peers_changed.emit(get_player_count(), NET.MAX_PLAYERS_PER_ROOM)
 
 
@@ -532,10 +562,27 @@ func _rpc_receive_snapshot(packet: PackedByteArray) -> void:
 		var yaw := CODEC.snapshot_player_yaw(packet, slot)
 		var body_mask := CODEC.snapshot_player_body_mask(packet, slot)
 		if player_id == _local_player_id:
+			var ack_sequence := CODEC.snapshot_player_ack(packet, slot)
+			raw_authoritative_state.emit(
+				position,
+				velocity,
+				ack_sequence,
+				server_tick
+			)
+			var position_before_reconciliation: Vector3 = _prediction.predicted_position
 			var reconciled_position: Vector3 = _prediction.reconcile(
 				position,
 				velocity,
-				CODEC.snapshot_player_ack(packet, slot)
+				ack_sequence
+			)
+			prediction_reconciled.emit(
+				reconciled_position - position_before_reconciliation,
+				_prediction.pending_count(),
+				ack_sequence
+			)
+			predicted_state.emit(
+				reconciled_position,
+				_prediction.predicted_velocity
 			)
 			authoritative_state.emit(
 				reconciled_position,
@@ -543,15 +590,16 @@ func _rpc_receive_snapshot(packet: PackedByteArray) -> void:
 				yaw,
 				CODEC.snapshot_player_health(packet, slot),
 				body_mask,
-				CODEC.snapshot_player_ack(packet, slot),
+				ack_sequence,
 				server_tick
 			)
 		else:
 			if _players.has(player_id):
 				_players[player_id].position = position
+				_players[player_id].velocity = velocity
 				_players[player_id].yaw = yaw
 				_players[player_id].body_mask = body_mask
-			remote_snapshot.emit(player_id, position, yaw, body_mask)
+			remote_snapshot.emit(player_id, position, velocity, yaw, body_mask)
 
 
 @rpc("authority", "call_remote", "reliable", 2)
@@ -598,6 +646,11 @@ func _rpc_receive_round_state(
 
 @rpc("authority", "call_remote", "reliable", 2)
 func _rpc_receive_push(sender_player_id: int, direction: Vector3, force: float) -> void:
+	_prediction.apply_external_impulse(direction, force)
+	predicted_state.emit(
+		_prediction.predicted_position,
+		_prediction.predicted_velocity
+	)
 	push_received.emit(sender_player_id, direction, force)
 
 

@@ -11,7 +11,11 @@ var port := 9999
 var accepted := false
 var authoritative_samples := 0
 var latest_authoritative_position := Vector3.ZERO
+var raw_authoritative_samples := 0
+var latest_raw_authoritative_position := Vector3.ZERO
 var latest_ack_sequence := 0
+var max_reconciliation_distance := 0.0
+var cumulative_reconciliation_distance := 0.0
 var failed := false
 
 
@@ -31,7 +35,7 @@ func _setup() -> void:
 	network.server_port = port
 	network.display_name = "MovimientoReal"
 	network.color_index = 3
-	network.configure_test_identity("e1a2b3c4d5e6f708")
+	network.configure_test_identity("%016x" % Time.get_ticks_usec())
 	network.status_changed.connect(func(_text: String, online: bool) -> void:
 		accepted = accepted or online
 	)
@@ -47,6 +51,27 @@ func _setup() -> void:
 		authoritative_samples += 1
 		latest_authoritative_position = position
 		latest_ack_sequence = ack_sequence
+	)
+	network.raw_authoritative_state.connect(func(
+		position: Vector3,
+		_velocity: Vector3,
+		_ack_sequence: int,
+		_server_tick: int
+	) -> void:
+		raw_authoritative_samples += 1
+		latest_raw_authoritative_position = position
+	)
+	network.prediction_reconciled.connect(func(
+		correction: Vector3,
+		_pending_inputs: int,
+		_ack_sequence: int
+	) -> void:
+		var correction_distance := Vector2(correction.x, correction.z).length()
+		max_reconciliation_distance = maxf(
+			max_reconciliation_distance,
+			correction_distance
+		)
+		cumulative_reconciliation_distance += correction_distance
 	)
 	var error: int = network.connect_to_server(address)
 	_require(error == OK, "client ENet creation failed")
@@ -132,12 +157,17 @@ func _run() -> void:
 		max_visual_authority_gap = maxf(
 			max_visual_authority_gap,
 			Vector2(
-				player.global_position.x - latest_authoritative_position.x,
-				player.global_position.z - latest_authoritative_position.z
+				player.global_position.x - latest_raw_authoritative_position.x,
+				player.global_position.z - latest_raw_authoritative_position.z
 			).length()
 		)
 		previous_position = player.global_position
 	player.set_touch_move(Vector2.ZERO)
+	await create_timer(0.75).timeout
+	var final_raw_gap := Vector2(
+		player.global_position.x - latest_raw_authoritative_position.x,
+		player.global_position.z - latest_raw_authoritative_position.z
+	).length()
 	var enet := network.multiplayer.multiplayer_peer as ENetMultiplayerPeer
 	var server_peer: ENetPacketPeer = enet.get_peer(1)
 	var packet_throttle := int(server_peer.get_statistic(
@@ -154,9 +184,10 @@ func _run() -> void:
 	))
 
 	print(
-		"REAL_MOVEMENT_RESULT samples=%d sent=%d ack=%d hard=%d soft=%d correction_back_m=%.3f backwards_frames=%d backwards_motion_m=%.3f max_rule_error_m=%.3f max_visual_gap_m=%.3f travelled_m=%.3f throttle=%d/%d loss=%.4f rtt_ms=%d"
+		"REAL_MOVEMENT_RESULT samples=%d raw_samples=%d sent=%d ack=%d hard=%d soft=%d correction_back_m=%.3f backwards_frames=%d backwards_motion_m=%.3f max_rule_error_m=%.3f max_visual_gap_m=%.3f final_raw_gap_m=%.3f max_reconcile_m=%.3f cumulative_reconcile_m=%.3f travelled_m=%.3f throttle=%d/%d loss=%.4f rtt_ms=%d"
 		% [
 			authoritative_samples,
+			raw_authoritative_samples,
 			network._input_sequence,
 			latest_ack_sequence,
 			player.get_network_hard_correction_count(),
@@ -166,6 +197,9 @@ func _run() -> void:
 			backwards_distance,
 			player.get_network_max_horizontal_error(),
 			max_visual_authority_gap,
+			final_raw_gap,
+			max_reconciliation_distance,
+			cumulative_reconciliation_distance,
 			distance_travelled,
 			packet_throttle,
 			packet_throttle_limit,
@@ -175,6 +209,10 @@ func _run() -> void:
 	)
 	_require(authoritative_samples >= 60, "too few real authoritative snapshots")
 	_require(
+		raw_authoritative_samples == authoritative_samples,
+		"raw server positions were not measured for every local snapshot"
+	)
+	_require(
 		player.get_network_hard_correction_count() == 0,
 		"normal sustained movement triggered a hard reconciliation"
 	)
@@ -183,8 +221,12 @@ func _run() -> void:
 		"authoritative reconciliation pulled the active player backwards"
 	)
 	_require(
-		player.get_network_max_horizontal_error() < 4.25,
-		"client and server movement diverged beyond the latency budget"
+		max_visual_authority_gap < 1.5,
+		"local rendering diverged from the position remote clients receive"
+	)
+	_require(
+		final_raw_gap < 0.5,
+		"local player stopped in a different position than remote clients see"
 	)
 	_require(
 		packet_throttle >= 24 and packet_throttle_limit == 32,

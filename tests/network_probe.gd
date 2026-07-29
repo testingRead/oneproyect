@@ -63,6 +63,7 @@ func _setup() -> void:
 	network.remote_snapshot.connect(func(
 		_player_id: int,
 		position: Vector3,
+		_velocity: Vector3,
 		_yaw: float,
 		body_mask: int
 	) -> void:

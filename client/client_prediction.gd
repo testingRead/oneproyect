@@ -51,6 +51,17 @@ func pending_count() -> int:
 	return _sequences.size()
 
 
+func apply_external_impulse(direction: Vector3, force: float) -> void:
+	var safe_direction := direction
+	safe_direction.y = 0.0
+	if not safe_direction.is_finite() or safe_direction.length_squared() < 0.01:
+		return
+	safe_direction = safe_direction.normalized()
+	predicted_velocity.x += safe_direction.x * force
+	predicted_velocity.z += safe_direction.z * force
+	predicted_velocity.y = maxf(predicted_velocity.y, force * 0.42)
+
+
 func _step(move: Vector2, flags: int) -> void:
 	var floor_height := MOVEMENT.floor_height_at(predicted_position)
 	var on_floor := (

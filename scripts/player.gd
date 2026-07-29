@@ -3,6 +3,8 @@ extends CharacterBody3D
 
 const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.gd")
 const HUMANOID_RIG := preload("res://scripts/characters/humanoid_rig.gd")
+const MOVEMENT := preload("res://shared/movement_rules.gd")
+const NET := preload("res://shared/net_constants.gd")
 
 @export var move_speed := 6.0
 @export var ground_acceleration := 28.0
@@ -98,6 +100,10 @@ var _network_hard_correction_count := 0
 var _network_soft_correction_count := 0
 var _network_backward_correction_distance := 0.0
 var _network_max_horizontal_error := 0.0
+var _network_authority_enabled := false
+var _network_target_position := Vector3.ZERO
+var _network_target_velocity := Vector3.ZERO
+var _network_prediction_elapsed := 0.0
 var _spawn_transform: Transform3D
 var _health := MAX_HEALTH
 var _invulnerability := 0.0
@@ -146,23 +152,43 @@ func _physics_process(delta: float) -> void:
 		_network_idle_elapsed += delta
 
 	var movement_scale := _get_leg_movement_scale()
-	var acceleration := ground_acceleration if is_on_floor() else air_acceleration
-	velocity.x = move_toward(
-		velocity.x,
-		direction.x * move_speed * movement_scale,
-		acceleration * delta
-	)
-	velocity.z = move_toward(
-		velocity.z,
-		direction.z * move_speed * movement_scale,
-		acceleration * delta
-	)
-
-	if not is_on_floor():
-		velocity += get_gravity() * delta
-	elif _controls_enabled and (_jump_requested or Input.is_action_just_pressed("jump")):
-		velocity.y = jump_velocity * movement_scale
-		_network_jump_event = true
+	var jump_pressed := _jump_requested or Input.is_action_just_pressed("jump")
+	var animation_on_floor := is_on_floor()
+	if _network_authority_enabled:
+		if _controls_enabled and jump_pressed:
+			_network_jump_event = true
+		_network_prediction_elapsed = minf(
+			_network_prediction_elapsed + delta,
+			1.0 / float(NET.SNAPSHOT_RATE)
+		)
+		global_position = MOVEMENT.step_position(
+			_network_target_position,
+			_network_target_velocity,
+			_network_prediction_elapsed
+		)
+		velocity = _network_target_velocity
+		var predicted_floor := MOVEMENT.floor_height_at(global_position)
+		animation_on_floor = (
+			global_position.y <= predicted_floor + 0.02
+			and velocity.y <= 0.0
+		)
+	else:
+		var acceleration := ground_acceleration if is_on_floor() else air_acceleration
+		velocity.x = move_toward(
+			velocity.x,
+			direction.x * move_speed * movement_scale,
+			acceleration * delta
+		)
+		velocity.z = move_toward(
+			velocity.z,
+			direction.z * move_speed * movement_scale,
+			acceleration * delta
+		)
+		if not is_on_floor():
+			velocity += get_gravity() * delta
+		elif _controls_enabled and jump_pressed:
+			velocity.y = jump_velocity * movement_scale
+			_network_jump_event = true
 	_jump_requested = false
 	if _controls_enabled and Input.is_action_just_pressed("push"):
 		request_push()
@@ -173,14 +199,20 @@ func _physics_process(delta: float) -> void:
 	_walk_phase = HUMANOID_RIG.animate(
 		visual,
 		delta,
-		Vector2(velocity.x, velocity.z).length(),
+		maxf(
+			Vector2(velocity.x, velocity.z).length(),
+			_network_move_world.length() * move_speed
+			if _network_authority_enabled
+			else 0.0
+		),
 		_walk_phase,
-		is_on_floor(),
+		animation_on_floor,
 		clampf(_push_animation / 0.30, 0.0, 1.0),
 		clampf(_hurt_animation / 0.25, 0.0, 1.0)
 	)
 
-	move_and_slide()
+	if not _network_authority_enabled:
+		move_and_slide()
 	if global_position.y < -8.0:
 		reset_to_spawn()
 
@@ -265,6 +297,27 @@ func consume_network_jump() -> bool:
 	return jumped
 
 
+func set_network_authority_enabled(enabled: bool) -> void:
+	_network_authority_enabled = enabled
+	_network_target_position = global_position
+	_network_target_velocity = velocity
+	_network_prediction_elapsed = 0.0
+
+
+func apply_network_authority(position: Vector3, authoritative_velocity: Vector3) -> void:
+	if (
+		not _network_authority_enabled
+		or not position.is_finite()
+		or not authoritative_velocity.is_finite()
+	):
+		return
+	_network_target_position = position
+	_network_target_velocity = authoritative_velocity
+	_network_prediction_elapsed = 0.0
+	global_position = position
+	velocity = authoritative_velocity
+
+
 func apply_authoritative_state(
 	position: Vector3,
 	authoritative_velocity: Vector3,
@@ -283,6 +336,9 @@ func apply_authoritative_state(
 		_network_max_horizontal_error,
 		horizontal_distance
 	)
+	if _network_authority_enabled:
+		_apply_authoritative_appearance(facing_yaw, health, body_mask)
+		return
 	var vertical_error := position.y - global_position.y
 	var authoritative_horizontal_speed := Vector2(
 		authoritative_velocity.x,
@@ -357,6 +413,14 @@ func apply_authoritative_state(
 	if simulation_settled and velocity_error > 2.0:
 		velocity.x = lerpf(velocity.x, authoritative_velocity.x, 0.12)
 		velocity.z = lerpf(velocity.z, authoritative_velocity.z, 0.12)
+	_apply_authoritative_appearance(facing_yaw, health, body_mask)
+
+
+func _apply_authoritative_appearance(
+	facing_yaw: float,
+	health: int,
+	body_mask: int
+) -> void:
 	visual.rotation.y = lerp_angle(visual.rotation.y, facing_yaw, 0.08)
 	var safe_health := clampi(health, 0, MAX_HEALTH)
 	if safe_health != _health:

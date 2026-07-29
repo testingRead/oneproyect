@@ -80,21 +80,28 @@ El cliente envía secuencia, vector de movimiento, yaw y flags de acciones. El
 servidor valida rango, orden y frecuencia, integra a 20 Hz y publica estado más
 el último número de input procesado.
 
-El cliente aplica de inmediato el mismo `MovementRules`, conserva inputs sin ACK
-y, al recibir su estado:
+`ClientPrediction` conserva el historial de inputs y mide la reconciliación,
+pero no decide la posición física visible en esta etapa. Las pruebas reales
+mostraron que, con variaciones fuertes de RTT, reproducir inputs pendientes sin
+un tick de cliente confirmado permitía que el cuerpo local y el servidor se
+separasen varios metros.
 
-1. fija la base autorizada;
-2. elimina inputs confirmados;
-3. reproduce los pendientes;
-4. corrige suavemente el nodo visual.
+Mientras está online, el `CharacterBody3D` local usa directamente el snapshot
+autoritativo y su velocidad. Entre snapshots extrapola como máximo 100 ms con
+`MovementRules`; no integra una segunda posición física. Al llegar el siguiente
+snapshot, tanto el jugador local como los remotos adoptan inmediatamente la
+misma base. Esto garantiza que colisiones, límites y posición observada por
+otros clientes partan del mismo estado.
 
-Los remotos guardan dos snapshots y se interpolan. Su animación se deduce de la
-velocidad recibida.
+Los remotos extrapolan la posición y velocidad recibidas durante el mismo
+intervalo máximo y deducen la animación de esa velocidad. El input local activa
+la animación inmediatamente aunque la respuesta de movimiento espere el
+snapshot del servidor.
 
-El render local usa una zona muerta amplia: errores pequeños no mueven al
-personaje visible, discrepancias medias convergen lentamente y sólo un error
-superior a varios metros provoca teletransporte. La autoridad lógica se
-mantiene para snapshots, empujones, límites y resultados.
+La predicción física completa sólo se reactivará cuando cada input se asocie a
+un tick de simulación procesado y la reproducción sea verificable bajo latencia
+y pérdida. La prueba `real_movement_probe.gd` compara el cuerpo local contra el
+snapshot crudo que reciben los demás y exige coincidencia al detenerse.
 
 ## Reconexión
 

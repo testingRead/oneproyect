@@ -102,6 +102,7 @@ func _ready() -> void:
 	network.remote_player_left.connect(_on_remote_player_left)
 	network.remote_snapshot.connect(_on_remote_snapshot)
 	network.authoritative_state.connect(_on_authoritative_state)
+	network.raw_authoritative_state.connect(_on_raw_authoritative_state)
 	network.meteor_received.connect(disaster.spawn_network_meteor)
 	network.shockwave_received.connect(disaster.spawn_network_shockwave)
 	network.round_state_received.connect(disaster.apply_network_state)
@@ -113,6 +114,8 @@ func _ready() -> void:
 		var spawn_position: Vector3 = network.get_local_spawn_position()
 		player.global_position = spawn_position
 		player.velocity = Vector3.ZERO
+		player.set_network_authority_enabled(true)
+		player.apply_network_authority(spawn_position, Vector3.ZERO)
 		network.set_prediction_origin(spawn_position)
 		network.replay_remote_players()
 		_on_network_status_changed(
@@ -130,21 +133,25 @@ func _process(delta: float) -> void:
 		var frame_ms := 1000.0 / maxf(float(fps), 1.0)
 		fps_label.text = "%d FPS  %.1f ms" % [fps, frame_ms]
 		_stats_elapsed = 0.0
-	if network.is_online():
-		_snapshot_elapsed += delta
-		if _snapshot_elapsed >= INPUT_INTERVAL:
-			_snapshot_elapsed -= INPUT_INTERVAL
-			network.submit_input(
-				player.get_network_move(),
-				player.get_visual_yaw(),
-				player.consume_network_jump()
-			)
 	if _damage_flash_strength > 0.0:
 		_damage_flash_strength = maxf(0.0, _damage_flash_strength - delta * 1.7)
 		damage_flash.color.a = _damage_flash_strength * 0.34
 		damage_flash.visible = _damage_flash_strength > 0.0
 	if pause_panel.visible:
 		preview_avatar.rotation.y = fmod(preview_avatar.rotation.y + delta * 0.55, TAU)
+
+
+func _physics_process(delta: float) -> void:
+	if not network.is_online():
+		return
+	_snapshot_elapsed += delta
+	if _snapshot_elapsed >= INPUT_INTERVAL:
+		_snapshot_elapsed -= INPUT_INTERVAL
+		network.submit_input(
+			player.get_network_move(),
+			player.get_visual_yaw(),
+			player.consume_network_jump()
+		)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -346,8 +353,10 @@ func _on_network_status_changed(text: String, online: bool) -> void:
 	name_input.editable = not online
 	character_button.disabled = online
 	if online:
+		player.set_network_authority_enabled(true)
 		network.set_prediction_origin(player.global_position, player.velocity)
 	if not online and not network.is_online():
+		player.set_network_authority_enabled(false)
 		if pause_panel.visible and not get_tree().paused:
 			pause_panel.visible = false
 			player.set_controls_enabled(true)
@@ -379,12 +388,13 @@ func _on_remote_player_left(peer_id: int) -> void:
 func _on_remote_snapshot(
 	peer_id: int,
 	position: Vector3,
+	velocity: Vector3,
 	facing_yaw: float,
 	limb_mask: int
 ) -> void:
 	var avatar: RemoteAvatar = _remote_avatars.get(peer_id)
 	if avatar != null:
-		avatar.set_snapshot(position, facing_yaw)
+		avatar.set_snapshot(position, velocity, facing_yaw)
 		avatar.set_limb_mask(limb_mask)
 
 
@@ -404,6 +414,15 @@ func _on_authoritative_state(
 		health,
 		body_mask
 	)
+
+
+func _on_raw_authoritative_state(
+	position: Vector3,
+	authoritative_velocity: Vector3,
+	_ack_sequence: int,
+	_server_tick: int
+) -> void:
+	player.apply_network_authority(position, authoritative_velocity)
 
 
 func _on_simulation_host_changed(peer_id: int) -> void:

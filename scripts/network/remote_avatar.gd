@@ -7,7 +7,9 @@ const ALL_LIMBS_MASK := HUMANOID_RIG.ALL_BODY_PARTS_MASK
 @onready var name_label: Label3D = $Name
 
 var target_position := Vector3.ZERO
+var target_velocity := Vector3.ZERO
 var target_yaw := 0.0
+var _snapshot_elapsed := 0.0
 var _walk_phase := 0.0
 var _variant_index := 0
 var _limb_mask := ALL_LIMBS_MASK
@@ -15,7 +17,12 @@ var _limb_mask := ALL_LIMBS_MASK
 
 func _process(delta: float) -> void:
 	var previous_position := global_position
-	global_position = global_position.lerp(target_position, clampf(delta * 12.0, 0.0, 1.0))
+	_snapshot_elapsed = minf(_snapshot_elapsed + delta, 0.12)
+	var displayed_position := target_position + target_velocity * _snapshot_elapsed
+	global_position = global_position.lerp(
+		displayed_position,
+		clampf(delta * 18.0, 0.0, 1.0)
+	)
 	rotation.y = lerp_angle(rotation.y, target_yaw, clampf(delta * 14.0, 0.0, 1.0))
 	var speed := global_position.distance_to(previous_position) / maxf(delta, 0.001)
 	_walk_phase = HUMANOID_RIG.animate(self, delta, speed, _walk_phase, true)
@@ -30,9 +37,12 @@ func configure(player_name: String, player_color: int, initial_position: Vector3
 	set_limb_mask(ALL_LIMBS_MASK)
 
 
-func set_snapshot(position: Vector3, facing_yaw: float) -> void:
+func set_snapshot(position: Vector3, velocity: Vector3, facing_yaw: float) -> void:
 	target_position = position
+	target_velocity = velocity
 	target_yaw = facing_yaw
+	_snapshot_elapsed = 0.0
+	global_position = position
 
 
 func set_limb_mask(mask: int) -> void:
