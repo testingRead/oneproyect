@@ -8,7 +8,7 @@ on:
       - agent/graybox
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-debug-${{ github.ref }}
@@ -409,22 +409,33 @@ jobs:
             sha256sum oneproyect-debug-arm32.apk > oneproyect-debug-arm32.apk.sha256
           )
 
-      - name: Publish ARM64 APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: oneproyect-android-debug-arm64-${{ github.run_number }}
-          path: |
-            build/android/oneproyect-debug-arm64.apk
-            build/android/oneproyect-debug-arm64.apk.sha256
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Publish ARM32 APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: oneproyect-android-debug-arm32-${{ github.run_number }}
-          path: |
-            build/android/oneproyect-debug-arm32.apk
-            build/android/oneproyect-debug-arm32.apk.sha256
-          if-no-files-found: error
-          retention-days: 1
+      - name: Publish rolling public playtest release
+        if: github.repository == 'testingRead/oneproyect'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="playtest-latest"
+          title="OneProyect playtest #${GITHUB_RUN_NUMBER}"
+          notes="Build reproducible del commit ${GITHUB_SHA}. Usa ARM64 en teléfonos modernos."
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$title" \
+              --notes "$notes"
+          else
+            gh release create "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "$title" \
+              --notes "$notes" \
+              --prerelease
+          fi
+          gh release upload "$tag" \
+            build/android/oneproyect-debug-arm64.apk \
+            build/android/oneproyect-debug-arm64.apk.sha256 \
+            build/android/oneproyect-debug-arm32.apk \
+            build/android/oneproyect-debug-arm32.apk.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber

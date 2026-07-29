@@ -99,7 +99,11 @@ estable guardada únicamente en GitHub
 Actions Secrets, por lo que las siguientes versiones podrán instalarse como
 actualizaciones sin cambiar la identidad de la aplicación.
 
-Los artifacts se conservan solamente 1 día para limitar almacenamiento.
+CI reemplaza siempre una única prerelease pública `playtest-latest`; no crea
+artifacts temporales ni acumula releases. Descargas directas:
+
+- [APK ARM64 para teléfonos modernos](https://github.com/testingRead/oneproyect/releases/download/playtest-latest/oneproyect-debug-arm64.apk)
+- [APK ARM32 para teléfonos antiguos](https://github.com/testingRead/oneproyect/releases/download/playtest-latest/oneproyect-debug-arm32.apk)
 
 La ruta recomendada para exportar directamente en el teléfono está documentada
 en [docs/ANDROID_LOCAL_BUILD.md](docs/ANDROID_LOCAL_BUILD.md).
