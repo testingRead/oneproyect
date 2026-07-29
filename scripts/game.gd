@@ -1,7 +1,12 @@
 extends Node3D
 
+const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn")
+const SNAPSHOT_INTERVAL := 0.1
+
 @onready var player: GrayboxPlayer = $World/Player
 @onready var disaster: DisasterController = $World/DisasterController
+@onready var remote_players: Node3D = $World/RemotePlayers
+@onready var network: Variant = get_node("/root/Network")
 @onready var sounds: SoundBank = $SoundBank
 @onready var fps_label: Label = $HUD/TopBar/FPS
 @onready var health_label: Label = $HUD/TopBar/Health
@@ -10,9 +15,13 @@ extends Node3D
 @onready var round_clock: Label = $HUD/RoundPanel/Clock
 @onready var pause_panel: Control = $HUD/PausePanel
 @onready var pause_button: Button = $HUD/TopBar/Pause
+@onready var online_button: Button = $HUD/TopBar/Online
+@onready var network_status: Label = $HUD/TopBar/NetworkStatus
 @onready var touch_debug: Label = $HUD/TouchDebug
 
 var _stats_elapsed := 0.0
+var _snapshot_elapsed := 0.0
+var _remote_avatars: Dictionary = {}
 
 
 func _ready() -> void:
@@ -22,6 +31,7 @@ func _ready() -> void:
 	$HUD/Jump.action_pressed.connect(player.request_jump)
 	$HUD/TopBar/Pause.pressed.connect(toggle_pause)
 	$HUD/TopBar/Restart.pressed.connect(restart_level)
+	online_button.pressed.connect(_toggle_online)
 	$HUD/PausePanel/Center/Resume.pressed.connect(toggle_pause)
 	$HUD/PausePanel/Center/Restart.pressed.connect(restart_level)
 	player.health_changed.connect(_on_health_changed)
@@ -31,7 +41,15 @@ func _ready() -> void:
 	disaster.round_survived.connect(_on_round_survived)
 	disaster.meteor_warning.connect(sounds.play_warning)
 	disaster.meteor_impact.connect(sounds.play_impact)
+	network.status_changed.connect(_on_network_status_changed)
+	network.remote_player_joined.connect(_on_remote_player_joined)
+	network.remote_player_left.connect(_on_remote_player_left)
+	network.remote_snapshot.connect(_on_remote_snapshot)
+	network.meteor_received.connect(disaster.spawn_network_meteor)
+	network.round_state_received.connect(disaster.apply_network_state)
+	network.simulation_host_changed.connect(_on_simulation_host_changed)
 	_on_health_changed(100, 100)
+	_on_network_status_changed("MODO LOCAL", false)
 
 
 func _process(delta: float) -> void:
@@ -41,6 +59,11 @@ func _process(delta: float) -> void:
 		var frame_ms := 1000.0 / maxf(float(fps), 1.0)
 		fps_label.text = "%d FPS  %.1f ms" % [fps, frame_ms]
 		_stats_elapsed = 0.0
+	if network.is_online():
+		_snapshot_elapsed += delta
+		if _snapshot_elapsed >= SNAPSHOT_INTERVAL:
+			network.send_snapshot(player.global_position, player.get_visual_yaw())
+			_snapshot_elapsed = 0.0
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -102,3 +125,59 @@ func _on_disaster_clock_changed(seconds_left: int) -> void:
 func _on_round_survived(_round_number: int) -> void:
 	sounds.play_success()
 	player.heal_full()
+
+
+func _toggle_online() -> void:
+	if network.is_online():
+		network.disconnect_session()
+		_clear_remote_players()
+		online_button.text = "CONECTAR"
+		disaster.restart_cycle()
+		return
+	online_button.disabled = true
+	var error: int = network.connect_to_server()
+	if error != OK:
+		online_button.disabled = false
+
+
+func _on_network_status_changed(text: String, online: bool) -> void:
+	network_status.text = text
+	network_status.modulate = Color(0.4, 1.0, 0.62) if online else Color(0.76, 0.87, 1.0)
+	online_button.disabled = text.begins_with("Conectando")
+	online_button.text = "SALIR" if online else "CONECTAR"
+	if not online and not network.is_online():
+		_clear_remote_players()
+
+
+func _on_remote_player_joined(peer_id: int, player_name: String, player_color: int) -> void:
+	if _remote_avatars.has(peer_id):
+		return
+	var avatar: RemoteAvatar = REMOTE_AVATAR_SCENE.instantiate()
+	avatar.name = "Peer%d" % peer_id
+	remote_players.add_child(avatar)
+	avatar.configure(player_name, player_color, Vector3(0.0, 1.2, 8.0))
+	_remote_avatars[peer_id] = avatar
+
+
+func _on_remote_player_left(peer_id: int) -> void:
+	var avatar: RemoteAvatar = _remote_avatars.get(peer_id)
+	if avatar != null:
+		avatar.queue_free()
+	_remote_avatars.erase(peer_id)
+
+
+func _on_remote_snapshot(peer_id: int, position: Vector3, facing_yaw: float) -> void:
+	var avatar: RemoteAvatar = _remote_avatars.get(peer_id)
+	if avatar != null:
+		avatar.set_snapshot(position, facing_yaw)
+
+
+func _on_simulation_host_changed(peer_id: int) -> void:
+	if peer_id == multiplayer.get_unique_id():
+		disaster.sync_as_host()
+
+
+func _clear_remote_players() -> void:
+	for avatar: RemoteAvatar in _remote_avatars.values():
+		avatar.queue_free()
+	_remote_avatars.clear()

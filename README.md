@@ -12,7 +12,20 @@ gama baja. Usa Godot 4.7.1, GDScript y el renderer Compatibility/OpenGL.
 
 La primera arena, **Plaza Caos**, ejecuta rondas de lluvia de meteoritos con
 marcas de advertencia, refugios, daño, impulso físico y un pool fijo de objetos.
+Los techos bloquean físicamente las explosiones: refugiarse es una mecánica real,
+no solamente decorativa.
 El contador superior muestra FPS y tiempo aproximado por frame.
+
+## Multijugador de prueba
+
+El botón **CONECTAR** entra a una sala ENet/UDP de hasta cinco personas. Cada
+jugador tiene nombre y color, y los avatares remotos se interpolan a partir de
+10 actualizaciones de posición por segundo.
+
+El VPS escucha en UDP `9999` y actúa sólo como retransmisor. El primer jugador
+conectado simula la ronda y envía los eventos del desastre; si se desconecta,
+el servidor elige automáticamente al siguiente. Así, la máquina pequeña no
+procesa el mapa, los meteoritos ni las colisiones.
 
 ## Exportación reproducible
 
@@ -23,7 +36,10 @@ binarios y export templates oficiales. Genera APK separados:
 - `oneproyect-debug-arm32.apk`: teléfonos antiguos de 32 bits.
 
 Se ejecuta en pushes a `main`/`agent/graybox` y manualmente desde GitHub Actions.
-Las builds de prueba usan una firma estable guardada únicamente en GitHub
+Antes de exportar, CI ejecuta una prueba de movimiento/colisiones/refugio y otra
+con un servidor más dos clientes reales, verificando posiciones, elección de
+host, meteoritos y sincronización de ronda. Las builds de prueba usan una firma
+estable guardada únicamente en GitHub
 Actions Secrets, por lo que las siguientes versiones podrán instalarse como
 actualizaciones sin cambiar la identidad de la aplicación.
 

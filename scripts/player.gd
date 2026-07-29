@@ -96,6 +96,10 @@ func get_health() -> int:
 	return _health
 
 
+func get_visual_yaw() -> float:
+	return visual.rotation.y
+
+
 func apply_damage_and_knockback(origin: Vector3, force: float, damage: int) -> void:
 	if _invulnerability > 0.0:
 		return

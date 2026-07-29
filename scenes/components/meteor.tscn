@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/gameplay/meteor_slot.gd" id="1_script"]
 
@@ -28,9 +28,6 @@ rings = 5
 
 [sub_resource type="SphereShape3D" id="ShapeMeteor"]
 radius = 0.72
-
-[sub_resource type="SphereShape3D" id="ShapeBlast"]
-radius = 2.75
 
 [sub_resource type="StandardMaterial3D" id="MatShockwave"]
 transparency = 1
@@ -68,15 +65,6 @@ cast_shadow = 0
 
 [node name="Collision" type="CollisionShape3D" parent="Meteor"]
 shape = SubResource("ShapeMeteor")
-
-[node name="BlastArea" type="Area3D" parent="."]
-position = Vector3(0, 0.5, 0)
-collision_layer = 0
-collision_mask = 1
-monitoring = true
-
-[node name="Collision" type="CollisionShape3D" parent="BlastArea"]
-shape = SubResource("ShapeBlast")
 
 [node name="Shockwave" type="MeshInstance3D" parent="."]
 position = Vector3(0, 0.08, 0)

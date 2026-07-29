@@ -87,8 +87,69 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$HOME/.cache/oneproyect-godot/godot" --headless --path "$GITHUB_WORKSPACE" \
+          GODOT="$HOME/.cache/oneproyect-godot/godot"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/smoke_test.gd
+          set +e
+          timeout 3 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            > "$RUNNER_TEMP/oneproyect-boot.log" 2>&1
+          boot_code=$?
+          set -e
+          test "$boot_code" -eq 124
+          if grep -qE "SCRIPT ERROR|ERROR:|Parse Error" "$RUNNER_TEMP/oneproyect-boot.log"; then
+            cat "$RUNNER_TEMP/oneproyect-boot.log"
+            exit 1
+          fi
+
+      - name: Verify two-client multiplayer relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT="$HOME/.cache/oneproyect-godot/godot"
+          SERVER_LOG="$RUNNER_TEMP/oneproyect-server.log"
+          HOST_LOG="$RUNNER_TEMP/oneproyect-host.log"
+          OBSERVER_LOG="$RUNNER_TEMP/oneproyect-observer.log"
+
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" -- --server > "$SERVER_LOG" 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          for attempt in {1..40}; do
+            if grep -q "ONEPROYECT_SERVER_READY" "$SERVER_LOG"; then
+              break
+            fi
+            sleep 0.25
+          done
+          grep -q "ONEPROYECT_SERVER_READY" "$SERVER_LOG"
+
+          timeout 15 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/network_probe.gd -- --role=host > "$HOST_LOG" 2>&1 &
+          host_pid=$!
+          sleep 0.8
+          timeout 15 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/network_probe.gd -- --role=observer > "$OBSERVER_LOG" 2>&1 &
+          observer_pid=$!
+          set +e
+          wait "$host_pid"
+          host_code=$?
+          wait "$observer_pid"
+          observer_code=$?
+          set -e
+          if [[ "$host_code" -ne 0 || "$observer_code" -ne 0 ]]; then
+            cat "$SERVER_LOG" "$HOST_LOG" "$OBSERVER_LOG"
+            exit 1
+          fi
+
+          grep -q "NETWORK_PROBE_OK role=host" "$HOST_LOG"
+          grep -q "NETWORK_PROBE_OK role=observer" "$OBSERVER_LOG"
+          if grep -qE "SCRIPT ERROR|NETWORK_PROBE_FAIL|Invalid packet|ERROR:" \
+            "$SERVER_LOG" "$HOST_LOG" "$OBSERVER_LOG"; then
+            cat "$SERVER_LOG" "$HOST_LOG" "$OBSERVER_LOG"
+            exit 1
+          fi
 
       - name: Prepare stable debug signing
         shell: bash

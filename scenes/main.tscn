@@ -329,6 +329,8 @@ far = 58.0
 [node name="DisasterController" type="Node3D" parent="World"]
 script = ExtResource("6_disaster")
 
+[node name="RemotePlayers" type="Node3D" parent="World"]
+
 [node name="SoundBank" type="Node" parent="."]
 script = ExtResource("7_sound")
 
@@ -417,10 +419,17 @@ theme_override_font_sizes/font_size = 18
 text = "60 FPS  16.7 ms"
 
 [node name="Health" type="Label" parent="HUD/TopBar"]
-custom_minimum_size = Vector2(160, 0)
+custom_minimum_size = Vector2(145, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "VIDA  100/100"
+
+[node name="NetworkStatus" type="Label" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.76, 0.87, 1, 1)
+theme_override_font_sizes/font_size = 16
+text = "MODO LOCAL"
 
 [node name="Spacer" type="Control" parent="HUD/TopBar"]
 layout_mode = 2
@@ -431,6 +440,12 @@ custom_minimum_size = Vector2(126, 42)
 layout_mode = 2
 theme_override_font_sizes/font_size = 17
 text = "REINICIAR"
+
+[node name="Online" type="Button" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(124, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "CONECTAR"
 
 [node name="Pause" type="Button" parent="HUD/TopBar"]
 custom_minimum_size = Vector2(106, 42)

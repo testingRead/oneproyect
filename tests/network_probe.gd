@@ -1,0 +1,101 @@
+extends SceneTree
+
+const NETWORK_SCRIPT := preload("res://scripts/network/network_manager.gd")
+const TIMEOUT_SECONDS := 10.0
+
+var network: OneProjectNetwork
+var role := "observer"
+var online := false
+var saw_remote := false
+var saw_snapshot := false
+var saw_meteor := false
+var saw_round_state := false
+
+
+func _init() -> void:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--role="):
+			role = argument.trim_prefix("--role=")
+	call_deferred("_setup")
+
+
+func _setup() -> void:
+	if root.has_node("Network"):
+		network = root.get_node("Network")
+	else:
+		network = NETWORK_SCRIPT.new()
+		network.name = "Network"
+		root.add_child(network)
+	print("NETWORK_PROBE_NODE role=%s path=%s" % [role, network.get_path()])
+	network.status_changed.connect(_on_status)
+	network.remote_player_joined.connect(func(_id: int, _name: String, _color: int) -> void:
+		saw_remote = true
+	)
+	network.remote_snapshot.connect(func(_id: int, _position: Vector3, _yaw: float) -> void:
+		saw_snapshot = true
+	)
+	network.meteor_received.connect(func(_target: Vector3, _drift: Vector2, _damage: int, _force: float) -> void:
+		saw_meteor = true
+	)
+	network.round_state_received.connect(func(_state: int, _round: int, _time: float) -> void:
+		saw_round_state = true
+	)
+	_run()
+
+
+func _run() -> void:
+	network.display_name = role.capitalize()
+	var error := network.connect_to_server("127.0.0.1")
+	_require(error == OK, "client creation failed")
+	var elapsed := 0.0
+	var sent_events := false
+	var events_sent_at := 0.0
+	while elapsed < TIMEOUT_SECONDS:
+		await process_frame
+		elapsed += 1.0 / 60.0
+		if online and network.get_player_count() >= 2:
+			if role == "host":
+				network.send_snapshot(Vector3(2.0, 1.2, -3.0), 0.75)
+				if network.is_simulation_host() and not sent_events and elapsed > 1.0:
+					network.broadcast_meteor(Vector3(1.0, 0.06, 1.0), Vector2.ZERO, 22, 10.5)
+					network.broadcast_round_state(1, 3, 20.0)
+					sent_events = true
+					events_sent_at = elapsed
+					saw_meteor = true
+					saw_round_state = true
+			else:
+				network.send_snapshot(Vector3(-2.0, 1.2, 3.0), -0.75)
+		if _is_complete(sent_events, elapsed - events_sent_at):
+			print(
+				"NETWORK_PROBE_OK role=%s players=%d host=%s remote=%s snapshot=%s meteor=%s round=%s"
+				% [
+					role,
+					network.get_player_count(),
+					network.is_simulation_host(),
+					saw_remote,
+					saw_snapshot,
+					saw_meteor,
+					saw_round_state,
+				]
+			)
+			network.disconnect_session()
+			quit(0)
+			return
+	_require(false, "timed out waiting for synchronized events")
+
+
+func _is_complete(sent_events: bool, event_age: float) -> bool:
+	if role == "host":
+		return online and saw_remote and saw_snapshot and sent_events and event_age >= 1.0
+	return online and saw_remote and saw_snapshot and saw_meteor and saw_round_state
+
+
+func _on_status(_text: String, is_online: bool) -> void:
+	online = is_online
+
+
+func _require(condition: bool, message: String) -> void:
+	if condition:
+		return
+	push_error("NETWORK_PROBE_FAIL role=%s: %s" % [role, message])
+	quit(1)

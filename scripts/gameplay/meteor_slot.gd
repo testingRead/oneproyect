@@ -15,7 +15,6 @@ enum Phase {
 @onready var marker: MeshInstance3D = $WarningMarker
 @onready var body: RigidBody3D = $Meteor
 @onready var shockwave: MeshInstance3D = $Shockwave
-@onready var blast_area: Area3D = $BlastArea
 
 var phase := Phase.IDLE
 var _phase_time := 0.0
@@ -59,6 +58,7 @@ func launch(target: Vector3, horizontal_velocity: Vector2, warning_time: float, 
 	marker.visible = true
 	marker.scale = Vector3.ONE
 	shockwave.visible = false
+	shockwave.position = Vector3(0.0, 0.08, 0.0)
 	body.visible = false
 	body.freeze = true
 	body.position = Vector3(0.0, 12.0, 0.0)
@@ -109,8 +109,18 @@ func _begin_impact() -> void:
 	body.visible = false
 	body.collision_layer = 0
 	shockwave.visible = true
+	var impact_origin := body.global_position
+	shockwave.global_position = impact_origin + Vector3(0.0, 0.08, 0.0)
 	shockwave.scale = Vector3(0.2, 1.0, 0.2)
-	for nearby_body in blast_area.get_overlapping_bodies():
-		if nearby_body.has_method("apply_damage_and_knockback"):
-			nearby_body.apply_damage_and_knockback(global_position, _blast_force, _damage)
+	var space_state := get_world_3d().direct_space_state
+	for nearby_body in get_tree().get_nodes_in_group("players"):
+		if not nearby_body.has_method("apply_damage_and_knockback"):
+			continue
+		var target_position: Vector3 = nearby_body.global_position + Vector3.UP * 0.3
+		if impact_origin.distance_to(target_position) > 2.75:
+			continue
+		var query := PhysicsRayQueryParameters3D.create(impact_origin, target_position, 1)
+		query.exclude = [body.get_rid(), nearby_body.get_rid()]
+		if space_state.intersect_ray(query).is_empty():
+			nearby_body.apply_damage_and_knockback(impact_origin, _blast_force, _damage)
 	impacted.emit()

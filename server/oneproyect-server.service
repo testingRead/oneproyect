@@ -1,0 +1,31 @@
+[Unit]
+Description=OneProyect lightweight ENet relay
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=oneproyect
+Group=oneproyect
+WorkingDirectory=/opt/oneproyect-server/game
+Environment=HOME=/var/lib/oneproyect
+Environment=GODOT_SILENCE_ROOT_WARNING=1
+ExecStart=/opt/oneproyect-server/bin/godot --headless --path /opt/oneproyect-server/game -- --server
+Restart=on-failure
+RestartSec=3
+MemoryHigh=150M
+MemoryMax=192M
+CPUQuota=35%
+TasksMax=64
+LimitNOFILE=1024
+Nice=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/oneproyect
+StateDirectory=oneproyect
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

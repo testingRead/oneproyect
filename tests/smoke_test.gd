@@ -1,13 +1,22 @@
 extends SceneTree
 
 const EXPECTED_METEOR_POOL := 8
+const NETWORK_SCRIPT := preload("res://scripts/network/network_manager.gd")
 
 
 func _init() -> void:
 	call_deferred("_run")
 
 
+func _ensure_network() -> void:
+	if not root.has_node("Network"):
+		var network := NETWORK_SCRIPT.new()
+		network.name = "Network"
+		root.add_child(network)
+
+
 func _run() -> void:
+	_ensure_network()
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	_require(packed != null, "Main scene must load")
 	var game := packed.instantiate()
@@ -37,10 +46,20 @@ func _run() -> void:
 	for frame in 110:
 		await physics_frame
 	_require(player.get_health() < GrayboxPlayer.MAX_HEALTH, "Meteor impact must damage the player")
+	var exposed_health := player.get_health()
 
-	print("SMOKE_OK lights=%d meteors=%d health=%d" % [
+	player.heal_full()
+	player.global_position = Vector3(-8.3, 1.2, -7.8)
+	player.velocity = Vector3.ZERO
+	meteor.launch(Vector3(-8.3, 0.06, -7.8), Vector2.ZERO, 0.01, 22, 10.5)
+	for frame in 110:
+		await physics_frame
+	_require(player.get_health() == GrayboxPlayer.MAX_HEALTH, "Shelter roof must block meteor blast")
+
+	print("SMOKE_OK lights=%d meteors=%d exposed_health=%d sheltered_health=%d" % [
 		lights.size(),
 		meteors.size(),
+		exposed_health,
 		player.get_health(),
 	])
 	quit(0)
