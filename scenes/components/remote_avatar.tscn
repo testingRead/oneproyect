@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/network/remote_avatar.gd" id="1"]
 
@@ -21,6 +21,21 @@ roughness = 0.3
 material = SubResource("MatVisor")
 size = Vector3(0.58, 0.26, 0.12)
 
+[sub_resource type="StandardMaterial3D" id="MatAccessory"]
+albedo_color = Color(1, 0.78, 0.2, 1)
+roughness = 0.88
+
+[sub_resource type="CylinderMesh" id="MeshCap"]
+material = SubResource("MatAccessory")
+top_radius = 0.36
+bottom_radius = 0.48
+height = 0.18
+radial_segments = 8
+
+[sub_resource type="BoxMesh" id="MeshBackpack"]
+material = SubResource("MatAccessory")
+size = Vector3(0.68, 0.72, 0.22)
+
 [node name="RemoteAvatar" type="Node3D"]
 script = ExtResource("1")
 
@@ -31,6 +46,16 @@ cast_shadow = 0
 [node name="Visor" type="MeshInstance3D" parent="."]
 position = Vector3(0, 0.38, 0.48)
 mesh = SubResource("MeshVisor")
+cast_shadow = 0
+
+[node name="Cap" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1, 0)
+mesh = SubResource("MeshCap")
+cast_shadow = 0
+
+[node name="Backpack" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.04, -0.48)
+mesh = SubResource("MeshBackpack")
 cast_shadow = 0
 
 [node name="Name" type="Label3D" parent="."]

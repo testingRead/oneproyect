@@ -19,6 +19,7 @@ var server_address := "149.50.152.250"
 var server_port := DEFAULT_PORT
 var display_name := ""
 var color_index := 0
+var host_score := 1
 
 var _players: Dictionary = {}
 var _join_order: Array[int] = []
@@ -26,6 +27,7 @@ var _simulation_host_id := 0
 var _online := false
 var _server_mode := false
 var _last_round_state: Dictionary = {}
+var _host_review_elapsed := 0.0
 
 
 func _ready() -> void:
@@ -33,11 +35,21 @@ func _ready() -> void:
 	server_port = int(ProjectSettings.get_setting("network/server_port", DEFAULT_PORT))
 	display_name = "Jugador%03d" % (randi() % 1000)
 	color_index = randi() % 5
+	host_score = clampi(OS.get_processor_count(), 1, 16)
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
+
+
+func _process(delta: float) -> void:
+	if not _server_mode or _players.size() < 2:
+		return
+	_host_review_elapsed += delta
+	if _host_review_elapsed >= 3.0:
+		_host_review_elapsed = 0.0
+		_elect_simulation_host(true, false)
 
 
 func start_server() -> Error:
@@ -122,7 +134,7 @@ func broadcast_round_state(state: int, round_number: int, time_left: float) -> v
 
 
 @rpc("any_peer", "call_remote", "reliable", 0)
-func _rpc_register_player(requested_name: String, requested_color: int) -> void:
+func _rpc_register_player(requested_name: String, requested_color: int, requested_host_score: int) -> void:
 	if not multiplayer.is_server():
 		return
 	var sender := multiplayer.get_remote_sender_id()
@@ -132,10 +144,15 @@ func _rpc_register_player(requested_name: String, requested_color: int) -> void:
 	if safe_name.is_empty():
 		safe_name = "Jugador%d" % sender
 	var safe_color := clampi(requested_color, 0, 4)
+	var safe_host_score := clampi(requested_host_score, 1, 16)
 	for existing_id in _players:
 		var existing: Dictionary = _players[existing_id]
 		_rpc_player_joined.rpc_id(sender, existing_id, existing.name, existing.color)
-	_players[sender] = {"name": safe_name, "color": safe_color}
+	_players[sender] = {
+		"name": safe_name,
+		"color": safe_color,
+		"host_score": safe_host_score,
+	}
 	_join_order.append(sender)
 	for peer_id in _players:
 		_rpc_player_joined.rpc_id(peer_id, sender, safe_name, safe_color)
@@ -148,7 +165,10 @@ func _rpc_register_player(requested_name: String, requested_color: int) -> void:
 			_last_round_state.time_left
 		)
 	peers_changed.emit(_players.size(), MAX_PLAYERS)
-	print("PLAYER_REGISTERED id=%d name=%s total=%d" % [sender, safe_name, _players.size()])
+	print(
+		"PLAYER_REGISTERED id=%d name=%s score=%d total=%d"
+		% [sender, safe_name, safe_host_score, _players.size()]
+	)
 
 
 @rpc("authority", "call_remote", "reliable", 0)
@@ -248,7 +268,7 @@ func _on_connected_to_server() -> void:
 	_server_mode = false
 	var own_id := multiplayer.get_unique_id()
 	_players[own_id] = {"name": display_name, "color": color_index}
-	_rpc_register_player.rpc_id(1, display_name, color_index)
+	_rpc_register_player.rpc_id(1, display_name, color_index, host_score)
 	status_changed.emit("CONECTADO · esperando sala", true)
 
 
@@ -282,15 +302,51 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	print("PEER_DISCONNECTED id=%d total=%d" % [peer_id, _players.size()])
 
 
-func _elect_simulation_host() -> void:
+func _elect_simulation_host(consider_latency := false, force_announce := true) -> void:
 	if not multiplayer.is_server():
 		return
 	var next_host := 0
+	var best_device_score := -1
 	for peer_id in _join_order:
-		if _players.has(peer_id):
+		if not _players.has(peer_id):
+			continue
+		var candidate_score := int(_players[peer_id].host_score)
+		if candidate_score > best_device_score:
+			best_device_score = candidate_score
 			next_host = peer_id
-			break
+	if (
+		_players.has(_simulation_host_id)
+		and int(_players[_simulation_host_id].host_score) == best_device_score
+	):
+		next_host = _simulation_host_id
+	if consider_latency and next_host != 0:
+		next_host = _choose_lower_latency_peer(next_host, best_device_score)
+	if next_host == _simulation_host_id and not force_announce:
+		return
 	_simulation_host_id = next_host
 	for peer_id in _players:
 		_rpc_set_simulation_host.rpc_id(peer_id, next_host)
 	print("SIMULATION_HOST id=%d" % next_host)
+
+
+func _choose_lower_latency_peer(current_choice: int, device_score: int) -> int:
+	var enet_peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if enet_peer == null:
+		return current_choice
+	var best_id := current_choice
+	var best_rtt := _get_peer_rtt(enet_peer, current_choice)
+	for peer_id in _join_order:
+		if not _players.has(peer_id) or int(_players[peer_id].host_score) != device_score:
+			continue
+		var candidate_rtt := _get_peer_rtt(enet_peer, peer_id)
+		if candidate_rtt > 0.0 and (best_rtt <= 0.0 or candidate_rtt + 40.0 < best_rtt):
+			best_id = peer_id
+			best_rtt = candidate_rtt
+	return best_id
+
+
+func _get_peer_rtt(enet_peer: ENetMultiplayerPeer, peer_id: int) -> float:
+	var packet_peer := enet_peer.get_peer(peer_id)
+	if packet_peer == null:
+		return 0.0
+	return packet_peer.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME)

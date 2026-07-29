@@ -2,6 +2,7 @@ extends Node3D
 
 const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn")
 const SNAPSHOT_INTERVAL := 0.1
+const PROFILE_PATH := "user://profile.cfg"
 
 @onready var player: GrayboxPlayer = $World/Player
 @onready var disaster: DisasterController = $World/DisasterController
@@ -15,8 +16,12 @@ const SNAPSHOT_INTERVAL := 0.1
 @onready var round_clock: Label = $HUD/RoundPanel/Clock
 @onready var pause_panel: Control = $HUD/PausePanel
 @onready var pause_button: Button = $HUD/TopBar/Pause
+@onready var restart_button: Button = $HUD/TopBar/Restart
 @onready var online_button: Button = $HUD/TopBar/Online
 @onready var network_status: Label = $HUD/TopBar/NetworkStatus
+@onready var name_input: LineEdit = $HUD/PausePanel/Center/NameInput
+@onready var pause_title: Label = $HUD/PausePanel/Center/Title
+@onready var pause_restart: Button = $HUD/PausePanel/Center/Restart
 @onready var touch_debug: Label = $HUD/TouchDebug
 
 var _stats_elapsed := 0.0
@@ -48,6 +53,7 @@ func _ready() -> void:
 	network.meteor_received.connect(disaster.spawn_network_meteor)
 	network.round_state_received.connect(disaster.apply_network_state)
 	network.simulation_host_changed.connect(_on_simulation_host_changed)
+	_load_profile()
 	_on_health_changed(100, 100)
 	_on_network_status_changed("MODO LOCAL", false)
 
@@ -76,8 +82,18 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func toggle_pause() -> void:
+	if network.is_online():
+		var menu_open := not pause_panel.visible
+		pause_panel.visible = menu_open
+		pause_title.text = "MENÚ EN LÍNEA"
+		pause_button.text = "CERRAR" if menu_open else "MENÚ"
+		player.set_controls_enabled(not menu_open)
+		if not OS.has_feature("mobile"):
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if menu_open else Input.MOUSE_MODE_CAPTURED
+		return
 	get_tree().paused = not get_tree().paused
 	pause_panel.visible = get_tree().paused
+	pause_title.text = "EN PAUSA"
 	pause_button.text = "SEGUIR" if get_tree().paused else "PAUSA"
 	if not OS.has_feature("mobile"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if get_tree().paused else Input.MOUSE_MODE_CAPTURED
@@ -86,11 +102,13 @@ func toggle_pause() -> void:
 func restart_level() -> void:
 	get_tree().paused = false
 	pause_panel.visible = false
-	pause_button.text = "PAUSA"
-	$HUD/PausePanel/Center/Title.text = "EN PAUSA"
+	pause_button.text = "MENÚ" if network.is_online() else "PAUSA"
+	pause_title.text = "EN PAUSA"
 	$HUD/PausePanel/Center/Resume.visible = true
+	player.set_controls_enabled(true)
 	player.reset_to_spawn()
-	disaster.restart_cycle()
+	if not network.is_online():
+		disaster.restart_cycle()
 	if not OS.has_feature("mobile"):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -134,6 +152,10 @@ func _toggle_online() -> void:
 		online_button.text = "CONECTAR"
 		disaster.restart_cycle()
 		return
+	var requested_name := name_input.text.strip_edges().substr(0, 16)
+	if not requested_name.is_empty():
+		network.display_name = requested_name
+	_save_profile()
 	online_button.disabled = true
 	var error: int = network.connect_to_server()
 	if error != OK:
@@ -145,7 +167,16 @@ func _on_network_status_changed(text: String, online: bool) -> void:
 	network_status.modulate = Color(0.4, 1.0, 0.62) if online else Color(0.76, 0.87, 1.0)
 	online_button.disabled = text.begins_with("Conectando")
 	online_button.text = "SALIR" if online else "CONECTAR"
+	pause_button.text = "MENÚ" if online else "PAUSA"
+	restart_button.text = "REAPARECER" if online else "REINICIAR"
+	pause_restart.text = "REAPARECER" if online else "REINICIAR"
+	name_input.editable = not online
 	if not online and not network.is_online():
+		if pause_panel.visible and not get_tree().paused:
+			pause_panel.visible = false
+			player.set_controls_enabled(true)
+			if not OS.has_feature("mobile"):
+				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		_clear_remote_players()
 
 
@@ -181,3 +212,20 @@ func _clear_remote_players() -> void:
 	for avatar: RemoteAvatar in _remote_avatars.values():
 		avatar.queue_free()
 	_remote_avatars.clear()
+
+
+func _load_profile() -> void:
+	var config := ConfigFile.new()
+	if config.load(PROFILE_PATH) == OK:
+		var saved_name := str(config.get_value("player", "name", "")).strip_edges().substr(0, 16)
+		if not saved_name.is_empty():
+			network.display_name = saved_name
+	name_input.text = network.display_name
+
+
+func _save_profile() -> void:
+	var config := ConfigFile.new()
+	config.set_value("player", "name", network.display_name)
+	var error := config.save(PROFILE_PATH)
+	if error != OK:
+		push_warning("No se pudo guardar el nombre del jugador: %s" % error)

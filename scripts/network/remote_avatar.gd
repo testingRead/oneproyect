@@ -11,6 +11,8 @@ const COLORS := [
 
 @onready var body_mesh: MeshInstance3D = $Body
 @onready var name_label: Label3D = $Name
+@onready var cap: MeshInstance3D = $Cap
+@onready var backpack: MeshInstance3D = $Backpack
 
 var target_position := Vector3.ZERO
 var target_yaw := 0.0
@@ -28,6 +30,8 @@ func configure(player_name: String, player_color: int, initial_position: Vector3
 	var material := body_mesh.get_active_material(0).duplicate() as StandardMaterial3D
 	material.albedo_color = COLORS[clampi(player_color, 0, COLORS.size() - 1)]
 	body_mesh.material_override = material
+	cap.visible = player_color % 2 == 0
+	backpack.visible = not cap.visible
 
 
 func set_snapshot(position: Vector3, facing_yaw: float) -> void:

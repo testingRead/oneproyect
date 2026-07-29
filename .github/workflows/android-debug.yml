@@ -126,12 +126,12 @@ jobs:
           grep -q "ONEPROYECT_SERVER_READY" "$SERVER_LOG"
 
           timeout 15 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
-            --script res://tests/network_probe.gd -- --role=host > "$HOST_LOG" 2>&1 &
-          host_pid=$!
-          sleep 0.8
-          timeout 15 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/network_probe.gd -- --role=observer > "$OBSERVER_LOG" 2>&1 &
           observer_pid=$!
+          sleep 0.8
+          timeout 15 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/network_probe.gd -- --role=host > "$HOST_LOG" 2>&1 &
+          host_pid=$!
           set +e
           wait "$host_pid"
           host_code=$?
@@ -186,6 +186,9 @@ jobs:
             --export-debug "Android Debug ARM32" build/android/oneproyect-debug-arm32.apk
           test -s build/android/oneproyect-debug-arm64.apk
           test -s build/android/oneproyect-debug-arm32.apk
+          max_apk_bytes=$((36 * 1024 * 1024))
+          test "$(stat -c '%s' build/android/oneproyect-debug-arm64.apk)" -lt "$max_apk_bytes"
+          test "$(stat -c '%s' build/android/oneproyect-debug-arm32.apk)" -lt "$max_apk_bytes"
           ls -lh build/android/oneproyect-debug-arm64.apk build/android/oneproyect-debug-arm32.apk
           "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose --print-certs \
             build/android/oneproyect-debug-arm64.apk

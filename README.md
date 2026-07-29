@@ -22,10 +22,12 @@ El botón **CONECTAR** entra a una sala ENet/UDP de hasta cinco personas. Cada
 jugador tiene nombre y color, y los avatares remotos se interpolan a partir de
 10 actualizaciones de posición por segundo.
 
-El VPS escucha en UDP `9999` y actúa sólo como retransmisor. El primer jugador
-conectado simula la ronda y envía los eventos del desastre; si se desconecta,
-el servidor elige automáticamente al siguiente. Así, la máquina pequeña no
-procesa el mapa, los meteoritos ni las colisiones.
+El VPS escucha en UDP `9999` y actúa sólo como retransmisor. El teléfono con
+mayor capacidad declarada simula la ronda y envía los eventos del desastre; a
+igualdad de capacidad, el relay favorece una latencia al menos 40 ms mejor y
+evita cambios pequeños que harían oscilar el rol. Si el host se desconecta, se
+elige otro automáticamente. Así, la máquina pequeña no procesa el mapa, los
+meteoritos ni las colisiones.
 
 ## Exportación reproducible
 
@@ -44,3 +46,6 @@ Actions Secrets, por lo que las siguientes versiones podrán instalarse como
 actualizaciones sin cambiar la identidad de la aplicación.
 
 Los artifacts se conservan solamente 1 día para limitar almacenamiento.
+
+La ruta recomendada para exportar directamente en el teléfono está documentada
+en [docs/ANDROID_LOCAL_BUILD.md](docs/ANDROID_LOCAL_BUILD.md).

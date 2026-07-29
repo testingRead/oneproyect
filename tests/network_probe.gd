@@ -5,6 +5,7 @@ const TIMEOUT_SECONDS := 10.0
 
 var network: OneProjectNetwork
 var role := "observer"
+var address := "127.0.0.1"
 var online := false
 var saw_remote := false
 var saw_snapshot := false
@@ -16,6 +17,8 @@ func _init() -> void:
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--role="):
 			role = argument.trim_prefix("--role=")
+		elif argument.begins_with("--address="):
+			address = argument.trim_prefix("--address=")
 	call_deferred("_setup")
 
 
@@ -27,6 +30,7 @@ func _setup() -> void:
 		network.name = "Network"
 		root.add_child(network)
 	print("NETWORK_PROBE_NODE role=%s path=%s" % [role, network.get_path()])
+	network.host_score = 16 if role == "host" else 1
 	network.status_changed.connect(_on_status)
 	network.remote_player_joined.connect(func(_id: int, _name: String, _color: int) -> void:
 		saw_remote = true
@@ -45,7 +49,7 @@ func _setup() -> void:
 
 func _run() -> void:
 	network.display_name = role.capitalize()
-	var error := network.connect_to_server("127.0.0.1")
+	var error := network.connect_to_server(address)
 	_require(error == OK, "client creation failed")
 	var elapsed := 0.0
 	var sent_events := false

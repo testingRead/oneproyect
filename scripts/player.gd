@@ -21,6 +21,7 @@ var _jump_requested := false
 var _spawn_transform: Transform3D
 var _health := MAX_HEALTH
 var _invulnerability := 0.0
+var _controls_enabled := true
 
 
 func _ready() -> void:
@@ -36,6 +37,8 @@ func _physics_process(delta: float) -> void:
 	_invulnerability = maxf(0.0, _invulnerability - delta)
 	var desktop_move := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var movement_input := _touch_move if _touch_move.length_squared() > desktop_move.length_squared() else desktop_move
+	if not _controls_enabled:
+		movement_input = Vector2.ZERO
 	var yaw_basis := Basis(Vector3.UP, camera_rig.rotation.y)
 	var direction := yaw_basis * Vector3(movement_input.x, 0.0, movement_input.y)
 	if direction.length_squared() > 1.0:
@@ -47,7 +50,7 @@ func _physics_process(delta: float) -> void:
 
 	if not is_on_floor():
 		velocity += get_gravity() * delta
-	elif _jump_requested or Input.is_action_just_pressed("jump"):
+	elif _controls_enabled and (_jump_requested or Input.is_action_just_pressed("jump")):
 		velocity.y = jump_velocity
 	_jump_requested = false
 
@@ -67,7 +70,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func set_touch_move(value: Vector2) -> void:
-	_touch_move = value
+	_touch_move = value if _controls_enabled else Vector2.ZERO
 
 
 func add_touch_look(delta: Vector2) -> void:
@@ -75,7 +78,15 @@ func add_touch_look(delta: Vector2) -> void:
 
 
 func request_jump() -> void:
-	_jump_requested = true
+	if _controls_enabled:
+		_jump_requested = true
+
+
+func set_controls_enabled(enabled: bool) -> void:
+	_controls_enabled = enabled
+	if not enabled:
+		_touch_move = Vector2.ZERO
+		_jump_requested = false
 
 
 func reset_to_spawn() -> void:
