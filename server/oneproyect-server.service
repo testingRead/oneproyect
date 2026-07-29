@@ -13,10 +13,10 @@ Environment=GODOT_SILENCE_ROOT_WARNING=1
 ExecStart=/opt/oneproyect-server/bin/godot --headless --path /opt/oneproyect-server/game -- --server
 Restart=on-failure
 RestartSec=3
-MemoryHigh=150M
-MemoryMax=192M
+MemoryHigh=64M
+MemoryMax=96M
 CPUQuota=35%
-TasksMax=64
+TasksMax=32
 LimitNOFILE=1024
 Nice=5
 NoNewPrivileges=true

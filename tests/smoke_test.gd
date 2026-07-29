@@ -86,6 +86,7 @@ func _run() -> void:
 		and test_feature.feature_context.is_empty(),
 		"Features omitted by the next plan must deactivate without rebuilding the game"
 	)
+	disaster.set_physics_process(false)
 	var meteors := disaster.get_node("MeteorMode").find_children("Meteor*", "", false, false)
 	_require(meteors.size() == EXPECTED_METEOR_POOL, "Meteor pool must be preallocated")
 	var shockwaves := disaster.get_node("ShockwaveMode").find_children(

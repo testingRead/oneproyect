@@ -76,6 +76,8 @@ const ACCESSORY_VISUAL_PATHS := {
 
 var _touch_move := Vector2.ZERO
 var _jump_requested := false
+var _network_jump_event := false
+var _network_move_world := Vector2.ZERO
 var _spawn_transform: Transform3D
 var _health := MAX_HEALTH
 var _invulnerability := 0.0
@@ -117,6 +119,7 @@ func _physics_process(delta: float) -> void:
 	var direction := yaw_basis * Vector3(movement_input.x, 0.0, movement_input.y)
 	if direction.length_squared() > 1.0:
 		direction = direction.normalized()
+	_network_move_world = Vector2(direction.x, direction.z)
 
 	var movement_scale := _get_leg_movement_scale()
 	var acceleration := ground_acceleration if is_on_floor() else air_acceleration
@@ -135,6 +138,7 @@ func _physics_process(delta: float) -> void:
 		velocity += get_gravity() * delta
 	elif _controls_enabled and (_jump_requested or Input.is_action_just_pressed("jump")):
 		velocity.y = jump_velocity * movement_scale
+		_network_jump_event = true
 	_jump_requested = false
 	if _controls_enabled and Input.is_action_just_pressed("push"):
 		request_push()
@@ -225,6 +229,50 @@ func get_health() -> int:
 
 func get_visual_yaw() -> float:
 	return visual.rotation.y
+
+
+func get_network_move() -> Vector2:
+	return _network_move_world
+
+
+func consume_network_jump() -> bool:
+	var jumped := _network_jump_event
+	_network_jump_event = false
+	return jumped
+
+
+func apply_authoritative_state(
+	position: Vector3,
+	authoritative_velocity: Vector3,
+	facing_yaw: float,
+	health: int,
+	body_mask: int
+) -> void:
+	if not position.is_finite() or not authoritative_velocity.is_finite():
+		return
+	var error_distance := global_position.distance_to(position)
+	global_position = (
+		position
+		if error_distance > 3.0
+		else global_position.lerp(position, 0.32)
+	)
+	velocity.x = lerpf(velocity.x, authoritative_velocity.x, 0.35)
+	velocity.z = lerpf(velocity.z, authoritative_velocity.z, 0.35)
+	visual.rotation.y = lerp_angle(visual.rotation.y, facing_yaw, 0.35)
+	var safe_health := clampi(health, 0, MAX_HEALTH)
+	if safe_health != _health:
+		_health = safe_health
+		health_changed.emit(_health, MAX_HEALTH)
+	var safe_mask := body_mask & ALL_LIMBS_MASK
+	if safe_mask != _limb_mask:
+		_limb_mask = safe_mask
+		for limb in LIMB_VISUAL_PATHS.size():
+			var hitbox := get_node(LIMB_HITBOX_PATHS[limb]) as Area3D
+			(hitbox.get_node("Shape") as CollisionShape3D).set_deferred(
+				"disabled",
+				not _is_limb_attached(limb)
+			)
+		HUMANOID_RIG.apply_limb_mask(visual, _limb_mask, _character_variant_index)
 
 
 func get_limb_mask() -> int:

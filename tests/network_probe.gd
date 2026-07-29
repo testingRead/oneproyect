@@ -1,22 +1,27 @@
 extends SceneTree
 
-const NETWORK_SCRIPT := preload("res://scripts/network/network_manager.gd")
-const TIMEOUT_SECONDS := 10.0
+const NETWORK_SCRIPT := preload("res://client/network_client.gd")
+const TIMEOUT_MSEC := 16000
 
-var network: OneProjectNetwork
+var network: Node
 var role := "observer"
 var address := "127.0.0.1"
 var port := 9999
-var online := false
+var accepted := false
 var saw_remote := false
-var saw_snapshot := false
-var saw_limb_mask := false
-var saw_meteor := false
-var saw_shockwave := false
+var saw_remote_movement := false
+var saw_authoritative_state := false
+var saw_input_ack := false
 var saw_round_state := false
-var saw_round_plan := false
-var saw_push := false
-var remote_peer_id := 0
+var saw_suspension := false
+var resumed := false
+var reconnect_id_preserved := false
+var remote_join_count := 0
+var local_player_id_before_drop := 0
+var position_before_drop := Vector3.ZERO
+var latest_authoritative_position := Vector3.ZERO
+var drop_requested := false
+var resumed_at_msec := 0
 
 
 func _init() -> void:
@@ -31,36 +36,51 @@ func _init() -> void:
 
 
 func _setup() -> void:
-	if root.has_node("Network"):
-		network = root.get_node("Network")
-	else:
-		network = NETWORK_SCRIPT.new()
-		network.name = "Network"
-		root.add_child(network)
-	print("NETWORK_PROBE_NODE role=%s path=%s" % [role, network.get_path()])
+	network = NETWORK_SCRIPT.new()
+	network.name = "Network"
+	root.add_child(network)
 	network.server_port = port
-	network.host_score = 16 if role == "host" else 1
-	network.status_changed.connect(_on_status)
-	network.remote_player_joined.connect(func(peer_id: int, _name: String, _color: int) -> void:
+	network.display_name = role.capitalize()
+	network.color_index = 1 if role == "host" else 2
+	network.configure_test_identity(
+		"aaaaaaaaaaaaaaaa" if role == "host" else "bbbbbbbbbbbbbbbb"
+	)
+	network.set_prediction_origin(Vector3(0.0, 1.2, 8.0))
+	network.status_changed.connect(func(_text: String, online: bool) -> void:
+		accepted = accepted or online
+	)
+	network.remote_player_joined.connect(func(
+		_player_id: int,
+		_name: String,
+		_color: int
+	) -> void:
 		saw_remote = true
-		remote_peer_id = peer_id
+		remote_join_count += 1
+	)
+	network.remote_session_suspended.connect(func(_player_id: int) -> void:
+		saw_suspension = true
 	)
 	network.remote_snapshot.connect(func(
-		_id: int,
-		_position: Vector3,
+		_player_id: int,
+		position: Vector3,
 		_yaw: float,
-		limb_mask: int
+		body_mask: int
 	) -> void:
-		saw_snapshot = true
-		saw_limb_mask = limb_mask == (
-			(95 | (1 << 11)) if role == "host" else (63 | (1 << 10))
-		)
+		if body_mask == 0b111111111111 and position.x > 0.45:
+			saw_remote_movement = true
 	)
-	network.meteor_received.connect(func(_target: Vector3, _drift: Vector2, _damage: int, _force: float) -> void:
-		saw_meteor = true
-	)
-	network.shockwave_received.connect(func() -> void:
-		saw_shockwave = true
+	network.authoritative_state.connect(func(
+		position: Vector3,
+		_velocity: Vector3,
+		_yaw: float,
+		_health: int,
+		body_mask: int,
+		ack_sequence: int,
+		_server_tick: int
+	) -> void:
+		saw_authoritative_state = body_mask == 0b111111111111
+		saw_input_ack = saw_input_ack or ack_sequence > 0
+		latest_authoritative_position = position
 	)
 	network.round_state_received.connect(func(
 		_state: int,
@@ -68,123 +88,94 @@ func _setup() -> void:
 		_time: float,
 		mode_id: String,
 		map_id: String,
-		round_seed: int,
-		feature_ids: PackedStringArray,
-		player_profile_id: String,
-		spawn_policy_id: String,
-		spectator_policy_id: String
+		_seed: int,
+		_features: PackedStringArray,
+		_profile: String,
+		_spawn: String,
+		_spectator: String
 	) -> void:
-		saw_round_state = true
-		saw_round_plan = (
-			mode_id == "meteors"
+		saw_round_state = (
+			mode_id in ["meteors", "shockwave", "flood"]
 			and map_id == "plaza_caos"
-			and round_seed == 2468
-			and feature_ids == PackedStringArray(["test_feature"])
-			and player_profile_id == "default"
-			and spawn_policy_id == "spread"
-			and spectator_policy_id == "overhead"
 		)
 	)
-	network.push_received.connect(func(_sender: int, _direction: Vector3, _force: float) -> void:
-		saw_push = true
+	network.session_resumed.connect(func(player_id: int) -> void:
+		resumed = true
+		reconnect_id_preserved = player_id == local_player_id_before_drop
+		resumed_at_msec = Time.get_ticks_msec()
 	)
+	var error: int = network.connect_to_server(address)
+	_require(error == OK, "client ENet creation failed")
 	_run()
 
 
 func _run() -> void:
-	network.display_name = role.capitalize()
-	var error := network.connect_to_server(address)
-	_require(error == OK, "client creation failed")
-	var elapsed := 0.0
-	var sent_events := false
-	var events_sent_at := 0.0
-	while elapsed < TIMEOUT_SECONDS:
+	var started_msec := Time.get_ticks_msec()
+	var next_input_msec := started_msec
+	while Time.get_ticks_msec() - started_msec < TIMEOUT_MSEC:
 		await process_frame
-		elapsed += 1.0 / 60.0
-		if online and network.get_player_count() >= 2:
-			if role == "host":
-				network.send_snapshot(
-					Vector3(2.0, 1.2, -3.0),
-					0.75,
-					63 | (1 << 10)
-				)
-				if network.is_simulation_host() and not sent_events and elapsed > 1.0:
-					network.broadcast_meteor(Vector3(1.0, 0.06, 1.0), Vector2.ZERO, 22, 10.5)
-					network.broadcast_shockwave()
-					network.broadcast_round_state(
-						1,
-						3,
-						20.0,
-						"meteors",
-						"plaza_caos",
-						2468,
-						PackedStringArray(["test_feature"]),
-						"default",
-						"spread",
-						"overhead"
-					)
-					network.send_push(remote_peer_id, Vector3.FORWARD, 5.2)
-					sent_events = true
-					events_sent_at = elapsed
-					saw_meteor = true
-					saw_shockwave = true
-					saw_round_state = true
-					saw_round_plan = true
-					saw_push = true
-			else:
-				network.send_snapshot(
-					Vector3(-2.0, 1.2, 3.0),
-					-0.75,
-					95 | (1 << 11)
-				)
-		if _is_complete(sent_events, elapsed - events_sent_at):
+		var now_msec := Time.get_ticks_msec()
+		if network.is_online() and now_msec >= next_input_msec:
+			next_input_msec = now_msec + 50
+			network.submit_input(
+				Vector2(1.0, 0.0) if role == "host" else Vector2.ZERO,
+				0.5,
+				false
+			)
+		if (
+			role == "host"
+			and not drop_requested
+			and saw_input_ack
+			and latest_authoritative_position.x > 0.45
+			and now_msec - started_msec > 2200
+		):
+			drop_requested = true
+			local_player_id_before_drop = network.get_local_player_id()
+			position_before_drop = latest_authoritative_position
+			network.simulate_network_drop_for_test()
+		if _is_complete(now_msec):
 			print(
-				"NETWORK_PROBE_OK role=%s players=%d host=%s remote=%s snapshot=%s limbs=%s meteor=%s shockwave=%s round=%s plan=%s push=%s"
+				"NETWORK_PROBE_OK role=%s accepted=%s remote=%s authoritative=%s ack=%s moved=%s round=%s suspended=%s resumed=%s same_id=%s"
 				% [
 					role,
-					network.get_player_count(),
-					network.is_simulation_host(),
+					accepted,
 					saw_remote,
-					saw_snapshot,
-					saw_limb_mask,
-					saw_meteor,
-					saw_shockwave,
+					saw_authoritative_state,
+					saw_input_ack,
+					saw_remote_movement,
 					saw_round_state,
-					saw_round_plan,
-					saw_push,
+					saw_suspension,
+					resumed,
+					reconnect_id_preserved,
 				]
 			)
 			network.disconnect_session()
 			quit(0)
 			return
-	_require(false, "timed out waiting for synchronized events")
+	_require(false, "timed out waiting for authoritative movement/reconnection")
 
 
-func _is_complete(sent_events: bool, event_age: float) -> bool:
+func _is_complete(now_msec: int) -> bool:
 	if role == "host":
 		return (
-			online
+			accepted
 			and saw_remote
-			and saw_snapshot
-			and saw_limb_mask
-			and sent_events
-			and event_age >= 1.0
+			and saw_authoritative_state
+			and saw_input_ack
+			and drop_requested
+			and resumed
+			and reconnect_id_preserved
+			and latest_authoritative_position.x >= position_before_drop.x - 0.25
+			and now_msec - resumed_at_msec >= 1200
 		)
 	return (
-		online
+		accepted
 		and saw_remote
-		and saw_snapshot
-		and saw_limb_mask
-		and saw_meteor
-		and saw_shockwave
+		and saw_remote_movement
 		and saw_round_state
-		and saw_round_plan
-		and saw_push
+		and saw_suspension
+		and remote_join_count >= 2
 	)
-
-
-func _on_status(_text: String, is_online: bool) -> void:
-	online = is_online
 
 
 func _require(condition: bool, message: String) -> void:

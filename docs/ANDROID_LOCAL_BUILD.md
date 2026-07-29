@@ -9,24 +9,44 @@ El POCO X7 Pro ya funciona como worker ARM64 de validación:
 - Java, Gradle, Android SDK, `aapt2`, `apksigner`, `adb`, Clang y Cargo están
   disponibles;
 - el proyecto público vive en `$HOME/projects/oneproyect`;
-- el smoke test headless funciona dentro de Debian/proot con la caché `.godot`
-  importada.
+- `glibc`, `glibc-runner` y `fontconfig-glibc` permiten ejecutar el binario
+  directamente con `grun`, sin proot;
+- el smoke test y la prueba ENet de tres procesos funcionan con la caché
+  `.godot` importada.
 
-El editor/importador Linux ARM64 presenta un fallo nativo bajo proot. No se usa
-para importar recursos, pero el runtime ya importado sí funciona con
-`--single-threaded-scene`. Falta validar la exportación APK con las export
-templates oficiales; hasta entonces GitHub Actions sigue siendo la fuente
-reproducible.
+El runtime nativo con `grun` es estable y más rápido que proot. El
+editor/exportador Linux ARM64, en cambio, aborta en una liberación de memoria
+tanto con proot como con `grun`; tampoco llega a producir un PCK. Por tanto, el
+POCO ya es un worker útil para tests ARM64 paralelos, pero no se considera una
+ruta de exportación reproducible. GitHub Actions sigue exportando APK y servidor.
 
 ## Conclusión
 
-Termux no empaqueta Godot en su repositorio, pero el binario Linux ARM64 oficial
-permite ejecutar pruebas dentro de proot. La ruta Android soportada para editar
-visualmente sigue siendo el **Editor Android de Godot 4.7.1**.
+Termux y TUR no empaquetan Godot, pero el binario Linux ARM64 oficial se ejecuta
+con `glibc-runner`. La ruta Android soportada para editar y exportar visualmente
+sigue siendo el **Editor Android de Godot 4.7.1**.
 
 El editor Android aún no está instalado en el POCO. Termux sí está preparado:
 Git funciona, `termux-open` está disponible, el almacenamiento compartido está
 montado y quedan aproximadamente 140 GiB libres.
+
+## Worker de pruebas
+
+Después de sincronizar fuentes y la caché de clases, una prueba se ejecuta con:
+
+```sh
+grun "$HOME/toolchains/godot-4.7.1/godot" \
+  --headless \
+  --path "$HOME/projects/oneproyect" \
+  --script res://tests/smoke_test.gd
+```
+
+Codec, sala y smoke pueden lanzarse como tres procesos en segundo plano. Así se
+usan varios núcleos sin activar el importador que falla. La prueba servidor +
+dos clientes también corre en paralelo y valida UDP, ACK, movimiento y
+reconexión en ARM64. Para Gradle u otras herramientas que lo admitan se usarán
+`--parallel --max-workers=6`; dos núcleos quedan para Android, SSH y picos de
+memoria.
 
 ## Preparación única
 

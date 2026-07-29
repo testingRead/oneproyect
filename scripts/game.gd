@@ -2,7 +2,7 @@ extends Node3D
 
 const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn")
 const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.gd")
-const SNAPSHOT_INTERVAL := 0.1
+const INPUT_INTERVAL := 0.05
 const PROFILE_PATH := "user://profile.cfg"
 const PUSH_RANGE := 2.8
 const PUSH_MIN_DOT := 0.62
@@ -99,6 +99,7 @@ func _ready() -> void:
 	network.remote_player_joined.connect(_on_remote_player_joined)
 	network.remote_player_left.connect(_on_remote_player_left)
 	network.remote_snapshot.connect(_on_remote_snapshot)
+	network.authoritative_state.connect(_on_authoritative_state)
 	network.meteor_received.connect(disaster.spawn_network_meteor)
 	network.shockwave_received.connect(disaster.spawn_network_shockwave)
 	network.round_state_received.connect(disaster.apply_network_state)
@@ -118,11 +119,11 @@ func _process(delta: float) -> void:
 		_stats_elapsed = 0.0
 	if network.is_online():
 		_snapshot_elapsed += delta
-		if _snapshot_elapsed >= SNAPSHOT_INTERVAL:
-			network.send_snapshot(
-				player.global_position,
+		if _snapshot_elapsed >= INPUT_INTERVAL:
+			network.submit_input(
+				player.get_network_move(),
 				player.get_visual_yaw(),
-				player.get_limb_mask()
+				player.consume_network_jump()
 			)
 			_snapshot_elapsed = 0.0
 	if _damage_flash_strength > 0.0:
@@ -310,13 +311,21 @@ func _toggle_online() -> void:
 func _on_network_status_changed(text: String, online: bool) -> void:
 	network_status.text = text
 	network_status.modulate = Color(0.4, 1.0, 0.62) if online else Color(0.76, 0.87, 1.0)
-	online_button.disabled = text.begins_with("Conectando")
+	online_button.disabled = (
+		not online
+		and (
+			text.to_upper().begins_with("CONECT")
+			or text.to_upper().begins_with("VALIDANDO")
+		)
+	)
 	online_button.text = "SALIR" if online else "CONECTAR"
 	pause_button.text = "MENÚ" if online else "PAUSA"
 	restart_button.text = "REAPARECER" if online else "REINICIAR"
 	pause_restart.text = "REAPARECER" if online else "REINICIAR"
 	name_input.editable = not online
 	character_button.disabled = online
+	if online:
+		network.set_prediction_origin(player.global_position, player.velocity)
 	if not online and not network.is_online():
 		if pause_panel.visible and not get_tree().paused:
 			pause_panel.visible = false
@@ -356,6 +365,24 @@ func _on_remote_snapshot(
 	if avatar != null:
 		avatar.set_snapshot(position, facing_yaw)
 		avatar.set_limb_mask(limb_mask)
+
+
+func _on_authoritative_state(
+	position: Vector3,
+	authoritative_velocity: Vector3,
+	facing_yaw: float,
+	health: int,
+	body_mask: int,
+	_ack_sequence: int,
+	_server_tick: int
+) -> void:
+	player.apply_authoritative_state(
+		position,
+		authoritative_velocity,
+		facing_yaw,
+		health,
+		body_mask
+	)
 
 
 func _on_simulation_host_changed(peer_id: int) -> void:

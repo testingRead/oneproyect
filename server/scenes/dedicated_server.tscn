@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://server/dedicated_server.gd" id="1_server"]
+[ext_resource type="Script" path="res://server/room_manager.gd" id="2_rooms"]
+
+[node name="Network" type="Node"]
+script = ExtResource("1_server")
+
+[node name="RoomManager" type="Node" parent="."]
+script = ExtResource("2_rooms")

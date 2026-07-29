@@ -12,10 +12,6 @@ config/icon="res://assets/icon.webp"
 boot_splash/bg_color=Color(0.055, 0.067, 0.082, 1)
 run/max_fps=60
 
-[autoload]
-
-Network="*res://scripts/network/network_manager.gd"
-
 [display]
 
 window/size/viewport_width=1280
