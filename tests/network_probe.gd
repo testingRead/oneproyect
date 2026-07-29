@@ -6,9 +6,11 @@ const TIMEOUT_SECONDS := 10.0
 var network: OneProjectNetwork
 var role := "observer"
 var address := "127.0.0.1"
+var port := 9999
 var online := false
 var saw_remote := false
 var saw_snapshot := false
+var saw_limb_mask := false
 var saw_meteor := false
 var saw_shockwave := false
 var saw_round_state := false
@@ -22,6 +24,8 @@ func _init() -> void:
 			role = argument.trim_prefix("--role=")
 		elif argument.begins_with("--address="):
 			address = argument.trim_prefix("--address=")
+		elif argument.begins_with("--port="):
+			port = clampi(int(argument.trim_prefix("--port=")), 1024, 65535)
 	call_deferred("_setup")
 
 
@@ -33,14 +37,21 @@ func _setup() -> void:
 		network.name = "Network"
 		root.add_child(network)
 	print("NETWORK_PROBE_NODE role=%s path=%s" % [role, network.get_path()])
+	network.server_port = port
 	network.host_score = 16 if role == "host" else 1
 	network.status_changed.connect(_on_status)
 	network.remote_player_joined.connect(func(peer_id: int, _name: String, _color: int) -> void:
 		saw_remote = true
 		remote_peer_id = peer_id
 	)
-	network.remote_snapshot.connect(func(_id: int, _position: Vector3, _yaw: float) -> void:
+	network.remote_snapshot.connect(func(
+		_id: int,
+		_position: Vector3,
+		_yaw: float,
+		limb_mask: int
+	) -> void:
 		saw_snapshot = true
+		saw_limb_mask = limb_mask == (95 if role == "host" else 63)
 	)
 	network.meteor_received.connect(func(_target: Vector3, _drift: Vector2, _damage: int, _force: float) -> void:
 		saw_meteor = true
@@ -69,7 +80,7 @@ func _run() -> void:
 		elapsed += 1.0 / 60.0
 		if online and network.get_player_count() >= 2:
 			if role == "host":
-				network.send_snapshot(Vector3(2.0, 1.2, -3.0), 0.75)
+				network.send_snapshot(Vector3(2.0, 1.2, -3.0), 0.75, 63)
 				if network.is_simulation_host() and not sent_events and elapsed > 1.0:
 					network.broadcast_meteor(Vector3(1.0, 0.06, 1.0), Vector2.ZERO, 22, 10.5)
 					network.broadcast_shockwave()
@@ -82,16 +93,17 @@ func _run() -> void:
 					saw_round_state = true
 					saw_push = true
 			else:
-				network.send_snapshot(Vector3(-2.0, 1.2, 3.0), -0.75)
+				network.send_snapshot(Vector3(-2.0, 1.2, 3.0), -0.75, 95)
 		if _is_complete(sent_events, elapsed - events_sent_at):
 			print(
-				"NETWORK_PROBE_OK role=%s players=%d host=%s remote=%s snapshot=%s meteor=%s shockwave=%s round=%s push=%s"
+				"NETWORK_PROBE_OK role=%s players=%d host=%s remote=%s snapshot=%s limbs=%s meteor=%s shockwave=%s round=%s push=%s"
 				% [
 					role,
 					network.get_player_count(),
 					network.is_simulation_host(),
 					saw_remote,
 					saw_snapshot,
+					saw_limb_mask,
 					saw_meteor,
 					saw_shockwave,
 					saw_round_state,
@@ -106,11 +118,19 @@ func _run() -> void:
 
 func _is_complete(sent_events: bool, event_age: float) -> bool:
 	if role == "host":
-		return online and saw_remote and saw_snapshot and sent_events and event_age >= 1.0
+		return (
+			online
+			and saw_remote
+			and saw_snapshot
+			and saw_limb_mask
+			and sent_events
+			and event_age >= 1.0
+		)
 	return (
 		online
 		and saw_remote
 		and saw_snapshot
+		and saw_limb_mask
 		and saw_meteor
 		and saw_shockwave
 		and saw_round_state

@@ -60,6 +60,18 @@ scale = Vector3(0.23, 0.67, 0.32)
 mesh = SubResource("MeshBody")
 cast_shadow = 0
 
+[node name="LeftHand" type="MeshInstance3D" parent="."]
+position = Vector3(-0.545, -0.14, 0.02)
+scale = Vector3(0.22, 0.2, 0.3)
+mesh = SubResource("MeshBody")
+cast_shadow = 0
+
+[node name="RightHand" type="MeshInstance3D" parent="."]
+position = Vector3(0.545, -0.14, 0.02)
+scale = Vector3(0.22, 0.2, 0.3)
+mesh = SubResource("MeshBody")
+cast_shadow = 0
+
 [node name="LeftLeg" type="MeshInstance3D" parent="."]
 position = Vector3(-0.19, -0.515, 0)
 scale = Vector3(0.28, 0.77, 0.36)

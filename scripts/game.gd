@@ -1,18 +1,19 @@
 extends Node3D
 
 const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn")
+const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.gd")
 const SNAPSHOT_INTERVAL := 0.1
 const PROFILE_PATH := "user://profile.cfg"
 const PUSH_RANGE := 2.8
 const PUSH_MIN_DOT := 0.62
-const QUALITY_NAMES := ["BAJA", "MEDIA-BAJA", "MEDIA", "MEDIA-ALTA", "ALTA"]
+const QUALITY_NAMES := ["BAJA", "MEDIA", "ALTA"]
 const FPS_LIMITS := [30, 45, 60]
-const CHARACTER_NAMES := ["EXPLORADOR", "GUARDABOSQUES", "CORREDORA", "TÉCNICO", "DORADO"]
-const GOLDEN_CHARACTER_COST := 5
 
 @onready var player: GrayboxPlayer = $World/Player
 @onready var disaster: DisasterController = $World/DisasterController
 @onready var remote_players: Node3D = $World/RemotePlayers
+@onready var detached_parts: Node3D = $World/DetachedParts
+@onready var mode_map_host: Node3D = $World/ModeMapHost
 @onready var network: Variant = get_node("/root/Network")
 @onready var sounds: SoundBank = $SoundBank
 @onready var sun: DirectionalLight3D = $World/Sun
@@ -32,11 +33,12 @@ const GOLDEN_CHARACTER_COST := 5
 @onready var sound_toggle: CheckButton = $HUD/PausePanel/Center/SettingsRow/Sound
 @onready var vibration_toggle: CheckButton = $HUD/PausePanel/Center/SettingsRow/Vibration
 @onready var camera_button: Button = $HUD/PausePanel/Center/Camera
-@onready var character_button: Button = $HUD/PausePanel/Center/Character
 @onready var sensitivity_slider: HSlider = $HUD/PausePanel/Center/SensitivityRow/Slider
 @onready var sensitivity_value: Label = $HUD/PausePanel/Center/SensitivityRow/Value
-@onready var quality_button: Button = $HUD/PausePanel/Center/Quality
-@onready var fps_button: Button = $HUD/PausePanel/Center/FPSLimit
+@onready var quality_button: OptionButton = $HUD/PausePanel/Center/Quality
+@onready var fps_button: OptionButton = $HUD/PausePanel/Center/FPSLimit
+@onready var character_button: OptionButton = $HUD/PausePanel/PreviewPanel/Character
+@onready var preview_avatar: RemoteAvatar = $HUD/PausePanel/PreviewPanel/ViewportContainer/Viewport/Avatar
 @onready var pause_title: Label = $HUD/PausePanel/Center/Title
 @onready var pause_restart: Button = $HUD/PausePanel/Center/Restart
 @onready var touch_debug: Label = $HUD/TouchDebug
@@ -71,15 +73,17 @@ func _ready() -> void:
 	sound_toggle.toggled.connect(_on_sound_toggled)
 	vibration_toggle.toggled.connect(_on_vibration_toggled)
 	camera_button.pressed.connect(_toggle_camera_mode)
-	character_button.pressed.connect(_cycle_character)
 	sensitivity_slider.value_changed.connect(_on_sensitivity_changed)
-	quality_button.pressed.connect(_cycle_quality)
-	fps_button.pressed.connect(_cycle_fps_limit)
+	_populate_option_lists()
+	character_button.item_selected.connect(_on_character_selected)
+	quality_button.item_selected.connect(_on_quality_selected)
+	fps_button.item_selected.connect(_on_fps_limit_selected)
 	name_input.text_submitted.connect(_on_name_submitted)
 	player.health_changed.connect(_on_health_changed)
 	player.damaged.connect(_on_player_damaged)
 	player.defeated.connect(_on_player_defeated)
 	player.push_requested.connect(_on_push_requested)
+	player.limb_detached.connect(detached_parts.spawn_part)
 	disaster.state_changed.connect(_on_disaster_state_changed)
 	disaster.clock_changed.connect(_on_disaster_clock_changed)
 	disaster.round_survived.connect(_on_round_survived)
@@ -88,6 +92,8 @@ func _ready() -> void:
 	disaster.meteor_impact.connect(sounds.play_impact)
 	disaster.shockwave_warning.connect(sounds.play_warning)
 	disaster.shockwave_started.connect(sounds.play_shockwave)
+	disaster.mode_selected.connect(mode_map_host.activate_mode)
+	mode_map_host.map_activated.connect(_on_mode_map_activated)
 	network.status_changed.connect(_on_network_status_changed)
 	network.remote_player_joined.connect(_on_remote_player_joined)
 	network.remote_player_left.connect(_on_remote_player_left)
@@ -112,12 +118,18 @@ func _process(delta: float) -> void:
 	if network.is_online():
 		_snapshot_elapsed += delta
 		if _snapshot_elapsed >= SNAPSHOT_INTERVAL:
-			network.send_snapshot(player.global_position, player.get_visual_yaw())
+			network.send_snapshot(
+				player.global_position,
+				player.get_visual_yaw(),
+				player.get_limb_mask()
+			)
 			_snapshot_elapsed = 0.0
 	if _damage_flash_strength > 0.0:
 		_damage_flash_strength = maxf(0.0, _damage_flash_strength - delta * 1.7)
 		damage_flash.color.a = _damage_flash_strength * 0.34
 		damage_flash.visible = _damage_flash_strength > 0.0
+	if pause_panel.visible:
+		preview_avatar.rotation.y = fmod(preview_avatar.rotation.y + delta * 0.55, TAU)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -222,6 +234,15 @@ func _on_round_started(_round_number: int) -> void:
 	_participating_round = true
 
 
+func _on_mode_map_activated(
+	_mode_id: StringName,
+	spawn_transform: Transform3D,
+	has_spawn: bool
+) -> void:
+	if has_spawn:
+		player.set_spawn_transform(spawn_transform)
+
+
 func _on_player_damaged(_amount: int, _current: int) -> void:
 	_damage_flash_strength = 1.0
 	damage_flash.visible = true
@@ -303,8 +324,8 @@ func _on_remote_player_joined(peer_id: int, player_name: String, player_color: i
 	avatar.name = "Peer%d" % peer_id
 	remote_players.add_child(avatar)
 	avatar.configure(player_name, player_color, Vector3(0.0, 1.2, 8.0))
-	avatar.set_shadow_quality(_quality_level >= 3)
-	avatar.set_texture_detail(_quality_level >= 2)
+	avatar.set_shadow_quality(_quality_level >= 2)
+	avatar.set_texture_detail(_quality_level >= 1)
 	_remote_avatars[peer_id] = avatar
 
 
@@ -315,10 +336,16 @@ func _on_remote_player_left(peer_id: int) -> void:
 	_remote_avatars.erase(peer_id)
 
 
-func _on_remote_snapshot(peer_id: int, position: Vector3, facing_yaw: float) -> void:
+func _on_remote_snapshot(
+	peer_id: int,
+	position: Vector3,
+	facing_yaw: float,
+	limb_mask: int
+) -> void:
 	var avatar: RemoteAvatar = _remote_avatars.get(peer_id)
 	if avatar != null:
 		avatar.set_snapshot(position, facing_yaw)
+		avatar.set_limb_mask(limb_mask)
 
 
 func _on_simulation_host_changed(peer_id: int) -> void:
@@ -349,7 +376,11 @@ func _load_profile() -> void:
 		player.set_look_sensitivity_scale(
 			float(config.get_value("settings", "look_sensitivity", 1.0))
 		)
-		_quality_level = clampi(int(config.get_value("settings", "quality", 0)), 0, 4)
+		_quality_level = clampi(
+			int(config.get_value("settings", "quality", 0)),
+			0,
+			QUALITY_NAMES.size() - 1
+		)
 		var saved_fps := int(config.get_value("settings", "fps_limit", 60))
 		_fps_limit_index = FPS_LIMITS.find(saved_fps)
 		if _fps_limit_index == -1:
@@ -451,8 +482,8 @@ func _update_sensitivity_label() -> void:
 	sensitivity_value.text = "%.1fx" % player.get_look_sensitivity_scale()
 
 
-func _cycle_quality() -> void:
-	_quality_level = (_quality_level + 1) % QUALITY_NAMES.size()
+func _on_quality_selected(index: int) -> void:
+	_quality_level = clampi(index, 0, QUALITY_NAMES.size() - 1)
 	_apply_quality()
 	_save_profile()
 
@@ -466,32 +497,27 @@ func _apply_quality() -> void:
 		1:
 			viewport.msaa_3d = Viewport.MSAA_2X
 			sun.shadow_enabled = false
-		2:
-			viewport.msaa_3d = Viewport.MSAA_2X
-			sun.shadow_enabled = false
-		3:
-			viewport.msaa_3d = Viewport.MSAA_4X
-			sun.shadow_enabled = true
 		_:
-			viewport.msaa_3d = Viewport.MSAA_8X
+			viewport.msaa_3d = Viewport.MSAA_4X
 			sun.shadow_enabled = true
 	for mesh in get_tree().get_nodes_in_group("quality_shadow"):
 		var geometry := mesh as GeometryInstance3D
 		if geometry != null:
 			geometry.cast_shadow = (
 				GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-				if _quality_level >= 3
+				if _quality_level >= 2
 				else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			)
 	for avatar: RemoteAvatar in _remote_avatars.values():
-		avatar.set_shadow_quality(_quality_level >= 3)
-		avatar.set_texture_detail(_quality_level >= 2)
-	player.set_texture_detail(_quality_level >= 2)
-	quality_button.text = "CALIDAD: %s" % QUALITY_NAMES[_quality_level]
+		avatar.set_shadow_quality(_quality_level >= 2)
+		avatar.set_texture_detail(_quality_level >= 1)
+	player.set_texture_detail(_quality_level >= 1)
+	preview_avatar.set_texture_detail(_quality_level >= 1)
+	quality_button.select(_quality_level)
 
 
-func _cycle_fps_limit() -> void:
-	_fps_limit_index = (_fps_limit_index + 1) % FPS_LIMITS.size()
+func _on_fps_limit_selected(index: int) -> void:
+	_fps_limit_index = clampi(index, 0, FPS_LIMITS.size() - 1)
 	_apply_fps_limit()
 	_save_profile()
 
@@ -499,14 +525,21 @@ func _cycle_fps_limit() -> void:
 func _apply_fps_limit() -> void:
 	var limit: int = FPS_LIMITS[_fps_limit_index]
 	Engine.max_fps = limit
-	fps_button.text = "LÍMITE: %d FPS" % limit
+	fps_button.select(_fps_limit_index)
 
 
-func _cycle_character() -> void:
-	var next_index: int = (int(network.color_index) + 1) % CHARACTER_NAMES.size()
-	if next_index == 4 and _total_victories < GOLDEN_CHARACTER_COST:
-		next_index = 0
-		round_detail.text = "Dorado requiere %d victorias multijugador" % GOLDEN_CHARACTER_COST
+func _on_character_selected(index: int) -> void:
+	var next_index := CHARACTER_CATALOG.sanitize_index(index)
+	if (
+		next_index == CHARACTER_CATALOG.NAMES.size() - 1
+		and _total_victories < CHARACTER_CATALOG.GOLDEN_CHARACTER_COST
+	):
+		character_button.select(int(network.color_index))
+		round_detail.text = (
+			"Dorado requiere %d victorias multijugador"
+			% CHARACTER_CATALOG.GOLDEN_CHARACTER_COST
+		)
+		return
 	network.color_index = next_index
 	player.set_character_variant(next_index)
 	_update_character_button()
@@ -514,4 +547,26 @@ func _cycle_character() -> void:
 
 
 func _update_character_button() -> void:
-	character_button.text = "PERSONAJE: %s" % CHARACTER_NAMES[network.color_index]
+	character_button.select(int(network.color_index))
+	preview_avatar.configure("", int(network.color_index), Vector3(0.0, -0.15, 0.0))
+	preview_avatar.get_node("Name").visible = false
+	preview_avatar.set_process(false)
+	preview_avatar.set_shadow_quality(false)
+	preview_avatar.set_texture_detail(_quality_level >= 1)
+
+
+func _populate_option_lists() -> void:
+	quality_button.clear()
+	for quality_name in QUALITY_NAMES:
+		quality_button.add_item("CALIDAD: %s" % quality_name)
+	fps_button.clear()
+	for limit in FPS_LIMITS:
+		fps_button.add_item("LÍMITE: %d FPS" % limit)
+	character_button.clear()
+	for index in CHARACTER_CATALOG.NAMES.size():
+		var suffix := (
+			" · BLOQUEADO (%d)" % CHARACTER_CATALOG.GOLDEN_CHARACTER_COST
+			if index == CHARACTER_CATALOG.NAMES.size() - 1
+			else ""
+		)
+		character_button.add_item("%s%s" % [CHARACTER_CATALOG.NAMES[index], suffix])

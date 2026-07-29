@@ -1,4 +1,4 @@
-[gd_scene load_steps=33 format=3]
+[gd_scene load_steps=46 format=3]
 
 [ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
 [ext_resource type="Script" path="res://scripts/player.gd" id="2_player"]
@@ -8,6 +8,12 @@
 [ext_resource type="Script" path="res://scripts/gameplay/disaster_controller.gd" id="6_disaster"]
 [ext_resource type="Script" path="res://scripts/gameplay/sound_bank.gd" id="7_sound"]
 [ext_resource type="Texture2D" path="res://assets/textures/plaza_concrete.webp" id="8_floor"]
+[ext_resource type="PackedScene" path="res://scenes/components/remote_avatar.tscn" id="10_avatar"]
+[ext_resource type="Script" path="res://scripts/gameplay/dismemberment_pool.gd" id="11_parts"]
+[ext_resource type="Script" path="res://scripts/minigames/meteor_minigame.gd" id="12_meteor_mode"]
+[ext_resource type="Script" path="res://scripts/minigames/shockwave_minigame.gd" id="13_shockwave_mode"]
+[ext_resource type="Script" path="res://scripts/minigames/flood_minigame.gd" id="14_flood_mode"]
+[ext_resource type="Script" path="res://scripts/minigames/mode_map_host.gd" id="15_map_host"]
 
 [sub_resource type="StandardMaterial3D" id="MatFloor"]
 albedo_texture = ExtResource("8_floor")
@@ -84,6 +90,21 @@ size = Vector3(1, 1, 1)
 radius = 0.5
 height = 1.8
 
+[sub_resource type="BoxShape3D" id="ShapeHitTorso"]
+size = Vector3(0.82, 0.82, 0.54)
+
+[sub_resource type="BoxShape3D" id="ShapeHitHead"]
+size = Vector3(0.66, 0.62, 0.62)
+
+[sub_resource type="BoxShape3D" id="ShapeHitArm"]
+size = Vector3(0.3, 0.7, 0.4)
+
+[sub_resource type="BoxShape3D" id="ShapeHitHand"]
+size = Vector3(0.3, 0.28, 0.38)
+
+[sub_resource type="BoxShape3D" id="ShapeHitLeg"]
+size = Vector3(0.38, 0.82, 0.46)
+
 [sub_resource type="StandardMaterial3D" id="MatVisor"]
 albedo_color = Color(0.75, 0.94, 1, 1)
 roughness = 0.32
@@ -116,6 +137,14 @@ ambient_light_energy = 0.78
 reflected_light_source = 2
 tonemap_mode = 0
 
+[sub_resource type="Environment" id="EnvironmentPreview"]
+background_mode = 1
+background_color = Color(0.035, 0.05, 0.075, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.8, 0.88, 1, 1)
+ambient_light_energy = 1.35
+reflected_light_source = 2
+
 [node name="Main" type="Node3D"]
 script = ExtResource("1_game")
 
@@ -132,6 +161,9 @@ light_energy = 0.82
 shadow_enabled = false
 
 [node name="Arena" type="Node3D" parent="World"]
+
+[node name="PlayerSpawn" type="Marker3D" parent="World/Arena" groups=["player_spawn"]]
+position = Vector3(0, 1.2, 8)
 
 [node name="Floor" type="StaticBody3D" parent="World/Arena"]
 position = Vector3(0, -0.25, 0)
@@ -313,6 +345,80 @@ script = ExtResource("2_player")
 [node name="Collision" type="CollisionShape3D" parent="World/Player"]
 shape = SubResource("ShapePlayer")
 
+[node name="Hitboxes" type="Node3D" parent="World/Player"]
+
+[node name="Torso" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(0, 0.31, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/Torso"]
+shape = SubResource("ShapeHitTorso")
+
+[node name="Head" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(0, 1.04, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/Head"]
+shape = SubResource("ShapeHitHead")
+
+[node name="LeftArm" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(-0.545, 0.295, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/LeftArm"]
+shape = SubResource("ShapeHitArm")
+
+[node name="RightArm" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(0.545, 0.295, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/RightArm"]
+shape = SubResource("ShapeHitArm")
+
+[node name="LeftHand" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(-0.545, -0.14, 0.02)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/LeftHand"]
+shape = SubResource("ShapeHitHand")
+
+[node name="RightHand" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(0.545, -0.14, 0.02)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/RightHand"]
+shape = SubResource("ShapeHitHand")
+
+[node name="LeftLeg" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(-0.19, -0.515, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/LeftLeg"]
+shape = SubResource("ShapeHitLeg")
+
+[node name="RightLeg" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(0.19, -0.515, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/RightLeg"]
+shape = SubResource("ShapeHitLeg")
+
 [node name="Visual" type="Node3D" parent="World/Player"]
 
 [node name="Body" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
@@ -336,6 +442,18 @@ cast_shadow = 0
 [node name="RightArm" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
 position = Vector3(0.545, 0.295, 0)
 scale = Vector3(0.23, 0.67, 0.32)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="LeftHand" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(-0.545, -0.14, 0.02)
+scale = Vector3(0.22, 0.2, 0.3)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="RightHand" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(0.545, -0.14, 0.02)
+scale = Vector3(0.22, 0.2, 0.3)
 mesh = SubResource("MeshPlayerPart")
 cast_shadow = 0
 
@@ -386,7 +504,23 @@ far = 58.0
 [node name="DisasterController" type="Node3D" parent="World"]
 script = ExtResource("6_disaster")
 
+[node name="MeteorMode" type="Node3D" parent="World/DisasterController"]
+script = ExtResource("12_meteor_mode")
+
+[node name="ShockwaveMode" type="Node3D" parent="World/DisasterController"]
+script = ExtResource("13_shockwave_mode")
+
+[node name="FloodMode" type="Node3D" parent="World/DisasterController"]
+script = ExtResource("14_flood_mode")
+
+[node name="ModeMapHost" type="Node3D" parent="World"]
+script = ExtResource("15_map_host")
+default_map_path = NodePath("../Arena")
+
 [node name="RemotePlayers" type="Node3D" parent="World"]
+
+[node name="DetachedParts" type="Node3D" parent="World"]
+script = ExtResource("11_parts")
 
 [node name="SoundBank" type="Node" parent="."]
 script = ExtResource("7_sound")
@@ -605,9 +739,9 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -170.0
+offset_left = -360.0
 offset_top = -300.0
-offset_right = 170.0
+offset_right = -20.0
 offset_bottom = 300.0
 grow_horizontal = 2
 grow_vertical = 2
@@ -660,12 +794,6 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "CÁMARA: TERCERA PERSONA"
 
-[node name="Character" type="Button" parent="HUD/PausePanel/Center"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-theme_override_font_sizes/font_size = 18
-text = "PERSONAJE: EXPLORADOR"
-
 [node name="SensitivityRow" type="HBoxContainer" parent="HUD/PausePanel/Center"]
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
@@ -695,17 +823,15 @@ text = "1.0x"
 horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="Quality" type="Button" parent="HUD/PausePanel/Center"]
+[node name="Quality" type="OptionButton" parent="HUD/PausePanel/Center"]
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
-text = "CALIDAD: BAJA"
 
-[node name="FPSLimit" type="Button" parent="HUD/PausePanel/Center"]
+[node name="FPSLimit" type="OptionButton" parent="HUD/PausePanel/Center"]
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
-text = "LÍMITE: 60 FPS"
 
 [node name="Resume" type="Button" parent="HUD/PausePanel/Center"]
 custom_minimum_size = Vector2(0, 50)
@@ -718,3 +844,60 @@ custom_minimum_size = Vector2(0, 50)
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "REINICIAR"
+
+[node name="PreviewPanel" type="VBoxContainer" parent="HUD/PausePanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = 20.0
+offset_top = -236.0
+offset_right = 370.0
+offset_bottom = 236.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="HUD/PausePanel/PreviewPanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.86, 1, 1)
+theme_override_font_sizes/font_size = 20
+text = "PERSONAJE"
+horizontal_alignment = 1
+
+[node name="ViewportContainer" type="SubViewportContainer" parent="HUD/PausePanel/PreviewPanel"]
+custom_minimum_size = Vector2(350, 310)
+layout_mode = 2
+stretch = true
+mouse_filter = 2
+
+[node name="Viewport" type="SubViewport" parent="HUD/PausePanel/PreviewPanel/ViewportContainer"]
+transparent_bg = true
+size = Vector2i(350, 310)
+render_target_update_mode = 2
+own_world_3d = true
+
+[node name="Environment" type="WorldEnvironment" parent="HUD/PausePanel/PreviewPanel/ViewportContainer/Viewport"]
+environment = SubResource("EnvironmentPreview")
+
+[node name="Avatar" parent="HUD/PausePanel/PreviewPanel/ViewportContainer/Viewport" instance=ExtResource("10_avatar")]
+position = Vector3(0, -0.15, 0)
+
+[node name="Camera" type="Camera3D" parent="HUD/PausePanel/PreviewPanel/ViewportContainer/Viewport"]
+position = Vector3(0, 0.45, 3.5)
+current = true
+fov = 35.0
+
+[node name="Character" type="OptionButton" parent="HUD/PausePanel/PreviewPanel"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+
+[node name="UnlockHint" type="Label" parent="HUD/PausePanel/PreviewPanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.78, 0.3, 1)
+theme_override_font_sizes/font_size = 16
+text = "DORADO: 5 VICTORIAS"
+horizontal_alignment = 1

@@ -5,7 +5,7 @@ signal status_changed(text: String, online: bool)
 signal peers_changed(current: int, maximum: int)
 signal remote_player_joined(peer_id: int, display_name: String, color_index: int)
 signal remote_player_left(peer_id: int)
-signal remote_snapshot(peer_id: int, position: Vector3, facing_yaw: float)
+signal remote_snapshot(peer_id: int, position: Vector3, facing_yaw: float, limb_mask: int)
 signal meteor_received(target: Vector3, drift: Vector2, damage: int, blast_force: float)
 signal shockwave_received
 signal round_state_received(state: int, round_number: int, time_left: float)
@@ -116,10 +116,10 @@ func get_player_count() -> int:
 	return _players.size()
 
 
-func send_snapshot(position: Vector3, facing_yaw: float) -> void:
+func send_snapshot(position: Vector3, facing_yaw: float, limb_mask := 0b1111111) -> void:
 	if not is_online():
 		return
-	_rpc_submit_snapshot.rpc_id(1, position, facing_yaw)
+	_rpc_submit_snapshot.rpc_id(1, position, facing_yaw, limb_mask)
 
 
 func broadcast_meteor(target: Vector3, drift: Vector2, damage: int, blast_force: float) -> void:
@@ -214,21 +214,33 @@ func _rpc_set_simulation_host(peer_id: int) -> void:
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
-func _rpc_submit_snapshot(position: Vector3, facing_yaw: float) -> void:
+func _rpc_submit_snapshot(position: Vector3, facing_yaw: float, limb_mask: int) -> void:
 	if not multiplayer.is_server():
 		return
 	var sender := multiplayer.get_remote_sender_id()
 	if not _players.has(sender) or not position.is_finite() or position.length() > MAX_POSITION:
 		return
+	var safe_limb_mask := limb_mask & 0b1111111
 	for peer_id in _players:
 		if peer_id != sender:
-			_rpc_receive_snapshot.rpc_id(peer_id, sender, position, facing_yaw)
+			_rpc_receive_snapshot.rpc_id(
+				peer_id,
+				sender,
+				position,
+				facing_yaw,
+				safe_limb_mask
+			)
 
 
 @rpc("authority", "call_remote", "unreliable_ordered", 1)
-func _rpc_receive_snapshot(peer_id: int, position: Vector3, facing_yaw: float) -> void:
+func _rpc_receive_snapshot(
+	peer_id: int,
+	position: Vector3,
+	facing_yaw: float,
+	limb_mask: int
+) -> void:
 	if peer_id != multiplayer.get_unique_id():
-		remote_snapshot.emit(peer_id, position, facing_yaw)
+		remote_snapshot.emit(peer_id, position, facing_yaw, limb_mask)
 
 
 @rpc("any_peer", "call_remote", "reliable", 0)

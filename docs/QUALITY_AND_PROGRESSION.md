@@ -2,15 +2,13 @@
 
 ## Perfiles sin duplicar recursos
 
-Los cinco perfiles usan las mismas escenas, mallas y texturas:
+Los tres perfiles usan las mismas escenas, mallas y texturas:
 
 | Perfil | Antialiasing | Traje | Sombra de la única luz |
 | --- | --- | --- | --- |
 | Baja | Desactivado | Color plano | Desactivada |
-| Media-baja | MSAA 2× | Color plano | Desactivada |
 | Media | MSAA 2× | Atlas 256×256 | Desactivada |
-| Media-alta | MSAA 4× | Atlas 256×256 | Activada |
-| Alta | MSAA 8× | Atlas 256×256 | Activada |
+| Alta | MSAA 4× | Atlas 256×256 | Activada |
 
 Esto mantiene un solo APK pequeño. Las texturas importadas pueden usar mipmaps y
 la compresión de VRAM de Godot; los futuros modelos importados podrán usar el LOD

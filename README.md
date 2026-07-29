@@ -25,16 +25,40 @@ respuesta visual y vibración breve en Android; una racha de rondas y el récord
 personal guardado dan un objetivo inmediato sin añadir recursos pesados.
 
 El menú guarda nombre, personaje, sonido, vibración, cámara en primera/tercera
-persona, sensibilidad, límite de 30/45/60 FPS y cinco perfiles de calidad. Los
-perfiles reutilizan los mismos recursos: escalan antialiasing y sombras sin
-meter cinco copias de cada textura en el APK. Cuatro variantes low-poly son
-gratuitas; la variante dorada requiere cinco victorias multijugador.
+persona, sensibilidad, límite de 30/45/60 FPS y tres perfiles de calidad. Las
+opciones se muestran como listas completas y el personaje tiene una
+previsualización 3D. Los perfiles reutilizan los mismos recursos: escalan
+antialiasing y sombras sin duplicar texturas en el APK. Cuatro variantes
+low-poly son gratuitas; la variante dorada requiere cinco victorias
+multijugador.
+
+El personaje usa una animación procedural ligera y ocho zonas de impacto. El
+daño localizado puede desprender piezas estilizadas del traje; éstas provienen
+de un pool físico fijo y su estado se sincroniza como una máscara de 7 bits. Una
+o dos piernas perdidas reducen el movimiento y sin brazos no se puede empujar.
+Reaparecer restaura el cuerpo completo.
+
+## Base modular
+
+El ciclo de ronda no contiene reglas concretas de desastres. Descubre módulos
+hijos que implementan el contrato común `MinigameMode`; Meteoritos, Pulso e
+Inundación son tres módulos independientes. Cada módulo puede declarar su propia
+duración, textos, reglas y una escena de mapa opcional.
+
+Los mapas exclusivos se cargan una sola vez, quedan en caché y usan un
+`Marker3D` del grupo `player_spawn`. El jugador, cámara, HUD, perfil y red se
+mantienen entre modos. El catálogo y rig humanoide también son compartidos por
+el jugador local, los avatares remotos y la previsualización.
+
+La guía para añadir modos, mapas y personajes sin acoplarlos al núcleo está en
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Multijugador de prueba
 
 El botón **CONECTAR** entra a una sala ENet/UDP de hasta cinco personas. Cada
 jugador tiene nombre y color, y los avatares remotos se interpolan a partir de
-10 actualizaciones de posición por segundo.
+10 actualizaciones de posición por segundo. La misma instantánea incluye
+orientación y estado corporal, sin enviar nodos ni físicas por red.
 
 Los empujones se envían como eventos fiables pequeños únicamente al jugador
 objetivo. Las victorias multijugador se guardan por separado de las rondas

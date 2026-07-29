@@ -1,14 +1,8 @@
 class_name GrayboxPlayer
 extends CharacterBody3D
 
-const SUIT_TEXTURE := preload("res://assets/textures/suit_panels.res")
-const CHARACTER_COLORS := [
-	Color(0.15, 0.58, 0.96),
-	Color(0.22, 0.78, 0.5),
-	Color(0.75, 0.42, 0.95),
-	Color(1.0, 0.48, 0.14),
-	Color(1.0, 0.78, 0.2),
-]
+const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.gd")
+const HUMANOID_RIG := preload("res://scripts/characters/humanoid_rig.gd")
 
 @export var move_speed := 6.0
 @export var ground_acceleration := 28.0
@@ -19,21 +13,49 @@ const CHARACTER_COLORS := [
 
 @onready var visual: Node3D = $Visual
 @onready var camera_rig: Node3D = $CameraRig
-@onready var color_parts: Array[MeshInstance3D] = [
-	$Visual/Body,
-	$Visual/Head,
-	$Visual/LeftArm,
-	$Visual/RightArm,
-	$Visual/LeftLeg,
-	$Visual/RightLeg,
-]
 
 signal health_changed(current: int, maximum: int)
 signal damaged(amount: int, current: int)
 signal defeated
 signal push_requested
+signal limb_detached(
+	part_transform: Transform3D,
+	part_scale: Vector3,
+	color: Color,
+	impulse: Vector3
+)
 
 const MAX_HEALTH := 100
+const ALL_LIMBS_MASK := 0b1111111
+const LIMB_MAX_HEALTH := [24, 34, 34, 20, 20, 38, 38]
+const LIMB_VISUAL_PATHS := [
+	NodePath("Visual/Head"),
+	NodePath("Visual/LeftArm"),
+	NodePath("Visual/RightArm"),
+	NodePath("Visual/LeftHand"),
+	NodePath("Visual/RightHand"),
+	NodePath("Visual/LeftLeg"),
+	NodePath("Visual/RightLeg"),
+]
+const LIMB_HITBOX_PATHS := [
+	NodePath("Hitboxes/Head"),
+	NodePath("Hitboxes/LeftArm"),
+	NodePath("Hitboxes/RightArm"),
+	NodePath("Hitboxes/LeftHand"),
+	NodePath("Hitboxes/RightHand"),
+	NodePath("Hitboxes/LeftLeg"),
+	NodePath("Hitboxes/RightLeg"),
+]
+
+enum Limb {
+	HEAD,
+	LEFT_ARM,
+	RIGHT_ARM,
+	LEFT_HAND,
+	RIGHT_HAND,
+	LEFT_LEG,
+	RIGHT_LEG,
+}
 
 var _touch_move := Vector2.ZERO
 var _jump_requested := false
@@ -44,12 +66,20 @@ var _controls_enabled := true
 var _push_cooldown := 0.0
 var _first_person := false
 var _look_sensitivity_scale := 1.0
+var _walk_phase := 0.0
+var _push_animation := 0.0
+var _hurt_animation := 0.0
+var _limb_health := PackedInt32Array()
+var _limb_mask := ALL_LIMBS_MASK
+var _character_color: Color = CHARACTER_CATALOG.COLORS[0]
+var _character_variant_index := 0
 
 
 func _ready() -> void:
 	_spawn_transform = global_transform
 	floor_snap_length = 0.35
 	add_to_group("players")
+	_reset_limbs()
 	health_changed.emit(_health, MAX_HEALTH)
 	if not OS.has_feature("mobile"):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -58,6 +88,8 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_invulnerability = maxf(0.0, _invulnerability - delta)
 	_push_cooldown = maxf(0.0, _push_cooldown - delta)
+	_push_animation = maxf(0.0, _push_animation - delta)
+	_hurt_animation = maxf(0.0, _hurt_animation - delta)
 	var desktop_move := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var movement_input := _touch_move if _touch_move.length_squared() > desktop_move.length_squared() else desktop_move
 	if not _controls_enabled:
@@ -67,20 +99,39 @@ func _physics_process(delta: float) -> void:
 	if direction.length_squared() > 1.0:
 		direction = direction.normalized()
 
+	var movement_scale := _get_leg_movement_scale()
 	var acceleration := ground_acceleration if is_on_floor() else air_acceleration
-	velocity.x = move_toward(velocity.x, direction.x * move_speed, acceleration * delta)
-	velocity.z = move_toward(velocity.z, direction.z * move_speed, acceleration * delta)
+	velocity.x = move_toward(
+		velocity.x,
+		direction.x * move_speed * movement_scale,
+		acceleration * delta
+	)
+	velocity.z = move_toward(
+		velocity.z,
+		direction.z * move_speed * movement_scale,
+		acceleration * delta
+	)
 
 	if not is_on_floor():
 		velocity += get_gravity() * delta
 	elif _controls_enabled and (_jump_requested or Input.is_action_just_pressed("jump")):
-		velocity.y = jump_velocity
+		velocity.y = jump_velocity * movement_scale
 	_jump_requested = false
 	if _controls_enabled and Input.is_action_just_pressed("push"):
 		request_push()
 
 	if direction.length_squared() > 0.01:
 		visual.rotation.y = lerp_angle(visual.rotation.y, atan2(direction.x, direction.z), 12.0 * delta)
+	$Hitboxes.rotation.y = visual.rotation.y
+	_walk_phase = HUMANOID_RIG.animate(
+		visual,
+		delta,
+		Vector2(velocity.x, velocity.z).length(),
+		_walk_phase,
+		is_on_floor(),
+		clampf(_push_animation / 0.24, 0.0, 1.0),
+		clampf(_hurt_animation / 0.25, 0.0, 1.0)
+	)
 
 	move_and_slide()
 	if global_position.y < -8.0:
@@ -108,9 +159,14 @@ func request_jump() -> void:
 
 
 func request_push() -> void:
-	if not _controls_enabled or _push_cooldown > 0.0:
+	if (
+		not _controls_enabled
+		or _push_cooldown > 0.0
+		or not (_is_limb_attached(Limb.LEFT_ARM) or _is_limb_attached(Limb.RIGHT_ARM))
+	):
 		return
 	_push_cooldown = 0.72
+	_push_animation = 0.24
 	push_requested.emit()
 
 
@@ -126,10 +182,19 @@ func reset_to_spawn() -> void:
 	velocity = Vector3.ZERO
 	_touch_move = Vector2.ZERO
 	camera_rig.rotation = Vector3(-0.22, 0.0, 0.0)
-	heal_full()
+	_reset_limbs()
+	heal_full(false)
 
 
-func heal_full() -> void:
+func set_spawn_transform(spawn_transform: Transform3D, teleport := true) -> void:
+	_spawn_transform = spawn_transform
+	if teleport:
+		reset_to_spawn()
+
+
+func heal_full(restore_limbs := true) -> void:
+	if restore_limbs:
+		_reset_limbs()
 	_health = MAX_HEALTH
 	_invulnerability = 0.0
 	health_changed.emit(_health, MAX_HEALTH)
@@ -141,6 +206,10 @@ func get_health() -> int:
 
 func get_visual_yaw() -> float:
 	return visual.rotation.y
+
+
+func get_limb_mask() -> int:
+	return _limb_mask
 
 
 func get_aim_forward() -> Vector3:
@@ -163,13 +232,13 @@ func apply_external_push(direction: Vector3, force := 5.2) -> void:
 func apply_hazard_damage(damage: int, lift_force := 0.0) -> void:
 	if _invulnerability > 0.0:
 		return
-	_health = maxi(0, _health - damage)
-	_invulnerability = 0.45
 	velocity.y = maxf(velocity.y, lift_force)
-	health_changed.emit(_health, MAX_HEALTH)
-	damaged.emit(damage, _health)
-	if _health == 0:
-		defeated.emit()
+	var target_limb := (
+		Limb.LEFT_LEG
+		if _limb_health[Limb.LEFT_LEG] >= _limb_health[Limb.RIGHT_LEG]
+		else Limb.RIGHT_LEG
+	)
+	_take_damage(damage, target_limb, global_position + Vector3.DOWN)
 
 
 func set_first_person(enabled: bool) -> void:
@@ -192,19 +261,14 @@ func get_look_sensitivity_scale() -> float:
 
 
 func set_character_variant(index: int) -> void:
-	var safe_index := clampi(index, 0, CHARACTER_COLORS.size() - 1)
-	var material := color_parts[0].get_active_material(0).duplicate() as StandardMaterial3D
-	material.albedo_color = CHARACTER_COLORS[safe_index]
-	for part in color_parts:
-		part.material_override = material
-	$Visual/Cap.visible = safe_index % 2 == 0
-	$Visual/Backpack.visible = safe_index % 2 == 1
+	var safe_index: int = CHARACTER_CATALOG.sanitize_index(index)
+	_character_variant_index = safe_index
+	_character_color = HUMANOID_RIG.apply_variant(visual, safe_index)
+	HUMANOID_RIG.apply_limb_mask(visual, _limb_mask, safe_index)
 
 
 func set_texture_detail(enabled: bool) -> void:
-	var material := color_parts[0].material_override as StandardMaterial3D
-	if material != null:
-		material.albedo_texture = SUIT_TEXTURE if enabled else null
+	HUMANOID_RIG.set_texture_detail(visual, enabled)
 
 
 func apply_damage_and_knockback(origin: Vector3, force: float, damage: int) -> void:
@@ -218,12 +282,105 @@ func apply_damage_and_knockback(origin: Vector3, force: float, damage: int) -> v
 	velocity.x += away.x * force
 	velocity.z += away.z * force
 	velocity.y = maxf(velocity.y, force * 0.62)
-	_health = maxi(0, _health - damage)
+	_take_damage(damage, _find_closest_limb(origin), origin)
+
+
+func apply_limb_damage(limb: int, damage: int, origin: Vector3) -> void:
+	if limb < Limb.HEAD or limb > Limb.RIGHT_LEG or damage <= 0:
+		return
+	_take_damage(damage, limb, origin)
+
+
+func _take_damage(damage: int, limb: int, origin: Vector3) -> void:
+	if _invulnerability > 0.0:
+		return
+	var safe_damage := maxi(1, damage)
+	_health = maxi(0, _health - safe_damage)
 	_invulnerability = 0.45
+	_hurt_animation = 0.25
+	if limb >= Limb.HEAD:
+		_damage_limb(limb, safe_damage, origin)
 	health_changed.emit(_health, MAX_HEALTH)
-	damaged.emit(damage, _health)
+	damaged.emit(safe_damage, _health)
 	if _health == 0:
 		defeated.emit()
+
+
+func _damage_limb(limb: int, damage: int, origin: Vector3) -> void:
+	if not _is_limb_attached(limb):
+		return
+	_limb_health[limb] = maxi(0, _limb_health[limb] - damage)
+	if _limb_health[limb] == 0:
+		_detach_limb(limb, origin)
+
+
+func _find_closest_limb(origin: Vector3) -> int:
+	var closest_limb := -1
+	var closest_distance := (
+		($Hitboxes/Torso as Area3D).global_position.distance_squared_to(origin)
+	)
+	for limb in LIMB_VISUAL_PATHS.size():
+		if not _is_limb_attached(limb):
+			continue
+		var hitbox := get_node(LIMB_HITBOX_PATHS[limb]) as Area3D
+		var distance := hitbox.global_position.distance_squared_to(origin)
+		if distance < closest_distance:
+			closest_distance = distance
+			closest_limb = limb
+	return closest_limb
+
+
+func _detach_limb(limb: int, origin: Vector3) -> void:
+	_detach_single_limb(limb, origin)
+	if limb == Limb.LEFT_ARM:
+		_detach_single_limb(Limb.LEFT_HAND, origin)
+	elif limb == Limb.RIGHT_ARM:
+		_detach_single_limb(Limb.RIGHT_HAND, origin)
+
+
+func _detach_single_limb(limb: int, origin: Vector3) -> void:
+	if not _is_limb_attached(limb):
+		return
+	_limb_mask &= ~(1 << limb)
+	_limb_health[limb] = 0
+	var mesh := get_node(LIMB_VISUAL_PATHS[limb]) as MeshInstance3D
+	var hitbox := get_node(LIMB_HITBOX_PATHS[limb]) as Area3D
+	var collision := hitbox.get_node("Shape") as CollisionShape3D
+	var piece_transform := Transform3D(mesh.global_basis.orthonormalized(), mesh.global_position)
+	var impulse := mesh.global_position - origin
+	if impulse.length_squared() < 0.01:
+		impulse = Vector3.UP
+	impulse = impulse.normalized() * 2.4 + Vector3.UP * 1.8
+	mesh.visible = false
+	collision.set_deferred("disabled", true)
+	if limb == Limb.HEAD:
+		$Visual/Visor.visible = false
+		$Visual/Cap.visible = false
+	limb_detached.emit(piece_transform, mesh.scale, _character_color, impulse)
+
+
+func _reset_limbs() -> void:
+	_limb_mask = ALL_LIMBS_MASK
+	_limb_health = PackedInt32Array(LIMB_MAX_HEALTH)
+	for limb in LIMB_VISUAL_PATHS.size():
+		var hitbox := get_node(LIMB_HITBOX_PATHS[limb]) as Area3D
+		(hitbox.get_node("Shape") as CollisionShape3D).set_deferred("disabled", false)
+	HUMANOID_RIG.apply_limb_mask(visual, _limb_mask, _character_variant_index)
+
+
+func _is_limb_attached(limb: int) -> bool:
+	return (_limb_mask & (1 << limb)) != 0
+
+
+func _get_leg_movement_scale() -> float:
+	var leg_count := int(_is_limb_attached(Limb.LEFT_LEG)) + int(
+		_is_limb_attached(Limb.RIGHT_LEG)
+	)
+	if leg_count == 2:
+		return 1.0
+	if leg_count == 1:
+		return 0.72
+	return 0.48
 
 
 func _apply_look(delta: Vector2) -> void:
