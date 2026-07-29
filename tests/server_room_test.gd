@@ -2,7 +2,6 @@ extends SceneTree
 
 const NET := preload("res://shared/net_constants.gd")
 const CODEC := preload("res://shared/net_codec.gd")
-const MOVEMENT := preload("res://shared/movement_rules.gd")
 const ROOM_SCRIPT := preload("res://server/room_state.gd")
 const ROOM_MANAGER_SCRIPT := preload("res://server/room_manager.gd")
 
@@ -34,25 +33,6 @@ func _run() -> void:
 	root.add_child(room)
 	await process_frame
 	_require(room.phase == NET.RoomPhase.WAITING, "New rooms must wait in the lobby")
-	var blocked_side := MOVEMENT.step_position(
-		Vector3(3.5, NET.FLOOR_HEIGHT, 2.5),
-		Vector3(-6.0, 0.0, 0.0),
-		0.05
-	)
-	_require(
-		is_equal_approx(blocked_side.x, 3.5),
-		"Authoritative movement must not cross the platform's vertical side"
-	)
-	var climbed_step := MOVEMENT.step_position(
-		Vector3(0.0, MOVEMENT.STEP_FLOOR_HEIGHT, 3.5),
-		Vector3(0.0, 0.0, -6.0),
-		0.05
-	)
-	_require(
-		is_equal_approx(climbed_step.y, MOVEMENT.CENTER_FLOOR_HEIGHT),
-		"Authoritative movement must follow the center access step"
-	)
-
 	var first: RefCounted = room.session_manager.register_session(
 		20,
 		"aaaaaaaaaaaaaaaa",
@@ -86,23 +66,35 @@ func _run() -> void:
 	room.tick()
 	_require(room.phase == NET.RoomPhase.ACTIVE, "Countdown must advance to active play")
 
-	var input := CODEC.create_input_buffer()
-	CODEC.write_input(input, 1, Vector2(1.0, 0.0), 0.5, NET.InputFlags.JUMP)
-	_require(room.apply_input(20, input), "Valid ordered input must be accepted")
-	var start_position: Vector3 = first.position
-	room.tick()
-	_require(first.position.x > start_position.x, "Server must integrate horizontal movement")
-	_require(first.position.y > NET.FLOOR_HEIGHT, "Server must integrate jump")
-	_require(first.last_input_sequence == 1, "Server must acknowledge processed input")
-	_require(not room.apply_input(20, input), "Duplicate input sequence must be rejected")
+	var owned_state := CODEC.create_owned_state_buffer()
+	CODEC.write_owned_state(
+		owned_state,
+		1,
+		Vector3(3.25, 2.4, -1.5),
+		Vector3(5.5, 6.0, -0.5),
+		0.5,
+		78,
+		NET.ALL_BODY_PARTS_MASK
+	)
+	_require(room.apply_owned_state(20, owned_state), "Valid owned state must be accepted")
+	_require(
+		first.position.distance_to(Vector3(3.25, 2.4, -1.5)) < 0.001,
+		"Server must preserve the owner's physical result"
+	)
+	_require(first.health == 78, "Server must retain owner-reported health")
+	_require(first.last_state_sequence == 1, "Server must confirm the relayed state")
+	_require(
+		not room.apply_owned_state(20, owned_state),
+		"Duplicate state sequence must be rejected"
+	)
 
 	var snapshot: PackedByteArray = room.build_snapshot()
 	_require(CODEC.is_valid_snapshot(snapshot), "Room snapshot must use compact shared codec")
 	_require(CODEC.snapshot_player_count(snapshot) == 2, "Snapshot must include connected players")
 	_require(snapshot.size() == 68, "Two-player snapshot must omit three unused player slots")
 	_require(
-		CODEC.snapshot_player_ack(snapshot, 0) == 1,
-		"Snapshot must expose the last authoritative input sequence"
+		CODEC.snapshot_player_state_sequence(snapshot, 0) == 1,
+		"Snapshot must expose the last relayed state sequence"
 	)
 
 	var first_id: int = first.player_id

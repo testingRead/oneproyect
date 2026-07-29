@@ -1,120 +1,102 @@
-# Multijugador autoritativo
+# Multijugador con física del propietario
 
-## Auditoría de la implementación anterior
+## Decisión para el prototipo
 
-La primera versión ya usaba `ENetMultiplayerPeer`, UDP y RPC de alto nivel, pero
-era un relay:
+La sesión conserva un servidor dedicado de Godot 4 con ENet/UDP, pero cada
+teléfono es propietario de la simulación física de su personaje. Esta decisión
+prioriza controles inmediatos y resultados físicos divertidos durante la etapa
+de prototipo. La autoridad física estricta y las medidas antitrampas quedan
+fuera de alcance hasta que las reglas finales del juego estén definidas.
 
-- `scripts/network/network_manager.gd` ejecutaba cliente y servidor;
-- cada cliente enviaba posición y orientación, y el servidor las retransmitía;
-- un teléfono elegido como `simulation_host` decidía rondas y peligros;
-- jugadores, sesión y estado de ronda usaban `Dictionary`;
-- una desconexión eliminaba inmediatamente la identidad;
-- el arranque headless cargaba el mismo autoload que el cliente.
+El servidor continúa siendo autoridad de:
 
-La presentación también estaba mezclada con autoridad: `game.gd` enviaba
-snapshots de `GrayboxPlayer`, y `DisasterController` preguntaba si el cliente
-era host antes de generar reglas.
+- salas, capacidad, anfitrión y estado `ready`;
+- identidad estable, token y ventana de reconexión;
+- fase, tiempo, semilla y selección de minijuego;
+- generación y retransmisión de eventos compartidos;
+- pertenencia de cada estado al jugador que lo envía.
 
-## Límite nuevo
+Cada cliente es propietario de:
+
+- entrada, `CharacterBody3D` y colisiones completas de su personaje;
+- salto, impulso, caída y respuesta a meteoritos/ondas/agua;
+- vida y partes desprendidas resultantes de esas colisiones;
+- cámara, animación, audio, efectos y calidad visual.
+
+## Capas
 
 ```text
 shared/
   net_constants.gd       tasas, canales, límites y flags
-  movement_rules.gd      integración matemática común
-  net_codec.gd           PackedByteArray para input y snapshots
+  net_codec.gd           estado propietario y snapshots empaquetados
 
 server/
-  dedicated_server.gd    ENet y RPC; no carga escenas visuales
-  room_manager.gd        varias salas dentro del proceso
-  room_state.gd          estado autoritativo de una sala
+  dedicated_server.gd    ENet, RPC y retransmisión; sin recursos visuales
+  room_manager.gd        hasta cinco salas dentro del proceso
+  room_state.gd          fase, eventos y snapshots de una sala
   session_manager.gd     identidad, peer actual y reconexión
-  scenes/dedicated_server.tscn
+  session_state.gd       último estado aceptado del propietario
 
 client/
-  network_client.gd      ENet, RPC, inputs, ACK y señales compatibles
-  client_prediction.gd   historial, predicción y reconciliación
+  network_client.gd      ENet, RPC, envío local y señales para presentación
 ```
 
-El bootstrap crea exactamente una rama:
+No existe un predictor o una segunda simulación de movimiento. El bootstrap
+crea exclusivamente la rama de servidor con `--server`, o la rama de cliente
+con `/root/Network` y las escenas visuales.
 
-- `--server`: cambia a la escena dedicada y no crea `NetworkClient`;
-- normal: crea `/root/Network` y luego carga `scenes/menu.tscn`; el menú decide
-  entre juego local y lobby multijugador.
+## Flujo frecuente
 
-## Frecuencias y canales
+El propietario simula a la frecuencia física local y envía 20 veces por segundo
+un `PackedByteArray` de 22 bytes:
 
-- servidor lógico: 20 ticks/s;
-- inputs: máximo 20 paquetes/s;
-- snapshots: 10 paquetes/s en la primera etapa;
-- canal 0 `reliable`: registro, aceptación, reconexión, jugadores y cambios de
-  sesión;
-- canal 1 `unreliable_ordered`: input y snapshots;
-- canal 2 `reliable`: eventos críticos de juego que no pertenezcan a sesión.
+```text
+sequence + position + velocity + yaw + health + body_mask
+```
 
-Los mensajes frecuentes son `PackedByteArray`. Movimiento y ángulo están
-cuantizados a enteros de 16 bits, y posición/velocidad tienen precisión de un
-centímetro. Un input ocupa 12 bytes. El snapshot ocupa 20 bytes de cabecera más
-24 por jugador conectado: 44 bytes para uno, 68 para dos y 140 para cinco. No
-reserva ni transmite slots vacíos.
-Metadatos infrecuentes pueden seguir usando parámetros RPC tipados, pero no
-JSON.
+El servidor comprueba versión, orden, números finitos y límites amplios para
+evitar estados corruptos. Después conserva el resultado sin recalcularlo. A 10
+Hz genera un snapshot de 20 bytes de cabecera más 24 bytes por jugador
+conectado: 44 bytes para uno, 68 para dos y 140 para cinco.
 
-## Estado mínimo
+- canal 0 `reliable`: sesión, lobby, reconexión y fase;
+- canal 1 `unreliable_ordered`: estados propietarios y snapshots;
+- canal 2 `reliable`: meteoritos, ondas y empujes.
 
-Cada sala conserva ID, fase, semilla y tiempos de ronda. Cada sesión conserva
-una identidad estable, `peer_id` actual, token aleatorio, vencimiento de
-reconexión, posición, velocidad, yaw, vida/actividad, puntuación, máscara
-corporal y último input procesado.
+Los clientes remotos interpolan y extrapolan brevemente posición/velocidad. El
+cliente propietario nunca aplica a su cuerpo el snapshot devuelto por el
+servidor; sólo usa la secuencia como confirmación de relay. Así el RTT no puede
+detener, arrastrar o hacer flotar al jugador local.
 
-No existen cámaras, luces, materiales, texturas, audio, partículas, HUD ni
-animación en el árbol dedicado. Los límites autoritativos de la primera etapa
-son matemáticos: caja exterior, alturas de suelo/plataforma/escalones y cuatro
-pilares circulares. No se cargan `StaticBody3D` ni shapes. Esta aproximación
-evita que el servidor atraviese las piezas principales del mapa y luego
-arrastre al cliente hacia una posición contradictoria.
+## Peligros y empujes
 
-## Movimiento
+El servidor genera una sola descripción compacta de cada peligro. Todos los
+clientes representan el mismo meteorito u onda, pero sólo el propietario
+resuelve el contacto contra su personaje. El resultado local —incluidos impulso,
+vida y máscara corporal— viaja en el siguiente estado y se replica a los demás.
 
-El cliente envía secuencia, vector de movimiento, yaw y flags de acciones. El
-servidor valida rango, orden y frecuencia, integra a 20 Hz y publica estado más
-el último número de input procesado.
+Un empujón se solicita al servidor, que valida sala, distancia y dirección usando
+los últimos estados conservados. El teléfono objetivo aplica el impulso y luego
+replica el resultado como cualquier otra física.
 
-`ClientPrediction` conserva el historial de inputs y mide la reconciliación,
-pero no decide la posición física visible en esta etapa. Las pruebas reales
-mostraron que, con variaciones fuertes de RTT, reproducir inputs pendientes sin
-un tick de cliente confirmado permitía que el cuerpo local y el servidor se
-separasen varios metros.
-
-Mientras está online, el `CharacterBody3D` local usa directamente el snapshot
-autoritativo y su velocidad. Entre snapshots extrapola como máximo 100 ms con
-`MovementRules`; no integra una segunda posición física. Al llegar el siguiente
-snapshot, tanto el jugador local como los remotos adoptan inmediatamente la
-misma base. Esto garantiza que colisiones, límites y posición observada por
-otros clientes partan del mismo estado.
-
-Los remotos extrapolan la posición y velocidad recibidas durante el mismo
-intervalo máximo y deducen la animación de esa velocidad. El input local activa
-la animación inmediatamente aunque la respuesta de movimiento espere el
-snapshot del servidor.
-
-La predicción física completa sólo se reactivará cuando cada input se asocie a
-un tick de simulación procesado y la reproducción sea verificable bajo latencia
-y pérdida. La prueba `real_movement_probe.gd` compara el cuerpo local contra el
-snapshot crudo que reciben los demás y exige coincidencia al detenerse.
+Este modelo permite pequeñas diferencias físicas entre teléfonos. Es una
+propiedad aceptada del prototipo, no un error que deba reconciliarse.
 
 ## Reconexión
 
-El perfil local conserva `stable_id` y `reconnect_token`. Al volver antes de 60
-segundos, el servidor asocia el nuevo `peer_id` con la sesión anterior y
-continúa posición, vida y puntuación. Al vencer, la sala purga la sesión y
-notifica su eliminación.
+El perfil local conserva `stable_id` y `reconnect_token`. Durante 60 segundos el
+servidor mantiene el último estado propietario: posición, velocidad, vida,
+orientación, puntuación y máscara corporal. Una reconexión válida recupera el
+mismo `player_id` y ese estado.
 
-El lobby admite como máximo cinco salas dentro de un solo proceso y cada sala
-reserva hasta cinco sesiones. El creador puede iniciar con un mínimo de dos
-personas únicamente cuando todos confirmaron que están listos. La variante de
-personaje forma parte del perfil lógico de sala y queda bloqueada al comenzar;
-no se sincronizan meshes ni materiales. El proceso ENet admite 25 clientes
-simultáneos, pero cada
-`SessionManager` aplica por separado el límite de cinco. No hay matchmaking
-público, migración de proceso, P2P, cuentas ni persistencia del lado servidor.
+El lobby admite cinco salas en un proceso y cinco jugadores por sala. Sólo el
+anfitrión inicia, se requieren al menos dos personas y todas deben marcarse
+listas. No hay matchmaking público, migración de proceso, P2P, cuentas ni
+persistencia de servidor.
+
+## Límite futuro
+
+Un minijuego competitivo podrá declarar más adelante reglas autoritativas
+específicas —por ejemplo daño de armas o puntuación— sin reemplazar la física
+propietaria de todos los modos. No se añadirá rollback, física determinista ni
+lag compensation hasta que una regla real lo necesite.

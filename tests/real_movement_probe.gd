@@ -2,20 +2,15 @@ extends SceneTree
 
 const NETWORK_SCRIPT := preload("res://client/network_client.gd")
 const MAIN_SCENE := preload("res://scenes/main.tscn")
-const RUN_MSEC := 12000
 const CONNECT_TIMEOUT_MSEC := 8000
+const MOVEMENT_TEST_MSEC := 1800
 
 var network: Node
 var address := "127.0.0.1"
 var port := 9999
 var accepted := false
-var authoritative_samples := 0
-var latest_authoritative_position := Vector3.ZERO
-var raw_authoritative_samples := 0
-var latest_raw_authoritative_position := Vector3.ZERO
-var latest_ack_sequence := 0
-var max_reconciliation_distance := 0.0
-var cumulative_reconciliation_distance := 0.0
+var confirmed_states := 0
+var latest_confirmed_sequence := 0
 var failed := false
 
 
@@ -39,39 +34,9 @@ func _setup() -> void:
 	network.status_changed.connect(func(_text: String, online: bool) -> void:
 		accepted = accepted or online
 	)
-	network.authoritative_state.connect(func(
-		position: Vector3,
-		_velocity: Vector3,
-		_yaw: float,
-		_health: int,
-		_body_mask: int,
-		ack_sequence: int,
-		_server_tick: int
-	) -> void:
-		authoritative_samples += 1
-		latest_authoritative_position = position
-		latest_ack_sequence = ack_sequence
-	)
-	network.raw_authoritative_state.connect(func(
-		position: Vector3,
-		_velocity: Vector3,
-		_ack_sequence: int,
-		_server_tick: int
-	) -> void:
-		raw_authoritative_samples += 1
-		latest_raw_authoritative_position = position
-	)
-	network.prediction_reconciled.connect(func(
-		correction: Vector3,
-		_pending_inputs: int,
-		_ack_sequence: int
-	) -> void:
-		var correction_distance := Vector2(correction.x, correction.z).length()
-		max_reconciliation_distance = maxf(
-			max_reconciliation_distance,
-			correction_distance
-		)
-		cumulative_reconciliation_distance += correction_distance
+	network.owned_state_confirmed.connect(func(sequence: int, _server_tick: int) -> void:
+		confirmed_states += 1
+		latest_confirmed_sequence = maxi(latest_confirmed_sequence, sequence)
 	)
 	var error: int = network.connect_to_server(address)
 	_require(error == OK, "client ENet creation failed")
@@ -105,132 +70,85 @@ func _run() -> void:
 		network.shockwave_received.disconnect(disaster.spawn_network_shockwave)
 	if network.round_state_received.is_connected(disaster.apply_network_state):
 		network.round_state_received.disconnect(disaster.apply_network_state)
-	player.set_touch_move(Vector2.ZERO)
-	await create_timer(1.0).timeout
-	player.reset_network_correction_diagnostics()
-	player.network_correction_applied.connect(func(
-		hard: bool,
-		error: float,
-		local_position: Vector3,
-		authoritative_position: Vector3,
-		local_velocity: Vector3,
-		authoritative_velocity: Vector3,
-		move: Vector2
-	) -> void:
-		print(
-			"REAL_MOVEMENT_CORRECTION hard=%s error=%.3f local=(%.2f,%.2f) auth=(%.2f,%.2f) local_v=(%.2f,%.2f) auth_v=(%.2f,%.2f) move=(%.2f,%.2f)"
-			% [
-				hard,
-				error,
-				local_position.x,
-				local_position.z,
-				authoritative_position.x,
-				authoritative_position.z,
-				local_velocity.x,
-				local_velocity.z,
-				authoritative_velocity.x,
-				authoritative_velocity.z,
-				move.x,
-				move.y,
-			]
-		)
-	)
 
+	player.global_position = Vector3(0.0, 1.2, 4.8)
+	player.velocity = Vector3.ZERO
+	player.set_touch_move(Vector2.RIGHT)
 	var started := Time.get_ticks_msec()
 	var previous_position := player.global_position
+	var moving_frames := 0
+	var stalled_frames := 0
 	var backwards_frames := 0
-	var backwards_distance := 0.0
 	var distance_travelled := 0.0
-	var max_visual_authority_gap := 0.0
-	while Time.get_ticks_msec() - started < RUN_MSEC:
-		var elapsed := Time.get_ticks_msec() - started
-		var phase := int(elapsed / 1500) % 2
-		var move := Vector2.RIGHT if phase == 0 else Vector2.LEFT
-		player.set_touch_move(move)
+	while Time.get_ticks_msec() - started < MOVEMENT_TEST_MSEC:
 		await physics_frame
+		var elapsed := Time.get_ticks_msec() - started
 		var displacement := player.global_position - previous_position
-		var along_move := Vector2(displacement.x, displacement.z).dot(move)
-		if along_move < -0.01:
-			backwards_frames += 1
-			backwards_distance -= along_move
-		distance_travelled += Vector2(displacement.x, displacement.z).length()
-		max_visual_authority_gap = maxf(
-			max_visual_authority_gap,
-			Vector2(
-				player.global_position.x - latest_raw_authoritative_position.x,
-				player.global_position.z - latest_raw_authoritative_position.z
-			).length()
-		)
+		var horizontal_distance := Vector2(displacement.x, displacement.z).length()
+		distance_travelled += horizontal_distance
+		if elapsed > 300:
+			moving_frames += 1
+			stalled_frames += int(horizontal_distance < 0.015)
+			backwards_frames += int(displacement.x < -0.002)
 		previous_position = player.global_position
 	player.set_touch_move(Vector2.ZERO)
-	await create_timer(0.75).timeout
-	var final_raw_gap := Vector2(
-		player.global_position.x - latest_raw_authoritative_position.x,
-		player.global_position.z - latest_raw_authoritative_position.z
-	).length()
+	await create_timer(0.4).timeout
+
+	var local_stop_position := player.global_position
+	await create_timer(0.8).timeout
+	var network_drift := player.global_position.distance_to(local_stop_position)
+	_require(distance_travelled > 7.0, "local owner movement did not cover the expected distance")
+	_require(
+		stalled_frames <= maxi(2, moving_frames / 20),
+		"local movement stalled as if it still depended on snapshots"
+	)
+	_require(backwards_frames == 0, "network traffic moved the local owner backwards")
+	_require(network_drift < 0.12, "server snapshots changed the stopped local body")
+	_require(confirmed_states >= 10, "server did not confirm enough compact owner states")
+	_require(latest_confirmed_sequence > 0, "state sequence was not relayed")
+
+	player.global_position = Vector3(0.0, 1.2, 0.0)
+	player.velocity = Vector3.ZERO
+	player.heal_full()
+	await physics_frame
+	var meteor: MeteorSlot = disaster.get_node("MeteorMode").get_child(0)
+	meteor.launch(Vector3(0.0, 0.06, 0.0), Vector2.ZERO, 0.01, 22, 10.5)
+	var max_player_height := player.global_position.y
+	for frame in 190:
+		await physics_frame
+		max_player_height = maxf(max_player_height, player.global_position.y)
+	var damaged_health := player.get_health()
+	_require(damaged_health < GrayboxPlayer.MAX_HEALTH, "meteor did not damage the owner")
+	_require(max_player_height > 1.55, "meteor impulse did not launch the owner")
+	await create_timer(1.0).timeout
+	_require(
+		player.get_health() == damaged_health,
+		"server snapshot restored owner health after local hazard physics"
+	)
+
 	var enet := network.multiplayer.multiplayer_peer as ENetMultiplayerPeer
 	var server_peer: ENetPacketPeer = enet.get_peer(1)
-	var packet_throttle := int(server_peer.get_statistic(
-		ENetPacketPeer.PEER_PACKET_THROTTLE
-	))
-	var packet_throttle_limit := int(server_peer.get_statistic(
-		ENetPacketPeer.PEER_PACKET_THROTTLE_LIMIT
-	))
 	var packet_loss := float(server_peer.get_statistic(
 		ENetPacketPeer.PEER_PACKET_LOSS
 	)) / float(ENetPacketPeer.PACKET_LOSS_SCALE)
 	var round_trip_msec := int(server_peer.get_statistic(
 		ENetPacketPeer.PEER_ROUND_TRIP_TIME
 	))
-
 	print(
-		"REAL_MOVEMENT_RESULT samples=%d raw_samples=%d sent=%d ack=%d hard=%d soft=%d correction_back_m=%.3f backwards_frames=%d backwards_motion_m=%.3f max_rule_error_m=%.3f max_visual_gap_m=%.3f final_raw_gap_m=%.3f max_reconcile_m=%.3f cumulative_reconcile_m=%.3f travelled_m=%.3f throttle=%d/%d loss=%.4f rtt_ms=%d"
+		"REAL_MOVEMENT_RESULT confirmed=%d sent=%d moving_frames=%d stalled=%d backwards=%d travelled_m=%.3f stop_drift_m=%.3f meteor_health=%d meteor_peak_y=%.3f loss=%.4f rtt_ms=%d"
 		% [
-			authoritative_samples,
-			raw_authoritative_samples,
-			network._input_sequence,
-			latest_ack_sequence,
-			player.get_network_hard_correction_count(),
-			player.get_network_soft_correction_count(),
-			player.get_network_backward_correction_distance(),
+			confirmed_states,
+			network._state_sequence,
+			moving_frames,
+			stalled_frames,
 			backwards_frames,
-			backwards_distance,
-			player.get_network_max_horizontal_error(),
-			max_visual_authority_gap,
-			final_raw_gap,
-			max_reconciliation_distance,
-			cumulative_reconciliation_distance,
 			distance_travelled,
-			packet_throttle,
-			packet_throttle_limit,
+			network_drift,
+			damaged_health,
+			max_player_height,
 			packet_loss,
 			round_trip_msec,
 		]
-	)
-	_require(authoritative_samples >= 60, "too few real authoritative snapshots")
-	_require(
-		raw_authoritative_samples == authoritative_samples,
-		"raw server positions were not measured for every local snapshot"
-	)
-	_require(
-		player.get_network_hard_correction_count() == 0,
-		"normal sustained movement triggered a hard reconciliation"
-	)
-	_require(
-		player.get_network_backward_correction_distance() < 0.01,
-		"authoritative reconciliation pulled the active player backwards"
-	)
-	_require(
-		max_visual_authority_gap < 1.5,
-		"local rendering diverged from the position remote clients receive"
-	)
-	_require(
-		final_raw_gap < 0.5,
-		"local player stopped in a different position than remote clients see"
-	)
-	_require(
-		packet_throttle >= 24 and packet_throttle_limit == 32,
-		"ENet throttled the compact input stream"
 	)
 	network.disconnect_session()
 	if failed:

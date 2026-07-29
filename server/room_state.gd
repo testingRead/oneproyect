@@ -40,8 +40,6 @@ func _ready() -> void:
 
 func tick() -> void:
 	server_tick += 1
-	for session: RefCounted in session_manager.sessions:
-		session.simulate(server_tick)
 	session_manager.purge_expired(server_tick)
 	_refresh_host()
 	if (
@@ -80,7 +78,7 @@ func build_snapshot() -> PackedByteArray:
 			session.player_id,
 			session.player_flags(),
 			session.health,
-			session.last_input_sequence,
+			session.last_state_sequence,
 			session.position,
 			session.velocity,
 			session.facing_yaw,
@@ -90,9 +88,9 @@ func build_snapshot() -> PackedByteArray:
 	return _snapshot_buffer
 
 
-func apply_input(peer_id: int, packet: PackedByteArray) -> bool:
+func apply_owned_state(peer_id: int, packet: PackedByteArray) -> bool:
 	var session: RefCounted = session_manager.find_by_peer_id(peer_id)
-	return session != null and session.accept_input(packet, server_tick)
+	return session != null and session.accept_owned_state(packet, server_tick)
 
 
 func apply_push(peer_id: int, target_player_id: int, direction: Vector3) -> bool:

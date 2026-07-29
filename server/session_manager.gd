@@ -45,7 +45,6 @@ func register_session(
 		existing.display_name = _sanitize_name(requested_name, existing.player_id)
 		existing.color_index = clampi(requested_color, 0, 4)
 		existing.ready = false
-		existing.input_move = Vector2.ZERO
 		last_registration_reconnected = true
 		return existing
 	if sessions.size() >= NET.MAX_PLAYERS_PER_ROOM:
@@ -79,9 +78,6 @@ func mark_disconnected(peer_id: int, server_tick: int) -> RefCounted:
 	session.connected = false
 	session.ready = false
 	session.peer_id = 0
-	session.input_move = Vector2.ZERO
-	session.velocity.x = 0.0
-	session.velocity.z = 0.0
 	session.reconnect_until_tick = server_tick + NET.RECONNECT_TICKS
 	return session
 

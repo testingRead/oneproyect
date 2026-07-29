@@ -38,11 +38,12 @@ func configure(player_name: String, player_color: int, initial_position: Vector3
 
 
 func set_snapshot(position: Vector3, velocity: Vector3, facing_yaw: float) -> void:
+	if global_position.distance_squared_to(position) > 36.0:
+		global_position = position
 	target_position = position
 	target_velocity = velocity
 	target_yaw = facing_yaw
 	_snapshot_elapsed = 0.0
-	global_position = position
 
 
 func set_limb_mask(mask: int) -> void:

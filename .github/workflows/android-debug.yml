@@ -105,7 +105,7 @@ jobs:
             exit 1
           fi
 
-      - name: Verify authoritative ENet server and reconnection
+      - name: Verify ENet relay and reconnection
         shell: bash
         run: |
           set -euo pipefail
@@ -263,7 +263,7 @@ jobs:
           fi
           echo "$metrics_line"
 
-      - name: Verify real player movement reconciliation
+      - name: Verify owner physics movement and hazards
         shell: bash
         run: |
           set -euo pipefail
@@ -304,8 +304,7 @@ jobs:
             exit 1
           fi
           grep -q "REAL_MOVEMENT_RESULT" "$TEST_DIR/movement.log"
-          grep -q "hard=0 soft=0 correction_back_m=0.000" \
-            "$TEST_DIR/movement.log"
+          grep -q "stalled=0 backwards=0" "$TEST_DIR/movement.log"
           if grep -qE "SCRIPT ERROR|REAL_MOVEMENT_FAIL|NETWORK_LOAD_FAIL|ERROR:" \
             "$TEST_DIR"/*.log; then
             cat "$TEST_DIR"/*.log

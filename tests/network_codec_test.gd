@@ -2,27 +2,39 @@ extends SceneTree
 
 const NET := preload("res://shared/net_constants.gd")
 const CODEC := preload("res://shared/net_codec.gd")
-const MOVEMENT := preload("res://shared/movement_rules.gd")
 
 
 func _init() -> void:
-	var input := CODEC.create_input_buffer()
-	CODEC.write_input(
-		input,
+	var owned_state := CODEC.create_owned_state_buffer()
+	CODEC.write_owned_state(
+		owned_state,
 		42,
-		Vector2(0.5, -0.75),
+		Vector3(2.0, 1.2, -3.0),
+		Vector3(1.0, 4.5, -2.0),
 		1.25,
-		NET.InputFlags.JUMP
+		78,
+		NET.ALL_BODY_PARTS_MASK
 	)
-	_require(CODEC.is_valid_input(input), "Input packet must validate")
-	_require(input.size() == NET.INPUT_PACKET_SIZE, "Input packet size must stay fixed")
-	_require(CODEC.input_sequence(input) == 42, "Input sequence must round-trip")
+	_require(CODEC.is_valid_owned_state(owned_state), "Owned state packet must validate")
 	_require(
-		CODEC.input_move(input).distance_to(Vector2(0.5, -0.75)) < 0.0001,
-		"Move must round-trip"
+		owned_state.size() == NET.OWNED_STATE_PACKET_SIZE,
+		"Owned state packet size must stay fixed"
 	)
-	_require(absf(CODEC.input_yaw(input) - 1.25) < 0.0001, "Yaw must round-trip")
-	_require(CODEC.input_flags(input) == NET.InputFlags.JUMP, "Flags must round-trip")
+	_require(CODEC.owned_state_sequence(owned_state) == 42, "State sequence must round-trip")
+	_require(
+		CODEC.owned_state_position(owned_state).distance_to(Vector3(2.0, 1.2, -3.0)) < 0.001,
+		"Owned position must round-trip"
+	)
+	_require(
+		CODEC.owned_state_velocity(owned_state).distance_to(Vector3(1.0, 4.5, -2.0)) < 0.001,
+		"Owned velocity must round-trip"
+	)
+	_require(absf(CODEC.owned_state_yaw(owned_state) - 1.25) < 0.0001, "Yaw must round-trip")
+	_require(CODEC.owned_state_health(owned_state) == 78, "Health must round-trip")
+	_require(
+		CODEC.owned_state_body_mask(owned_state) == NET.ALL_BODY_PARTS_MASK,
+		"Body mask must round-trip"
+	)
 
 	var snapshot := CODEC.create_snapshot_buffer()
 	CODEC.write_snapshot_header(snapshot, 1, 5, 2, 100, 7, 9876, 240, 1)
@@ -42,7 +54,10 @@ func _init() -> void:
 	_require(snapshot.size() == 140, "Five-player snapshot must remain 140 bytes")
 	_require(CODEC.snapshot_server_tick(snapshot) == 100, "Server tick must round-trip")
 	_require(CODEC.snapshot_player_id(snapshot, 0) == 9, "Player ID must round-trip")
-	_require(CODEC.snapshot_player_ack(snapshot, 0) == 42, "Input ACK must round-trip")
+	_require(
+		CODEC.snapshot_player_state_sequence(snapshot, 0) == 42,
+		"Relayed state sequence must round-trip"
+	)
 	_require(
 		CODEC.snapshot_player_position(snapshot, 0).distance_to(Vector3(2.0, 1.2, -3.0)) < 0.001,
 		"Position must round-trip"
@@ -52,26 +67,14 @@ func _init() -> void:
 		"Compact body mask must round-trip"
 	)
 
-	var velocity := MOVEMENT.step_velocity(
-		Vector3.ZERO,
-		Vector2(1.0, 0.0),
-		true,
-		true,
-		NET.SERVER_TICK_DELTA
+	owned_state.resize(4)
+	_require(
+		not CODEC.is_valid_owned_state(owned_state),
+		"Malformed owned state must be rejected"
 	)
-	var position := MOVEMENT.step_position(
-		Vector3(0.0, NET.FLOOR_HEIGHT, 0.0),
-		velocity,
-		NET.SERVER_TICK_DELTA
-	)
-	_require(velocity.x > 0.0 and velocity.y > 0.0, "Shared rules must move and jump")
-	_require(position.x > 0.0 and position.y > NET.FLOOR_HEIGHT, "Movement must integrate")
-
-	input.resize(4)
-	_require(not CODEC.is_valid_input(input), "Malformed input must be rejected")
 	print(
-		"NETWORK_CODEC_OK input_bytes=%d snapshot_bytes=%d players=%d"
-		% [NET.INPUT_PACKET_SIZE, NET.SNAPSHOT_PACKET_SIZE, NET.MAX_PLAYERS_PER_ROOM]
+		"NETWORK_CODEC_OK state_bytes=%d snapshot_bytes=%d players=%d"
+		% [NET.OWNED_STATE_PACKET_SIZE, NET.SNAPSHOT_PACKET_SIZE, NET.MAX_PLAYERS_PER_ROOM]
 	)
 	quit(0)
 

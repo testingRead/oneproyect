@@ -3,8 +3,6 @@ extends CharacterBody3D
 
 const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.gd")
 const HUMANOID_RIG := preload("res://scripts/characters/humanoid_rig.gd")
-const MOVEMENT := preload("res://shared/movement_rules.gd")
-const NET := preload("res://shared/net_constants.gd")
 
 @export var move_speed := 6.0
 @export var ground_acceleration := 28.0
@@ -20,15 +18,6 @@ signal health_changed(current: int, maximum: int)
 signal damaged(amount: int, current: int)
 signal defeated
 signal push_requested
-signal network_correction_applied(
-	hard: bool,
-	horizontal_error: float,
-	local_position: Vector3,
-	authoritative_position: Vector3,
-	local_velocity: Vector3,
-	authoritative_velocity: Vector3,
-	move: Vector2
-)
 signal limb_detached(
 	part_transform: Transform3D,
 	part_scale: Vector3,
@@ -38,12 +27,6 @@ signal limb_detached(
 
 const MAX_HEALTH := 100
 const ALL_LIMBS_MASK := HUMANOID_RIG.ALL_BODY_PARTS_MASK
-const NETWORK_HARD_SNAP_DISTANCE := 4.5
-const NETWORK_HARD_SNAP_HEIGHT := 3.0
-const NETWORK_SETTLE_DELAY := 0.35
-const NETWORK_SETTLED_SPEED := 0.75
-const NETWORK_POSITION_DEADZONE := 1.25
-const NETWORK_HEIGHT_DEADZONE := 0.75
 const LIMB_MAX_HEALTH := [24, 34, 34, 20, 20, 38, 38]
 const ACCESSORY_MAX_HEALTH := 12
 const LIMB_VISUAL_PATHS := [
@@ -93,17 +76,6 @@ const ACCESSORY_VISUAL_PATHS := {
 
 var _touch_move := Vector2.ZERO
 var _jump_requested := false
-var _network_jump_event := false
-var _network_move_world := Vector2.ZERO
-var _network_idle_elapsed := NETWORK_SETTLE_DELAY
-var _network_hard_correction_count := 0
-var _network_soft_correction_count := 0
-var _network_backward_correction_distance := 0.0
-var _network_max_horizontal_error := 0.0
-var _network_authority_enabled := false
-var _network_target_position := Vector3.ZERO
-var _network_target_velocity := Vector3.ZERO
-var _network_prediction_elapsed := 0.0
 var _spawn_transform: Transform3D
 var _health := MAX_HEALTH
 var _invulnerability := 0.0
@@ -145,50 +117,24 @@ func _physics_process(delta: float) -> void:
 	var direction := yaw_basis * Vector3(movement_input.x, 0.0, movement_input.y)
 	if direction.length_squared() > 1.0:
 		direction = direction.normalized()
-	_network_move_world = Vector2(direction.x, direction.z)
-	if _network_move_world.length_squared() > 0.01:
-		_network_idle_elapsed = 0.0
-	else:
-		_network_idle_elapsed += delta
 
 	var movement_scale := _get_leg_movement_scale()
 	var jump_pressed := _jump_requested or Input.is_action_just_pressed("jump")
-	var animation_on_floor := is_on_floor()
-	if _network_authority_enabled:
-		if _controls_enabled and jump_pressed:
-			_network_jump_event = true
-		_network_prediction_elapsed = minf(
-			_network_prediction_elapsed + delta,
-			1.0 / float(NET.SNAPSHOT_RATE)
-		)
-		global_position = MOVEMENT.step_position(
-			_network_target_position,
-			_network_target_velocity,
-			_network_prediction_elapsed
-		)
-		velocity = _network_target_velocity
-		var predicted_floor := MOVEMENT.floor_height_at(global_position)
-		animation_on_floor = (
-			global_position.y <= predicted_floor + 0.02
-			and velocity.y <= 0.0
-		)
-	else:
-		var acceleration := ground_acceleration if is_on_floor() else air_acceleration
-		velocity.x = move_toward(
-			velocity.x,
-			direction.x * move_speed * movement_scale,
-			acceleration * delta
-		)
-		velocity.z = move_toward(
-			velocity.z,
-			direction.z * move_speed * movement_scale,
-			acceleration * delta
-		)
-		if not is_on_floor():
-			velocity += get_gravity() * delta
-		elif _controls_enabled and jump_pressed:
-			velocity.y = jump_velocity * movement_scale
-			_network_jump_event = true
+	var acceleration := ground_acceleration if is_on_floor() else air_acceleration
+	velocity.x = move_toward(
+		velocity.x,
+		direction.x * move_speed * movement_scale,
+		acceleration * delta
+	)
+	velocity.z = move_toward(
+		velocity.z,
+		direction.z * move_speed * movement_scale,
+		acceleration * delta
+	)
+	if not is_on_floor():
+		velocity += get_gravity() * delta
+	elif _controls_enabled and jump_pressed:
+		velocity.y = jump_velocity * movement_scale
 	_jump_requested = false
 	if _controls_enabled and Input.is_action_just_pressed("push"):
 		request_push()
@@ -199,20 +145,14 @@ func _physics_process(delta: float) -> void:
 	_walk_phase = HUMANOID_RIG.animate(
 		visual,
 		delta,
-		maxf(
-			Vector2(velocity.x, velocity.z).length(),
-			_network_move_world.length() * move_speed
-			if _network_authority_enabled
-			else 0.0
-		),
+		Vector2(velocity.x, velocity.z).length(),
 		_walk_phase,
-		animation_on_floor,
+		is_on_floor(),
 		clampf(_push_animation / 0.30, 0.0, 1.0),
 		clampf(_hurt_animation / 0.25, 0.0, 1.0)
 	)
 
-	if not _network_authority_enabled:
-		move_and_slide()
+	move_and_slide()
 	if global_position.y < -8.0:
 		reset_to_spawn()
 
@@ -285,180 +225,6 @@ func get_health() -> int:
 
 func get_visual_yaw() -> float:
 	return visual.rotation.y
-
-
-func get_network_move() -> Vector2:
-	return _network_move_world
-
-
-func consume_network_jump() -> bool:
-	var jumped := _network_jump_event
-	_network_jump_event = false
-	return jumped
-
-
-func set_network_authority_enabled(enabled: bool) -> void:
-	_network_authority_enabled = enabled
-	_network_target_position = global_position
-	_network_target_velocity = velocity
-	_network_prediction_elapsed = 0.0
-
-
-func apply_network_authority(position: Vector3, authoritative_velocity: Vector3) -> void:
-	if (
-		not _network_authority_enabled
-		or not position.is_finite()
-		or not authoritative_velocity.is_finite()
-	):
-		return
-	_network_target_position = position
-	_network_target_velocity = authoritative_velocity
-	_network_prediction_elapsed = 0.0
-	global_position = position
-	velocity = authoritative_velocity
-
-
-func apply_authoritative_state(
-	position: Vector3,
-	authoritative_velocity: Vector3,
-	facing_yaw: float,
-	health: int,
-	body_mask: int
-) -> void:
-	if not position.is_finite() or not authoritative_velocity.is_finite():
-		return
-	var horizontal_error := Vector2(
-		position.x - global_position.x,
-		position.z - global_position.z
-	)
-	var horizontal_distance := horizontal_error.length()
-	_network_max_horizontal_error = maxf(
-		_network_max_horizontal_error,
-		horizontal_distance
-	)
-	if _network_authority_enabled:
-		_apply_authoritative_appearance(facing_yaw, health, body_mask)
-		return
-	var vertical_error := position.y - global_position.y
-	var authoritative_horizontal_speed := Vector2(
-		authoritative_velocity.x,
-		authoritative_velocity.z
-	).length()
-	var simulation_settled := (
-		_network_idle_elapsed >= NETWORK_SETTLE_DELAY
-		and authoritative_horizontal_speed <= NETWORK_SETTLED_SPEED
-	)
-	var position_before_correction := global_position
-	if (
-		horizontal_distance > NETWORK_HARD_SNAP_DISTANCE
-		or absf(vertical_error) > NETWORK_HARD_SNAP_HEIGHT
-	):
-		global_position = position
-		_network_hard_correction_count += 1
-		network_correction_applied.emit(
-			true,
-			horizontal_distance,
-			position_before_correction,
-			position,
-			velocity,
-			authoritative_velocity,
-			_network_move_world
-		)
-	elif simulation_settled:
-		# The local CharacterBody runs at 60 Hz while the compact authoritative
-		# simulation runs at 20 Hz. Small differences are expected and must not
-		# be fed back into an actively controlled body as a constant backwards
-		# force. Settle only meaningful idle drift; large invalid states still
-		# snap immediately above.
-		var horizontal_correction := (
-			0.12
-			if horizontal_distance > 2.5
-			else 0.06
-			if horizontal_distance > NETWORK_POSITION_DEADZONE
-			else 0.0
-		)
-		global_position.x += horizontal_error.x * horizontal_correction
-		global_position.z += horizontal_error.y * horizontal_correction
-		var vertical_correction := (
-			0.12
-			if absf(vertical_error) > 1.5
-			else 0.06
-			if absf(vertical_error) > NETWORK_HEIGHT_DEADZONE
-			else 0.0
-		)
-		global_position.y += vertical_error * vertical_correction
-		if horizontal_correction > 0.0 or vertical_correction > 0.0:
-			_network_soft_correction_count += 1
-			network_correction_applied.emit(
-				false,
-				horizontal_distance,
-				position_before_correction,
-				position,
-				velocity,
-				authoritative_velocity,
-				_network_move_world
-			)
-	var correction := Vector2(
-		global_position.x - position_before_correction.x,
-		global_position.z - position_before_correction.z
-	)
-	if _network_move_world.length_squared() > 0.01:
-		var correction_along_move := correction.dot(_network_move_world.normalized())
-		if correction_along_move < 0.0:
-			_network_backward_correction_distance -= correction_along_move
-	var velocity_error := Vector2(
-		velocity.x - authoritative_velocity.x,
-		velocity.z - authoritative_velocity.z
-	).length()
-	if simulation_settled and velocity_error > 2.0:
-		velocity.x = lerpf(velocity.x, authoritative_velocity.x, 0.12)
-		velocity.z = lerpf(velocity.z, authoritative_velocity.z, 0.12)
-	_apply_authoritative_appearance(facing_yaw, health, body_mask)
-
-
-func _apply_authoritative_appearance(
-	facing_yaw: float,
-	health: int,
-	body_mask: int
-) -> void:
-	visual.rotation.y = lerp_angle(visual.rotation.y, facing_yaw, 0.08)
-	var safe_health := clampi(health, 0, MAX_HEALTH)
-	if safe_health != _health:
-		_health = safe_health
-		health_changed.emit(_health, MAX_HEALTH)
-	var safe_mask := body_mask & ALL_LIMBS_MASK
-	if safe_mask != _limb_mask:
-		_limb_mask = safe_mask
-		for limb in LIMB_VISUAL_PATHS.size():
-			var hitbox := get_node(LIMB_HITBOX_PATHS[limb]) as Area3D
-			(hitbox.get_node("Shape") as CollisionShape3D).set_deferred(
-				"disabled",
-				not _is_limb_attached(limb)
-			)
-		HUMANOID_RIG.apply_limb_mask(visual, _limb_mask, _character_variant_index)
-
-
-func reset_network_correction_diagnostics() -> void:
-	_network_hard_correction_count = 0
-	_network_soft_correction_count = 0
-	_network_backward_correction_distance = 0.0
-	_network_max_horizontal_error = 0.0
-
-
-func get_network_hard_correction_count() -> int:
-	return _network_hard_correction_count
-
-
-func get_network_soft_correction_count() -> int:
-	return _network_soft_correction_count
-
-
-func get_network_backward_correction_distance() -> float:
-	return _network_backward_correction_distance
-
-
-func get_network_max_horizontal_error() -> float:
-	return _network_max_horizontal_error
 
 
 func get_limb_mask() -> int:

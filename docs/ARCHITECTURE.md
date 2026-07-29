@@ -24,7 +24,7 @@ límites útiles para un juego pequeño de cinco personas y teléfonos modestos.
 
 - `GrayboxPlayer`: movimiento, cámara, controles, salud, hitboxes y API de
   daño/empuje.
-- `DisasterController`: autoridad, reloj, estados de ronda y selección
+- `DisasterController`: presentación, reloj, estados de ronda y selección
   aleatoria. No contiene reglas de un minijuego concreto.
 - `MinigameMode`: reglas y recursos exclusivos de un modo.
 - `MinigameMapDefinition` y `ModeMapHost`: metadatos, compatibilidad, caché y
@@ -44,9 +44,10 @@ mode_id + map_id + round_seed + feature_ids
 + player_profile_id + spawn_policy_id + spectator_policy_id
 ```
 
-La red transmite esos identificadores y la semilla; nunca escenas, materiales
-ni físicas completas. El host decide el plan y los clientes cargan los recursos
-locales registrados bajo los mismos IDs.
+La red transmite esos identificadores y la semilla; nunca escenas ni materiales.
+El servidor decide el plan y los clientes cargan los recursos locales
+registrados bajo los mismos IDs. Cada teléfono simula la física de su personaje
+y replica únicamente el resultado compacto.
 
 - `mode_id`: reglas principales, por ejemplo meteoritos o duelo.
 - `map_id`: escenario compatible.
@@ -88,8 +89,9 @@ específicos del minijuego a `game.gd`.
 5. Añadir el módulo como hijo directo de `World/DisasterController`.
 6. Añadir cobertura a `tests/smoke_test.gd`.
 
-`tick_round` recibe `authoritative`. En línea, sólo el host genera azar o eventos
-de reglas. La presentación local puede ejecutarse en todos los clientes.
+`tick_round` recibe `authoritative`. En línea, el servidor genera azar y eventos
+de reglas; la presentación y el contacto con el personaje propio se ejecutan en
+cada cliente.
 
 ## Añadir un mapa
 

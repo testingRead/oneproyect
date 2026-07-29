@@ -2,7 +2,8 @@ extends Node3D
 
 const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn")
 const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.gd")
-const INPUT_INTERVAL := 0.05
+const NET := preload("res://shared/net_constants.gd")
+const STATE_SEND_INTERVAL := 1.0 / float(NET.STATE_SEND_RATE)
 const PROFILE_PATH := "user://profile.cfg"
 const MENU_SCENE := "res://scenes/menu.tscn"
 const PUSH_RANGE := 2.8
@@ -46,7 +47,7 @@ const FPS_LIMITS := [30, 45, 60]
 @onready var touch_debug: Label = $HUD/TouchDebug
 
 var _stats_elapsed := 0.0
-var _snapshot_elapsed := 0.0
+var _state_send_elapsed := 0.0
 var _remote_avatars: Dictionary = {}
 var _damage_flash_strength := 0.0
 var _completed_rounds := 0
@@ -101,8 +102,6 @@ func _ready() -> void:
 	network.remote_player_joined.connect(_on_remote_player_joined)
 	network.remote_player_left.connect(_on_remote_player_left)
 	network.remote_snapshot.connect(_on_remote_snapshot)
-	network.authoritative_state.connect(_on_authoritative_state)
-	network.raw_authoritative_state.connect(_on_raw_authoritative_state)
 	network.meteor_received.connect(disaster.spawn_network_meteor)
 	network.shockwave_received.connect(disaster.spawn_network_shockwave)
 	network.round_state_received.connect(disaster.apply_network_state)
@@ -114,9 +113,6 @@ func _ready() -> void:
 		var spawn_position: Vector3 = network.get_local_spawn_position()
 		player.global_position = spawn_position
 		player.velocity = Vector3.ZERO
-		player.set_network_authority_enabled(true)
-		player.apply_network_authority(spawn_position, Vector3.ZERO)
-		network.set_prediction_origin(spawn_position)
 		network.replay_remote_players()
 		_on_network_status_changed(
 			"EN LÍNEA · SALA %d" % network.get_room_id(),
@@ -144,13 +140,15 @@ func _process(delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	if not network.is_online():
 		return
-	_snapshot_elapsed += delta
-	if _snapshot_elapsed >= INPUT_INTERVAL:
-		_snapshot_elapsed -= INPUT_INTERVAL
-		network.submit_input(
-			player.get_network_move(),
+	_state_send_elapsed += delta
+	if _state_send_elapsed >= STATE_SEND_INTERVAL:
+		_state_send_elapsed -= STATE_SEND_INTERVAL
+		network.submit_owned_state(
+			player.global_position,
+			player.velocity,
 			player.get_visual_yaw(),
-			player.consume_network_jump()
+			player.get_health(),
+			player.get_limb_mask()
 		)
 
 
@@ -352,11 +350,7 @@ func _on_network_status_changed(text: String, online: bool) -> void:
 	pause_restart.text = "REAPARECER" if online else "REINICIAR"
 	name_input.editable = not online
 	character_button.disabled = online
-	if online:
-		player.set_network_authority_enabled(true)
-		network.set_prediction_origin(player.global_position, player.velocity)
 	if not online and not network.is_online():
-		player.set_network_authority_enabled(false)
 		if pause_panel.visible and not get_tree().paused:
 			pause_panel.visible = false
 			player.set_controls_enabled(true)
@@ -396,33 +390,6 @@ func _on_remote_snapshot(
 	if avatar != null:
 		avatar.set_snapshot(position, velocity, facing_yaw)
 		avatar.set_limb_mask(limb_mask)
-
-
-func _on_authoritative_state(
-	position: Vector3,
-	authoritative_velocity: Vector3,
-	facing_yaw: float,
-	health: int,
-	body_mask: int,
-	_ack_sequence: int,
-	_server_tick: int
-) -> void:
-	player.apply_authoritative_state(
-		position,
-		authoritative_velocity,
-		facing_yaw,
-		health,
-		body_mask
-	)
-
-
-func _on_raw_authoritative_state(
-	position: Vector3,
-	authoritative_velocity: Vector3,
-	_ack_sequence: int,
-	_server_tick: int
-) -> void:
-	player.apply_network_authority(position, authoritative_velocity)
 
 
 func _on_simulation_host_changed(peer_id: int) -> void:

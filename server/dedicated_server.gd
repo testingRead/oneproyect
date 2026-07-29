@@ -11,8 +11,8 @@ var _metrics_elapsed := 0.0
 var _metrics_cpu_usec := 0
 var _bytes_received := 0
 var _bytes_sent := 0
-var _accepted_inputs := 0
-var _rejected_inputs := 0
+var _accepted_states := 0
+var _rejected_states := 0
 var _lobby_peers: Dictionary = {}
 const METRICS_INTERVAL := 5.0
 
@@ -310,13 +310,13 @@ func _register_session_in_room(
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
-func _rpc_submit_input(packet: PackedByteArray) -> void:
+func _rpc_submit_owned_state(packet: PackedByteArray) -> void:
 	_bytes_received += packet.size()
 	var room: Node = room_manager.find_room_for_peer(multiplayer.get_remote_sender_id())
-	if room != null and room.apply_input(multiplayer.get_remote_sender_id(), packet):
-		_accepted_inputs += 1
+	if room != null and room.apply_owned_state(multiplayer.get_remote_sender_id(), packet):
+		_accepted_states += 1
 	else:
-		_rejected_inputs += 1
+		_rejected_states += 1
 
 
 @rpc("any_peer", "call_remote", "reliable", 2)
@@ -691,22 +691,22 @@ func _print_metrics() -> void:
 	var cpu_percent := float(_metrics_cpu_usec) / (elapsed * 1000000.0) * 100.0
 	var memory_mib := float(OS.get_static_memory_usage()) / 1048576.0
 	print(
-		"SERVER_METRICS cpu_pct=%.3f memory_mib=%.2f rx_bps=%.1f tx_bps=%.1f inputs_ok=%d inputs_rejected=%d"
+		"SERVER_METRICS cpu_pct=%.3f memory_mib=%.2f rx_bps=%.1f tx_bps=%.1f states_ok=%d states_rejected=%d"
 		% [
 			cpu_percent,
 			memory_mib,
 			float(_bytes_received) / elapsed,
 			float(_bytes_sent) / elapsed,
-			_accepted_inputs,
-			_rejected_inputs,
+			_accepted_states,
+			_rejected_states,
 		]
 	)
 	_metrics_elapsed = 0.0
 	_metrics_cpu_usec = 0
 	_bytes_received = 0
 	_bytes_sent = 0
-	_accepted_inputs = 0
-	_rejected_inputs = 0
+	_accepted_states = 0
+	_rejected_states = 0
 
 
 func _audit_server_tree() -> void:

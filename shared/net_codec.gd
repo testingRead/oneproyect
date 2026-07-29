@@ -3,12 +3,17 @@ extends RefCounted
 
 const NET := preload("res://shared/net_constants.gd")
 
-const INPUT_VERSION := 0
-const INPUT_FLAGS := 1
-const INPUT_SEQUENCE := 2
-const INPUT_MOVE_X := 6
-const INPUT_MOVE_Z := 8
-const INPUT_YAW := 10
+const STATE_VERSION := 0
+const STATE_HEALTH := 1
+const STATE_SEQUENCE := 2
+const STATE_POSITION_X := 6
+const STATE_POSITION_Y := 8
+const STATE_POSITION_Z := 10
+const STATE_VELOCITY_X := 12
+const STATE_VELOCITY_Y := 14
+const STATE_VELOCITY_Z := 16
+const STATE_YAW := 18
+const STATE_BODY_MASK := 20
 
 const SNAPSHOT_VERSION := 0
 const SNAPSHOT_PHASE := 1
@@ -23,7 +28,7 @@ const SNAPSHOT_ROOM_ID := 18
 const PLAYER_ID := 0
 const PLAYER_FLAGS := 2
 const PLAYER_HEALTH := 3
-const PLAYER_ACK_SEQUENCE := 4
+const PLAYER_STATE_SEQUENCE := 4
 const PLAYER_POSITION_X := 8
 const PLAYER_POSITION_Y := 10
 const PLAYER_POSITION_Z := 12
@@ -37,54 +42,74 @@ const NORMALIZED_SCALE := 32767.0
 const WORLD_SCALE := 100.0
 
 
-static func create_input_buffer() -> PackedByteArray:
+static func create_owned_state_buffer() -> PackedByteArray:
 	var packet := PackedByteArray()
-	packet.resize(NET.INPUT_PACKET_SIZE)
-	packet[INPUT_VERSION] = NET.PROTOCOL_VERSION
+	packet.resize(NET.OWNED_STATE_PACKET_SIZE)
+	packet[STATE_VERSION] = NET.PROTOCOL_VERSION
 	return packet
 
 
-static func write_input(
+static func write_owned_state(
 	packet: PackedByteArray,
 	sequence: int,
-	move: Vector2,
+	position: Vector3,
+	velocity: Vector3,
 	yaw: float,
-	flags: int
+	health: int,
+	body_mask: int
 ) -> void:
-	if packet.size() != NET.INPUT_PACKET_SIZE:
-		packet.resize(NET.INPUT_PACKET_SIZE)
-	packet[INPUT_VERSION] = NET.PROTOCOL_VERSION
-	packet[INPUT_FLAGS] = flags & 0xff
-	packet.encode_u32(INPUT_SEQUENCE, sequence)
-	packet.encode_s16(INPUT_MOVE_X, _encode_normalized(move.x))
-	packet.encode_s16(INPUT_MOVE_Z, _encode_normalized(move.y))
-	packet.encode_s16(INPUT_YAW, _encode_angle(yaw))
+	if packet.size() != NET.OWNED_STATE_PACKET_SIZE:
+		packet.resize(NET.OWNED_STATE_PACKET_SIZE)
+	packet[STATE_VERSION] = NET.PROTOCOL_VERSION
+	packet[STATE_HEALTH] = clampi(health, 0, 100)
+	packet.encode_u32(STATE_SEQUENCE, sequence)
+	packet.encode_s16(STATE_POSITION_X, _encode_world(position.x))
+	packet.encode_s16(STATE_POSITION_Y, _encode_world(position.y))
+	packet.encode_s16(STATE_POSITION_Z, _encode_world(position.z))
+	packet.encode_s16(STATE_VELOCITY_X, _encode_world(velocity.x))
+	packet.encode_s16(STATE_VELOCITY_Y, _encode_world(velocity.y))
+	packet.encode_s16(STATE_VELOCITY_Z, _encode_world(velocity.z))
+	packet.encode_s16(STATE_YAW, _encode_angle(yaw))
+	packet.encode_u16(STATE_BODY_MASK, body_mask)
 
 
-static func is_valid_input(packet: PackedByteArray) -> bool:
+static func is_valid_owned_state(packet: PackedByteArray) -> bool:
 	return (
-		packet.size() == NET.INPUT_PACKET_SIZE
-		and packet[INPUT_VERSION] == NET.PROTOCOL_VERSION
+		packet.size() == NET.OWNED_STATE_PACKET_SIZE
+		and packet[STATE_VERSION] == NET.PROTOCOL_VERSION
 	)
 
 
-static func input_sequence(packet: PackedByteArray) -> int:
-	return packet.decode_u32(INPUT_SEQUENCE)
+static func owned_state_sequence(packet: PackedByteArray) -> int:
+	return packet.decode_u32(STATE_SEQUENCE)
 
 
-static func input_flags(packet: PackedByteArray) -> int:
-	return packet[INPUT_FLAGS]
-
-
-static func input_move(packet: PackedByteArray) -> Vector2:
-	return Vector2(
-		float(packet.decode_s16(INPUT_MOVE_X)) / NORMALIZED_SCALE,
-		float(packet.decode_s16(INPUT_MOVE_Z)) / NORMALIZED_SCALE
+static func owned_state_position(packet: PackedByteArray) -> Vector3:
+	return Vector3(
+		float(packet.decode_s16(STATE_POSITION_X)) / WORLD_SCALE,
+		float(packet.decode_s16(STATE_POSITION_Y)) / WORLD_SCALE,
+		float(packet.decode_s16(STATE_POSITION_Z)) / WORLD_SCALE
 	)
 
 
-static func input_yaw(packet: PackedByteArray) -> float:
-	return float(packet.decode_s16(INPUT_YAW)) / NORMALIZED_SCALE * PI
+static func owned_state_velocity(packet: PackedByteArray) -> Vector3:
+	return Vector3(
+		float(packet.decode_s16(STATE_VELOCITY_X)) / WORLD_SCALE,
+		float(packet.decode_s16(STATE_VELOCITY_Y)) / WORLD_SCALE,
+		float(packet.decode_s16(STATE_VELOCITY_Z)) / WORLD_SCALE
+	)
+
+
+static func owned_state_yaw(packet: PackedByteArray) -> float:
+	return float(packet.decode_s16(STATE_YAW)) / NORMALIZED_SCALE * PI
+
+
+static func owned_state_health(packet: PackedByteArray) -> int:
+	return packet[STATE_HEALTH]
+
+
+static func owned_state_body_mask(packet: PackedByteArray) -> int:
+	return packet.decode_u16(STATE_BODY_MASK)
 
 
 static func create_snapshot_buffer() -> PackedByteArray:
@@ -129,7 +154,7 @@ static func write_snapshot_player(
 	player_id: int,
 	flags: int,
 	health: int,
-	ack_sequence: int,
+	state_sequence: int,
 	position: Vector3,
 	velocity: Vector3,
 	yaw: float,
@@ -139,7 +164,7 @@ static func write_snapshot_player(
 	packet.encode_u16(offset + PLAYER_ID, player_id)
 	packet[offset + PLAYER_FLAGS] = flags & 0xff
 	packet[offset + PLAYER_HEALTH] = clampi(health, 0, 255)
-	packet.encode_u32(offset + PLAYER_ACK_SEQUENCE, ack_sequence)
+	packet.encode_u32(offset + PLAYER_STATE_SEQUENCE, state_sequence)
 	packet.encode_s16(offset + PLAYER_POSITION_X, _encode_world(position.x))
 	packet.encode_s16(offset + PLAYER_POSITION_Y, _encode_world(position.y))
 	packet.encode_s16(offset + PLAYER_POSITION_Z, _encode_world(position.z))
@@ -209,8 +234,8 @@ static func snapshot_player_health(packet: PackedByteArray, slot: int) -> int:
 	return packet[player_offset(slot) + PLAYER_HEALTH]
 
 
-static func snapshot_player_ack(packet: PackedByteArray, slot: int) -> int:
-	return packet.decode_u32(player_offset(slot) + PLAYER_ACK_SEQUENCE)
+static func snapshot_player_state_sequence(packet: PackedByteArray, slot: int) -> int:
+	return packet.decode_u32(player_offset(slot) + PLAYER_STATE_SEQUENCE)
 
 
 static func snapshot_player_position(packet: PackedByteArray, slot: int) -> Vector3:

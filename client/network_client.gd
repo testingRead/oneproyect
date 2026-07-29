@@ -5,33 +5,13 @@ signal status_changed(text: String, online: bool)
 signal peers_changed(current: int, maximum: int)
 signal remote_player_joined(player_id: int, display_name: String, color_index: int)
 signal remote_player_left(player_id: int)
+signal owned_state_confirmed(sequence: int, server_tick: int)
 signal remote_snapshot(
 	player_id: int,
 	position: Vector3,
 	velocity: Vector3,
 	facing_yaw: float,
 	body_mask: int
-)
-signal authoritative_state(
-	position: Vector3,
-	velocity: Vector3,
-	facing_yaw: float,
-	health: int,
-	body_mask: int,
-	ack_sequence: int,
-	server_tick: int
-)
-signal predicted_state(position: Vector3, velocity: Vector3)
-signal raw_authoritative_state(
-	position: Vector3,
-	velocity: Vector3,
-	ack_sequence: int,
-	server_tick: int
-)
-signal prediction_reconciled(
-	correction: Vector3,
-	pending_inputs: int,
-	ack_sequence: int
 )
 signal meteor_received(target: Vector3, drift: Vector2, damage: int, blast_force: float)
 signal shockwave_received
@@ -74,7 +54,6 @@ signal returned_to_lobby
 
 const NET := preload("res://shared/net_constants.gd")
 const CODEC := preload("res://shared/net_codec.gd")
-const PREDICTION_SCRIPT := preload("res://client/client_prediction.gd")
 const IDENTITY_PATH := "user://network_identity.cfg"
 
 var server_address := "149.50.152.250"
@@ -91,11 +70,10 @@ var _reconnect_elapsed := 0.0
 var _local_player_id := 0
 var _local_spawn_position := Vector3(0.0, NET.FLOOR_HEIGHT, 8.0)
 var _room_id := 0
-var _input_sequence := 0
-var _input_packet := PackedByteArray()
+var _state_sequence := 0
+var _state_packet := PackedByteArray()
 var _stable_id := ""
 var _reconnect_token := ""
-var _prediction: RefCounted
 var _persist_identity := true
 var _lobby_mode := false
 
@@ -105,8 +83,7 @@ func _ready() -> void:
 	server_port = int(ProjectSettings.get_setting("network/server_port", NET.DEFAULT_PORT))
 	display_name = "Jugador%03d" % (randi() % 1000)
 	color_index = randi() % 5
-	_input_packet = CODEC.create_input_buffer()
-	_prediction = PREDICTION_SCRIPT.new()
+	_state_packet = CODEC.create_owned_state_buffer()
 	_load_identity()
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
@@ -245,10 +222,6 @@ func replay_remote_players() -> void:
 		)
 
 
-func set_prediction_origin(position: Vector3, velocity := Vector3.ZERO) -> void:
-	_prediction.reset(position, velocity)
-
-
 func configure_test_identity(stable_id: String, reconnect_token := "") -> void:
 	_persist_identity = false
 	_stable_id = stable_id
@@ -268,19 +241,26 @@ func simulate_network_drop_for_test() -> void:
 	_close_peer()
 
 
-func submit_input(move: Vector2, facing_yaw: float, jump: bool) -> void:
+func submit_owned_state(
+	position: Vector3,
+	velocity: Vector3,
+	facing_yaw: float,
+	health: int,
+	body_mask: int
+) -> void:
 	if not is_online():
 		return
-	_input_sequence += 1
-	var flags := NET.InputFlags.JUMP if jump else 0
-	var safe_move := move.limit_length(1.0) if move.is_finite() else Vector2.ZERO
-	CODEC.write_input(_input_packet, _input_sequence, safe_move, facing_yaw, flags)
-	_prediction.predict(_input_sequence, safe_move, flags)
-	predicted_state.emit(
-		_prediction.predicted_position,
-		_prediction.predicted_velocity
+	_state_sequence += 1
+	CODEC.write_owned_state(
+		_state_packet,
+		_state_sequence,
+		position,
+		velocity,
+		facing_yaw,
+		health,
+		body_mask
 	)
-	_rpc_submit_input.rpc_id(1, _input_packet)
+	_rpc_submit_owned_state.rpc_id(1, _state_packet)
 
 
 func send_push(target_player_id: int, direction: Vector3, _force := 5.2) -> void:
@@ -378,7 +358,7 @@ func _rpc_leave_room() -> void:
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
-func _rpc_submit_input(_packet: PackedByteArray) -> void:
+func _rpc_submit_owned_state(_packet: PackedByteArray) -> void:
 	pass
 
 
@@ -524,7 +504,6 @@ func _rpc_player_joined(
 	}
 	if player_id == _local_player_id:
 		_local_spawn_position = position
-		_prediction.reset(position)
 	if player_id != _local_player_id and (not already_known or not was_connected):
 		remote_player_joined.emit(player_id, player_name, player_color)
 		remote_snapshot.emit(
@@ -562,35 +541,9 @@ func _rpc_receive_snapshot(packet: PackedByteArray) -> void:
 		var yaw := CODEC.snapshot_player_yaw(packet, slot)
 		var body_mask := CODEC.snapshot_player_body_mask(packet, slot)
 		if player_id == _local_player_id:
-			var ack_sequence := CODEC.snapshot_player_ack(packet, slot)
-			raw_authoritative_state.emit(
-				position,
-				velocity,
-				ack_sequence,
-				server_tick
-			)
-			var position_before_reconciliation: Vector3 = _prediction.predicted_position
-			var reconciled_position: Vector3 = _prediction.reconcile(
-				position,
-				velocity,
-				ack_sequence
-			)
-			prediction_reconciled.emit(
-				reconciled_position - position_before_reconciliation,
-				_prediction.pending_count(),
-				ack_sequence
-			)
-			predicted_state.emit(
-				reconciled_position,
-				_prediction.predicted_velocity
-			)
-			authoritative_state.emit(
-				reconciled_position,
-				_prediction.predicted_velocity,
-				yaw,
-				CODEC.snapshot_player_health(packet, slot),
-				body_mask,
-				ack_sequence,
+			_local_spawn_position = position
+			owned_state_confirmed.emit(
+				CODEC.snapshot_player_state_sequence(packet, slot),
 				server_tick
 			)
 		else:
@@ -646,11 +599,6 @@ func _rpc_receive_round_state(
 
 @rpc("authority", "call_remote", "reliable", 2)
 func _rpc_receive_push(sender_player_id: int, direction: Vector3, force: float) -> void:
-	_prediction.apply_external_impulse(direction, force)
-	predicted_state.emit(
-		_prediction.predicted_position,
-		_prediction.predicted_velocity
-	)
 	push_received.emit(sender_player_id, direction, force)
 
 
@@ -747,7 +695,7 @@ func _reset_runtime_state() -> void:
 	_local_player_id = 0
 	_local_spawn_position = Vector3(0.0, NET.FLOOR_HEIGHT, 8.0)
 	_room_id = 0
-	_input_sequence = 0
+	_state_sequence = 0
 	_lobby_mode = false
 
 

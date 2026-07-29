@@ -1,6 +1,7 @@
 extends SceneTree
 
 const NETWORK_SCRIPT := preload("res://client/network_client.gd")
+const NET := preload("res://shared/net_constants.gd")
 const RUN_MSEC := 7000
 
 var network: Node
@@ -8,8 +9,8 @@ var client_index := 1
 var address := "127.0.0.1"
 var port := 9999
 var accepted := false
-var authoritative := false
-var acknowledged := false
+var saw_remote_state := false
+var confirmed := false
 
 
 func _init() -> void:
@@ -31,21 +32,23 @@ func _setup() -> void:
 	network.display_name = "Carga%d" % client_index
 	network.color_index = (client_index - 1) % 5
 	network.configure_test_identity("%016x" % client_index)
-	network.set_prediction_origin(Vector3(0.0, 1.2, 8.0))
 	network.status_changed.connect(func(_text: String, online: bool) -> void:
 		accepted = accepted or online
 	)
-	network.authoritative_state.connect(func(
+	network.owned_state_confirmed.connect(func(
+		sequence: int,
+		_server_tick: int
+	) -> void:
+		confirmed = confirmed or sequence > 0
+	)
+	network.remote_snapshot.connect(func(
+		_player_id: int,
 		_position: Vector3,
 		_velocity: Vector3,
 		_yaw: float,
-		_health: int,
-		_body_mask: int,
-		ack_sequence: int,
-		_server_tick: int
+		_body_mask: int
 	) -> void:
-		authoritative = true
-		acknowledged = acknowledged or ack_sequence > 0
+		saw_remote_state = true
 	)
 	var error: int = network.connect_to_server(address)
 	_require(error == OK, "client ENet creation failed")
@@ -54,22 +57,34 @@ func _setup() -> void:
 
 func _run() -> void:
 	var started_msec := Time.get_ticks_msec()
-	var next_input_msec := started_msec
+	var next_state_msec := started_msec
 	var angle := float(client_index - 1) / 5.0 * TAU
-	var move := Vector2(cos(angle), sin(angle)) * 0.65
 	var run_msec := RUN_MSEC + client_index * 250
 	while Time.get_ticks_msec() - started_msec < run_msec:
 		await process_frame
 		var now_msec := Time.get_ticks_msec()
-		if network.is_online() and now_msec >= next_input_msec:
-			next_input_msec = now_msec + 50
-			network.submit_input(move, angle, false)
+		if network.is_online() and now_msec >= next_state_msec:
+			next_state_msec = now_msec + 50
+			var elapsed := float(now_msec - started_msec) / 1000.0
+			var position := Vector3(
+				cos(angle) * minf(elapsed * 0.7, 4.0),
+				1.2,
+				8.0 + sin(angle) * minf(elapsed * 0.7, 4.0)
+			)
+			var velocity := Vector3(cos(angle) * 0.7, 0.0, sin(angle) * 0.7)
+			network.submit_owned_state(
+				position,
+				velocity,
+				angle,
+				100,
+				NET.ALL_BODY_PARTS_MASK
+			)
 	_require(accepted, "session was not accepted")
-	_require(authoritative, "authoritative snapshots were not received")
-	_require(acknowledged, "server did not acknowledge inputs")
+	_require(confirmed, "server did not confirm owned states")
+	_require(saw_remote_state, "client did not receive another owner's state")
 	print(
-		"NETWORK_LOAD_OK client=%d accepted=%s authoritative=%s ack=%s"
-		% [client_index, accepted, authoritative, acknowledged]
+		"NETWORK_LOAD_OK client=%d accepted=%s confirmed=%s remote=%s"
+		% [client_index, accepted, confirmed, saw_remote_state]
 	)
 	network.disconnect_session()
 	quit(0)
