@@ -17,6 +17,11 @@ El servidor continúa siendo autoridad de:
 - generación y retransmisión de eventos compartidos;
 - pertenencia de cada estado al jugador que lo envía.
 
+`RoomPhase` existe una sola vez en `shared/net_constants.gd`. La presentación
+del cliente convierte explícitamente `WAITING`, `COUNTDOWN`, `ACTIVE` y
+`RESULT`; nunca convierte sus números directamente a una enumeración visual.
+Esto evita que `ACTIVE` pueda mostrarse como “ronda terminada”.
+
 Cada cliente es propietario de:
 
 - entrada, `CharacterBody3D` y colisiones completas de su personaje;
@@ -89,6 +94,22 @@ puestos reciben 5, 4, 3, 2 o 1 puntos; los empates de vida reciben los mismos
 puntos y los eliminados reciben cero. Una RPC fiable publica nombres, vida,
 puntos de ronda y total. Después de la cantidad elegida se conserva la
 clasificación final y se anuncia al jugador con mayor puntuación.
+
+La clasificación fiable incluye un `match_id` y número de ronda. El cliente usa
+ambos para guardar una sola vez XP, partidas, rondas, supervivencias y
+victorias. Jugar local no toca esos contadores. Durante esta fase el servidor
+mantiene las cifras en memoria sólo para mostrarlas en la sala; la persistencia
+real sigue en `user://profile.cfg`.
+
+La clasificación final ofrece dos transiciones explícitas:
+
+- **Volver a la sala** reutiliza el mismo `room_id`, limpia puntuación y
+  estados `ready`, conserva jugadores y permite seleccionar de nuevo.
+- **Salir** abandona la sala y regresa a la lista multijugador.
+
+El servidor envía primero el estado completo de espera y después la señal de
+reapertura por el mismo canal fiable. El autoload de red conserva ese estado
+durante el cambio de escena para que el menú nunca aparezca vacío.
 
 ## Peligros y empujes
 

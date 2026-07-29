@@ -39,6 +39,8 @@ func _run() -> void:
 		"",
 		"Ana",
 		2,
+		0,
+		0,
 		room.server_tick
 	)
 	var second: RefCounted = room.session_manager.register_session(
@@ -47,6 +49,8 @@ func _run() -> void:
 		"",
 		"Beto",
 		3,
+		0,
+		0,
 		room.server_tick
 	)
 	_require(first != null and second != null, "Fixed room must accept two sessions")
@@ -176,10 +180,25 @@ func _run() -> void:
 		and first.score == 10,
 		"Accumulated points must determine the match winner across rounds"
 	)
+	_require(
+		second.profile_victories == 1
+		and second.profile_experience == 13
+		and first.profile_experience == 10,
+		"Server session profile must reflect multiplayer results only"
+	)
 	room.tick()
 	_require(
 		room.phase == NET.RoomPhase.RESULT,
 		"Finished match must not revive or start another minigame automatically"
+	)
+	_require(room.reopen_waiting_room(), "A finished match must reopen its same room")
+	_require(
+		room.phase == NET.RoomPhase.WAITING
+		and room.round_number == 0
+		and not first.ready
+		and not second.ready
+		and second.profile_victories == 1,
+		"Reopening must reset match state while retaining room profile progress"
 	)
 
 	var first_id: int = first.player_id
@@ -197,6 +216,8 @@ func _run() -> void:
 		first_token,
 		"Ana",
 		2,
+		0,
+		0,
 		room.server_tick + 20
 	)
 	_require(resumed == first, "Reconnect must resume the same session object")

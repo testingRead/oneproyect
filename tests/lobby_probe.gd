@@ -99,6 +99,9 @@ func _on_room_waiting(
 	all_ready: bool,
 	_player_names: PackedStringArray,
 	_ready_flags: PackedByteArray,
+	_character_indices: PackedByteArray,
+	_victory_counts: PackedInt32Array,
+	_experience_values: PackedInt32Array,
 	total_rounds: int
 ) -> void:
 	joined = true

@@ -11,7 +11,8 @@ signal remote_snapshot(
 	position: Vector3,
 	velocity: Vector3,
 	facing_yaw: float,
-	body_mask: int
+	body_mask: int,
+	health: int
 )
 signal meteor_received(target: Vector3, drift: Vector2, damage: int, blast_force: float)
 signal shockwave_received
@@ -47,6 +48,9 @@ signal room_waiting_updated(
 	all_ready: bool,
 	player_names: PackedStringArray,
 	ready_flags: PackedByteArray,
+	character_indices: PackedByteArray,
+	victory_counts: PackedInt32Array,
+	experience_values: PackedInt32Array,
 	total_rounds: int
 )
 signal standings_received(
@@ -58,9 +62,11 @@ signal standings_received(
 	round_number: int,
 	total_rounds: int,
 	match_finished: bool,
-	winner_player_id: int
+	winner_player_id: int,
+	match_id: int
 )
 signal room_started(room_id: int)
+signal room_reopened(room_id: int)
 signal room_action_failed(reason: String)
 signal returned_to_lobby
 
@@ -72,6 +78,8 @@ var server_address := "149.50.152.250"
 var server_port := NET.DEFAULT_PORT
 var display_name := ""
 var color_index := 0
+var profile_victories := 0
+var profile_experience := 0
 
 var _players: Dictionary = {}
 var _online := false
@@ -88,6 +96,8 @@ var _stable_id := ""
 var _reconnect_token := ""
 var _persist_identity := true
 var _lobby_mode := false
+var _waiting_room_cached := false
+var _waiting_room_payload: Array = []
 
 
 func _ready() -> void:
@@ -145,7 +155,9 @@ func create_room() -> void:
 		_stable_id,
 		_reconnect_token,
 		display_name,
-		color_index
+		color_index,
+		profile_victories,
+		profile_experience
 	)
 
 
@@ -158,7 +170,9 @@ func join_room(room_id: int) -> void:
 		_stable_id,
 		_reconnect_token,
 		display_name,
-		color_index
+		color_index,
+		profile_victories,
+		profile_experience
 	)
 
 
@@ -180,6 +194,26 @@ func set_room_rules(total_rounds: int) -> void:
 func leave_room() -> void:
 	if _session_accepted:
 		_rpc_leave_room.rpc_id(1)
+
+
+func reopen_room() -> void:
+	if _session_accepted:
+		_rpc_reopen_room.rpc_id(1)
+
+
+func is_in_waiting_room() -> bool:
+	return is_online() and _waiting_room_cached
+
+
+func is_in_lobby() -> bool:
+	return _online and _lobby_mode and _room_id == 0
+
+
+func replay_waiting_room() -> bool:
+	if _waiting_room_cached and _waiting_room_payload.size() == 12:
+		room_waiting_updated.emit.callv(_waiting_room_payload)
+		return true
+	return false
 
 
 func disconnect_session() -> void:
@@ -262,7 +296,8 @@ func replay_remote_players() -> void:
 			player.get("position", Vector3(0.0, NET.FLOOR_HEIGHT, 8.0)),
 			player.get("velocity", Vector3.ZERO),
 			float(player.get("yaw", 0.0)),
-			int(player.get("body_mask", NET.ALL_BODY_PARTS_MASK))
+			int(player.get("body_mask", NET.ALL_BODY_PARTS_MASK)),
+			int(player.get("health", 100))
 		)
 
 
@@ -350,7 +385,9 @@ func _rpc_register_session(
 	_stable_id_value: String,
 	_reconnect_token_value: String,
 	_requested_name: String,
-	_requested_color: int
+	_requested_color: int,
+	_requested_victories: int,
+	_requested_experience: int
 ) -> void:
 	pass
 
@@ -370,7 +407,9 @@ func _rpc_create_room(
 	_stable_id_value: String,
 	_reconnect_token_value: String,
 	_requested_name: String,
-	_requested_color: int
+	_requested_color: int,
+	_requested_victories: int,
+	_requested_experience: int
 ) -> void:
 	pass
 
@@ -381,7 +420,9 @@ func _rpc_join_room(
 	_stable_id_value: String,
 	_reconnect_token_value: String,
 	_requested_name: String,
-	_requested_color: int
+	_requested_color: int,
+	_requested_victories: int,
+	_requested_experience: int
 ) -> void:
 	pass
 
@@ -403,6 +444,11 @@ func _rpc_set_room_rules(_total_rounds: int) -> void:
 
 @rpc("any_peer", "call_remote", "reliable", 0)
 func _rpc_leave_room() -> void:
+	pass
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_reopen_room() -> void:
 	pass
 
 
@@ -474,9 +520,27 @@ func _rpc_room_waiting(
 	all_ready: bool,
 	player_names: PackedStringArray,
 	ready_flags: PackedByteArray,
+	character_indices: PackedByteArray,
+	victory_counts: PackedInt32Array,
+	experience_values: PackedInt32Array,
 	total_rounds: int
 ) -> void:
 	_room_id = room_id
+	_waiting_room_cached = true
+	_waiting_room_payload = [
+		room_id,
+		player_count,
+		host_player_id == _local_player_id,
+		ready_count,
+		local_ready,
+		all_ready,
+		player_names,
+		ready_flags,
+		character_indices,
+		victory_counts,
+		experience_values,
+		total_rounds,
+	]
 	status_changed.emit(
 		"SALA %d · %d/%d JUGADORES" % [
 			room_id,
@@ -494,6 +558,9 @@ func _rpc_room_waiting(
 		all_ready,
 		player_names,
 		ready_flags,
+		character_indices,
+		victory_counts,
+		experience_values,
 		total_rounds
 	)
 
@@ -501,6 +568,8 @@ func _rpc_room_waiting(
 @rpc("authority", "call_remote", "reliable", 0)
 func _rpc_room_started(room_id: int) -> void:
 	if room_id == _room_id:
+		_waiting_room_cached = false
+		_waiting_room_payload.clear()
 		room_started.emit(room_id)
 
 
@@ -517,8 +586,18 @@ func _rpc_returned_to_lobby() -> void:
 	_room_id = 0
 	_local_player_id = 0
 	_lobby_mode = true
+	_waiting_room_cached = false
+	_waiting_room_payload.clear()
 	status_changed.emit("LOBBY CONECTADO", false)
 	returned_to_lobby.emit()
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_room_reopened(room_id: int) -> void:
+	if room_id != _room_id:
+		return
+	_waiting_room_cached = true
+	room_reopened.emit(room_id)
 
 
 @rpc("authority", "call_remote", "reliable", 0)
@@ -544,6 +623,11 @@ func _rpc_player_joined(
 		if already_known
 		else NET.ALL_BODY_PARTS_MASK
 	)
+	var previous_health := (
+		int(_players[player_id].get("health", 100))
+		if already_known
+		else 100
+	)
 	_players[player_id] = {
 		"name": player_name,
 		"color": player_color,
@@ -552,6 +636,7 @@ func _rpc_player_joined(
 		"velocity": Vector3.ZERO,
 		"yaw": previous_yaw,
 		"body_mask": previous_body_mask,
+		"health": previous_health,
 	}
 	if player_id == _local_player_id:
 		_local_spawn_position = position
@@ -562,7 +647,8 @@ func _rpc_player_joined(
 			position,
 			Vector3.ZERO,
 			0.0,
-			NET.ALL_BODY_PARTS_MASK
+			NET.ALL_BODY_PARTS_MASK,
+			100
 		)
 	peers_changed.emit(get_player_count(), NET.MAX_PLAYERS_PER_ROOM)
 
@@ -592,6 +678,7 @@ func _rpc_receive_snapshot(packet: PackedByteArray) -> void:
 		var velocity := CODEC.snapshot_player_velocity(packet, slot)
 		var yaw := CODEC.snapshot_player_yaw(packet, slot)
 		var body_mask := CODEC.snapshot_player_body_mask(packet, slot)
+		var health := CODEC.snapshot_player_health(packet, slot)
 		if player_id == _local_player_id:
 			_local_spawn_position = position
 		else:
@@ -600,7 +687,15 @@ func _rpc_receive_snapshot(packet: PackedByteArray) -> void:
 				_players[player_id].velocity = velocity
 				_players[player_id].yaw = yaw
 				_players[player_id].body_mask = body_mask
-			remote_snapshot.emit(player_id, position, velocity, yaw, body_mask)
+				_players[player_id].health = health
+			remote_snapshot.emit(
+				player_id,
+				position,
+				velocity,
+				yaw,
+				body_mask,
+				health
+			)
 
 
 @rpc("authority", "call_remote", "reliable", 2)
@@ -655,7 +750,8 @@ func _rpc_receive_standings(
 	round_number: int,
 	total_rounds: int,
 	match_finished: bool,
-	winner_player_id: int
+	winner_player_id: int,
+	match_id: int
 ) -> void:
 	standings_received.emit(
 		player_ids,
@@ -666,7 +762,8 @@ func _rpc_receive_standings(
 		round_number,
 		total_rounds,
 		match_finished,
-		winner_player_id
+		winner_player_id,
+		match_id
 	)
 
 
@@ -713,7 +810,9 @@ func _on_connected_to_server() -> void:
 			_stable_id,
 			_reconnect_token,
 			display_name,
-			color_index
+			color_index,
+			profile_victories,
+			profile_experience
 		)
 		status_changed.emit("RECONECTANDO A SALA %d…" % _room_id, false)
 		return
@@ -726,7 +825,9 @@ func _on_connected_to_server() -> void:
 		_stable_id,
 		_reconnect_token,
 		display_name,
-		color_index
+		color_index,
+		profile_victories,
+		profile_experience
 	)
 	status_changed.emit("VALIDANDO SESIÓN…", false)
 
@@ -770,6 +871,8 @@ func _reset_runtime_state() -> void:
 	_room_id = 0
 	_state_sequence = 0
 	_lobby_mode = false
+	_waiting_room_cached = false
+	_waiting_room_payload.clear()
 
 
 func _load_identity() -> void:

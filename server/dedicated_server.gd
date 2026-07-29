@@ -80,7 +80,9 @@ func _rpc_register_session(
 	stable_id: String,
 	reconnect_token: String,
 	requested_name: String,
-	requested_color: int
+	requested_color: int,
+	requested_victories: int,
+	requested_experience: int
 ) -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	var room: Node = room_manager.fixed_room()
@@ -91,7 +93,9 @@ func _rpc_register_session(
 		stable_id,
 		reconnect_token,
 		requested_name,
-		requested_color
+		requested_color,
+		requested_victories,
+		requested_experience
 	)
 
 
@@ -118,7 +122,9 @@ func _rpc_create_room(
 	stable_id: String,
 	reconnect_token: String,
 	requested_name: String,
-	requested_color: int
+	requested_color: int,
+	requested_victories: int,
+	requested_experience: int
 ) -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	if room_manager.find_room_for_peer(sender) != null:
@@ -134,7 +140,9 @@ func _rpc_create_room(
 		stable_id,
 		reconnect_token,
 		requested_name,
-		requested_color
+		requested_color,
+		requested_victories,
+		requested_experience
 	):
 		room_manager.remove_room(room)
 		_broadcast_lobby_rooms()
@@ -146,7 +154,9 @@ func _rpc_join_room(
 	stable_id: String,
 	reconnect_token: String,
 	requested_name: String,
-	requested_color: int
+	requested_color: int,
+	requested_victories: int,
+	requested_experience: int
 ) -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	if room_manager.find_room_for_peer(sender) != null:
@@ -170,7 +180,9 @@ func _rpc_join_room(
 		stable_id,
 		reconnect_token,
 		requested_name,
-		requested_color
+		requested_color,
+		requested_victories,
+		requested_experience
 	)
 
 
@@ -255,13 +267,30 @@ func _rpc_leave_room() -> void:
 	call_deferred("_broadcast_lobby_rooms")
 
 
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_reopen_room() -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	var room: Node = room_manager.find_room_for_peer(sender)
+	if room == null:
+		_rpc_room_action_failed.rpc_id(sender, "not_in_room")
+		return
+	if not room.reopen_waiting_room():
+		_rpc_room_action_failed.rpc_id(sender, "match_not_finished")
+		return
+	_broadcast_room_waiting(room)
+	_broadcast_room_reopened(room)
+	_broadcast_lobby_rooms()
+
+
 func _register_session_in_room(
 	sender: int,
 	room: Node,
 	stable_id: String,
 	reconnect_token: String,
 	requested_name: String,
-	requested_color: int
+	requested_color: int,
+	requested_victories: int,
+	requested_experience: int
 ) -> bool:
 	if room == null:
 		_rpc_session_rejected.rpc_id(sender, "room_missing")
@@ -272,6 +301,8 @@ func _register_session_in_room(
 		reconnect_token,
 		requested_name,
 		requested_color,
+		requested_victories,
+		requested_experience,
 		room.server_tick
 	)
 	if session == null:
@@ -400,6 +431,9 @@ func _rpc_room_waiting(
 	_all_ready: bool,
 	_player_names: PackedStringArray,
 	_ready_flags: PackedByteArray,
+	_character_indices: PackedByteArray,
+	_victory_counts: PackedInt32Array,
+	_experience_values: PackedInt32Array,
 	_total_rounds: int
 ) -> void:
 	pass
@@ -417,6 +451,11 @@ func _rpc_room_action_failed(_reason: String) -> void:
 
 @rpc("authority", "call_remote", "reliable", 0)
 func _rpc_returned_to_lobby() -> void:
+	pass
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_room_reopened(_room_id: int) -> void:
 	pass
 
 
@@ -481,7 +520,8 @@ func _rpc_receive_standings(
 	_round_number: int,
 	_total_rounds: int,
 	_match_finished: bool,
-	_winner_player_id: int
+	_winner_player_id: int,
+	_match_id: int
 ) -> void:
 	pass
 
@@ -560,7 +600,8 @@ func _send_standings_to_peer(room: Node, peer_id: int) -> void:
 		room.round_number,
 		room.total_rounds,
 		room.match_finished,
-		winner_player_id
+		winner_player_id,
+		room.match_id
 	)
 
 
@@ -612,7 +653,7 @@ func _notify_session_suspended(room: Node, player_id: int) -> void:
 
 func _on_phase_changed(room: Node) -> void:
 	_broadcast_round_state(room)
-	if room.phase == NET.RoomPhase.COUNTDOWN:
+	if room.phase == NET.RoomPhase.COUNTDOWN and room.round_number == 0:
 		_broadcast_room_started(room)
 	_broadcast_lobby_rooms()
 
@@ -692,15 +733,23 @@ func _broadcast_lobby_rooms() -> void:
 func _broadcast_room_waiting(room: Node) -> void:
 	if not is_instance_valid(room):
 		return
+	if room.phase != NET.RoomPhase.WAITING:
+		return
 	room._refresh_host()
 	var connected_peers := multiplayer.get_peers()
 	var player_names := PackedStringArray()
 	var ready_flags := PackedByteArray()
+	var character_indices := PackedByteArray()
+	var victory_counts := PackedInt32Array()
+	var experience_values := PackedInt32Array()
 	for session: RefCounted in room.session_manager.sessions:
 		if not session.connected:
 			continue
 		player_names.append(session.display_name)
 		ready_flags.append(1 if session.ready else 0)
+		character_indices.append(session.color_index)
+		victory_counts.append(session.profile_victories)
+		experience_values.append(session.profile_experience)
 	var ready_count: int = room.ready_count()
 	var all_ready: bool = room.all_connected_ready()
 	for session: RefCounted in room.session_manager.sessions:
@@ -719,6 +768,9 @@ func _broadcast_room_waiting(room: Node) -> void:
 				all_ready,
 				player_names,
 				ready_flags,
+				character_indices,
+				victory_counts,
+				experience_values,
 				room.total_rounds
 			)
 
@@ -744,6 +796,12 @@ func _broadcast_room_started(room: Node) -> void:
 			and _peer_can_receive(session.peer_id)
 		):
 			_rpc_room_started.rpc_id(session.peer_id, room.room_id)
+
+
+func _broadcast_room_reopened(room: Node) -> void:
+	for session: RefCounted in room.session_manager.sessions:
+		if session.connected and _peer_can_receive(session.peer_id):
+			_rpc_room_reopened.rpc_id(session.peer_id, room.room_id)
 
 
 func _peer_can_receive(peer_id: int) -> bool:

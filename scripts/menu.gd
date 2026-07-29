@@ -12,6 +12,7 @@ var _main_screen: VBoxContainer
 var _lobby_screen: VBoxContainer
 var _waiting_screen: VBoxContainer
 var _name_input: LineEdit
+var _profile_summary: Label
 var _lobby_status: Label
 var _empty_rooms: Label
 var _create_button: Button
@@ -32,6 +33,10 @@ var _loading_game := false
 var _local_ready := false
 var _is_host := false
 var _total_victories := 0
+var _multiplayer_experience := 0
+var _multiplayer_matches := 0
+var _multiplayer_rounds := 0
+var _multiplayer_survivals := 0
 
 
 func _ready() -> void:
@@ -39,7 +44,15 @@ func _ready() -> void:
 	_build_interface()
 	_connect_network()
 	_load_name()
-	_show_screen(_main_screen)
+	if network.is_in_waiting_room():
+		if not network.replay_waiting_room():
+			_show_screen(_waiting_screen)
+			_waiting_detail.text = "Recuperando estado de la sala…"
+	elif network.is_in_lobby():
+		_show_screen(_lobby_screen)
+		_on_lobby_ready(NET.MAX_ROOMS, NET.MAX_PLAYERS_PER_ROOM)
+	else:
+		_show_screen(_main_screen)
 
 
 func _build_interface() -> void:
@@ -61,8 +74,8 @@ func _build_interface() -> void:
 	var panel := PanelContainer.new()
 	panel.name = "MenuPanel"
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-330.0, -285.0)
-	panel.size = Vector2(660.0, 570.0)
+	panel.position = Vector2(-390.0, -350.0)
+	panel.size = Vector2(780.0, 700.0)
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.055, 0.075, 0.11, 0.98)
 	panel_style.border_color = Color(0.18, 0.45, 0.52, 0.9)
@@ -77,7 +90,7 @@ func _build_interface() -> void:
 
 	var screens := Control.new()
 	screens.name = "Screens"
-	screens.custom_minimum_size = Vector2(588.0, 514.0)
+	screens.custom_minimum_size = Vector2(708.0, 644.0)
 	panel.add_child(screens)
 	_main_screen = _build_main_screen(screens)
 	_lobby_screen = _build_lobby_screen(screens)
@@ -91,7 +104,11 @@ func _build_main_screen(parent: Control) -> VBoxContainer:
 	var subtitle := _label("Sobrevive, empuja y supera el desastre", 19)
 	subtitle.modulate = Color(0.76, 0.86, 1.0)
 	screen.add_child(subtitle)
-	screen.add_child(_spacer(16.0))
+	_profile_summary = _label("PERFIL MULTIJUGADOR", 16)
+	_profile_summary.name = "ProfileSummary"
+	_profile_summary.modulate = Color(0.45, 0.95, 0.78)
+	screen.add_child(_profile_summary)
+	screen.add_child(_spacer(8.0))
 	var name_label := _label("NOMBRE DEL JUGADOR", 16)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	screen.add_child(name_label)
@@ -157,9 +174,11 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	var screen := _new_screen("WaitingRoom")
 	parent.add_child(screen)
 	_waiting_title = _title("SALA", 34, Color(0.35, 0.95, 0.9))
+	_waiting_title.name = "WaitingTitle"
 	screen.add_child(_waiting_title)
-	_waiting_detail = _label("Esperando jugadores…", 22)
-	_waiting_detail.custom_minimum_size.y = 86.0
+	_waiting_detail = _label("Esperando jugadores…", 18)
+	_waiting_detail.name = "WaitingPlayers"
+	_waiting_detail.custom_minimum_size.y = 160.0
 	_waiting_detail.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	screen.add_child(_waiting_detail)
 	var character_row := HBoxContainer.new()
@@ -308,24 +327,39 @@ func _on_room_waiting(
 	all_ready: bool,
 	player_names: PackedStringArray,
 	ready_flags: PackedByteArray,
+	character_indices: PackedByteArray,
+	victory_counts: PackedInt32Array,
+	experience_values: PackedInt32Array,
 	total_rounds: int
 ) -> void:
 	_show_screen(_waiting_screen)
 	_is_host = is_host
 	_local_ready = local_ready
-	_waiting_title.text = "SALA %d" % room_id
+	_waiting_title.text = (
+		"SALA %d · ERES ANFITRIÓN" % room_id
+		if is_host
+		else "SALA %d" % room_id
+	)
 	var player_states := PackedStringArray()
-	for index in mini(player_names.size(), ready_flags.size()):
+	var visible_count := mini(player_names.size(), ready_flags.size())
+	visible_count = mini(visible_count, character_indices.size())
+	visible_count = mini(visible_count, victory_counts.size())
+	visible_count = mini(visible_count, experience_values.size())
+	for index in visible_count:
+		var character_index := CHARACTER_CATALOG.sanitize_index(character_indices[index])
 		player_states.append(
-			"%s %s" % [
+			"%s  %s · %s · %d victorias · %d XP" % [
+				"✓" if ready_flags[index] != 0 else "○",
 				player_names[index],
-				"✓" if ready_flags[index] != 0 else "…",
+				CHARACTER_CATALOG.NAMES[character_index],
+				victory_counts[index],
+				experience_values[index],
 			]
 		)
 	_waiting_detail.text = "%d/5 JUGADORES · %d LISTOS\n%s" % [
 		player_count,
 		ready_count,
-		"  ·  ".join(player_states),
+		"\n".join(player_states),
 	]
 	_character_button.disabled = local_ready
 	_rounds_button.disabled = not is_host
@@ -402,7 +436,35 @@ func _load_name() -> void:
 			0,
 			int(config.get_value("player", "total_victories", 0))
 		)
+		_multiplayer_experience = maxi(
+			0,
+			int(config.get_value("player", "multiplayer_experience", 0))
+		)
+		_multiplayer_matches = maxi(
+			0,
+			int(config.get_value("player", "multiplayer_matches", 0))
+		)
+		_multiplayer_rounds = maxi(
+			0,
+			int(config.get_value("player", "multiplayer_rounds", 0))
+		)
+		_multiplayer_survivals = maxi(
+			0,
+			int(config.get_value("player", "multiplayer_survivals", 0))
+		)
+	network.profile_victories = _total_victories
+	network.profile_experience = _multiplayer_experience
 	_name_input.text = network.display_name
+	_profile_summary.text = (
+		"%d VICTORIAS · %d XP · %d PARTIDAS · %d/%d RONDAS SOBREVIVIDAS"
+		% [
+			_total_victories,
+			_multiplayer_experience,
+			_multiplayer_matches,
+			_multiplayer_survivals,
+			_multiplayer_rounds,
+		]
+	)
 	_character_button.select(network.color_index)
 	_update_character_preview()
 

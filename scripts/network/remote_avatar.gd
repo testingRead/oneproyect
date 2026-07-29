@@ -13,6 +13,8 @@ var _snapshot_elapsed := 0.0
 var _walk_phase := 0.0
 var _variant_index := 0
 var _limb_mask := ALL_LIMBS_MASK
+var _player_name := "Jugador"
+var _health := 100
 
 
 func _process(delta: float) -> void:
@@ -29,7 +31,9 @@ func _process(delta: float) -> void:
 
 
 func configure(player_name: String, player_color: int, initial_position: Vector3) -> void:
-	name_label.text = player_name
+	_player_name = player_name
+	_health = 100
+	_update_name_label()
 	target_position = initial_position
 	global_position = initial_position
 	_variant_index = HUMANOID_RIG.CATALOG.sanitize_index(player_color)
@@ -49,6 +53,20 @@ func set_snapshot(position: Vector3, velocity: Vector3, facing_yaw: float) -> vo
 func set_limb_mask(mask: int) -> void:
 	_limb_mask = mask & ALL_LIMBS_MASK
 	HUMANOID_RIG.apply_limb_mask(self, _limb_mask, _variant_index)
+
+
+func set_health(value: int) -> void:
+	_health = clampi(value, 0, 100)
+	_update_name_label()
+
+
+func _update_name_label() -> void:
+	if _player_name.is_empty():
+		name_label.text = ""
+	elif _health <= 0:
+		name_label.text = "%s · ELIMINADO" % _player_name
+	else:
+		name_label.text = "%s · %d VIDA" % [_player_name, _health]
 
 
 func get_limb_mask() -> int:

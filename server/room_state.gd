@@ -23,6 +23,7 @@ var host_player_id := 0
 var auto_start_when_ready := false
 var total_rounds := NET.DEFAULT_MATCH_ROUNDS
 var match_finished := false
+var match_id := 0
 
 var _snapshot_buffers: Dictionary = {}
 var _random := RandomNumberGenerator.new()
@@ -159,12 +160,31 @@ func start_rounds(ignore_ready := false) -> bool:
 		return false
 	round_number = 0
 	match_finished = false
+	match_id = int(_random.randi() & 0x7fffffff)
+	if match_id == 0:
+		match_id = 1
 	for session: RefCounted in session_manager.sessions:
 		session.score = 0
 		session.round_points = 0
 		session.prepare_next_round()
 	phase = NET.RoomPhase.COUNTDOWN
 	phase_end_tick = server_tick + 5 * NET.SERVER_TICK_RATE
+	phase_changed.emit()
+	return true
+
+
+func reopen_waiting_room() -> bool:
+	if phase != NET.RoomPhase.RESULT or not match_finished:
+		return false
+	phase = NET.RoomPhase.WAITING
+	round_number = 0
+	phase_end_tick = 0
+	match_finished = false
+	for session: RefCounted in session_manager.sessions:
+		session.ready = false
+		session.score = 0
+		session.round_points = 0
+		session.prepare_next_round()
 	phase_changed.emit()
 	return true
 
@@ -235,6 +255,8 @@ func _advance_phase() -> void:
 			_score_round()
 			phase = NET.RoomPhase.RESULT
 			match_finished = round_number >= total_rounds
+			if match_finished:
+				_award_match_winner_profile()
 			publish_standings = true
 			phase_end_tick = (
 				0
@@ -278,6 +300,13 @@ func _score_round() -> void:
 		previous_points = points
 		session.round_points = points
 		session.score += points
+		session.profile_experience += points
+
+
+func _award_match_winner_profile() -> void:
+	var ranked := standings()
+	if not ranked.is_empty():
+		ranked[0].profile_victories += 1
 
 
 func _prepare_next_round() -> void:

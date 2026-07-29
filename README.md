@@ -34,7 +34,7 @@ multijugador.
 
 El personaje usa una animación procedural ligera y ocho zonas de impacto. El
 daño localizado puede desprender piezas estilizadas del traje; éstas provienen
-de un pool físico fijo y su estado se sincroniza como una máscara de 7 bits. Una
+de un pool físico fijo y su estado se sincroniza como una máscara compacta. Una
 o dos piernas perdidas reducen el movimiento y sin brazos no se puede empujar.
 Reaparecer restaura el cuerpo completo.
 
@@ -70,17 +70,23 @@ red. Al cambiar de la sala al mapa, el cliente reconstruye desde el estado
 conservado todos los avatares que ya estaban conectados.
 
 Los empujones se envían como eventos fiables pequeños únicamente al jugador
-objetivo. Las victorias multijugador se guardan por separado de las rondas
-locales; por ahora son progreso local de prototipo, no una economía segura.
+objetivo. Cada ronda publica vida, puntos y clasificación; al terminar la
+partida se puede volver a la misma sala, preparar otra partida o salir al
+lobby. La sala muestra nombre, personaje, estado listo, victorias y experiencia
+de cada jugador.
 
-El VPS escucha en UDP `9999` y es autoritativo únicamente para sesión, fase,
-inputs, movimiento simplificado, daño y eventos que afectan el resultado. No
-carga mapas visuales, cámaras, luces, texturas, animaciones, partículas ni
-audio. Cada cliente conserva la física visual completa, predicción,
-reconciliación, interpolación, efectos y ajustes de calidad. La colisión
-autoritativa ligera reproduce matemáticamente los límites, la plataforma
-central, sus accesos y los pilares; así evita correcciones contradictorias sin
-cargar el escenario 3D.
+Victorias, XP, partidas, rondas y supervivencias multijugador se guardan por
+separado del modo local. Las recompensas llevan identificador de partida y
+ronda para no duplicarse al reconectar; siguen siendo progreso local de
+prototipo, no una economía segura.
+
+El VPS escucha en UDP `9999` y es autoritativo para sesión, fase, clasificación,
+puntuación, reconexión y eventos compartidos. No carga mapas visuales, cámaras,
+luces, texturas, animaciones, partículas ni audio. En esta base de prototipo,
+cada cliente resuelve la física completa de su personaje y el servidor valida
+y retransmite resultados compactos sin devolverle su propia transformación.
+Los demás clientes interpolan esos estados; por eso el movimiento local no
+depende del RTT.
 
 ## Exportación reproducible
 

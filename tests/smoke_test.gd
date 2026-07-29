@@ -69,6 +69,11 @@ func _run() -> void:
 
 	var disaster: DisasterController = game.get_node("World/DisasterController")
 	_require(
+		disaster.call("_round_state_from_network", NetConstants.RoomPhase.ACTIVE)
+		== DisasterController.RoundState.ACTIVE,
+		"Shared ACTIVE phase must never be rendered as RESULT"
+	)
+	_require(
 		disaster.get_registered_mode_ids() == [&"meteors", &"shockwave", &"flood"],
 		"Round controller must discover independent minigame modules in scene order"
 	)
@@ -362,7 +367,15 @@ func _run() -> void:
 	var remote: RemoteAvatar = REMOTE_AVATAR_SCENE.instantiate()
 	game.get_node("World/RemotePlayers").add_child(remote)
 	remote.configure("Prueba", 2, Vector3.ZERO)
-	_require(remote.get_node("Name").text == "Prueba", "Remote name must be visible")
+	_require(
+		remote.get_node("Name").text == "Prueba · 100 VIDA",
+		"Remote name and life must be visible"
+	)
+	remote.set_health(0)
+	_require(
+		remote.get_node("Name").text == "Prueba · ELIMINADO",
+		"Remote elimination must be visible without synchronizing visual state"
+	)
 	_require(
 		remote.get_node("LeftEar").visible
 		and remote.get_node("RightEar").visible

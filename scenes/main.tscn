@@ -753,6 +753,76 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(1, 0.06, 0.02, 0)
 
+[node name="MatchResult" type="ColorRect" parent="HUD"]
+visible = false
+z_index = 45
+layout_mode = 3
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -330.0
+offset_top = -245.0
+offset_right = 330.0
+offset_bottom = 245.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.025, 0.04, 0.065, 0.96)
+
+[node name="Content" type="VBoxContainer" parent="HUD/MatchResult"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 30.0
+offset_top = 24.0
+offset_right = -30.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="HUD/MatchResult/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.78, 0.26, 1)
+theme_override_font_sizes/font_size = 32
+text = "RESULTADO FINAL"
+horizontal_alignment = 1
+
+[node name="Standings" type="Label" parent="HUD/MatchResult/Content"]
+custom_minimum_size = Vector2(0, 220)
+layout_mode = 2
+theme_override_font_sizes/font_size = 19
+text = "Clasificación"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Reward" type="Label" parent="HUD/MatchResult/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.45, 0.95, 0.78, 1)
+theme_override_font_sizes/font_size = 18
+text = "Progreso guardado"
+horizontal_alignment = 1
+
+[node name="Actions" type="HBoxContainer" parent="HUD/MatchResult/Content"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ReturnRoom" type="Button" parent="HUD/MatchResult/Content/Actions"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 19
+text = "VOLVER A LA SALA"
+
+[node name="Exit" type="Button" parent="HUD/MatchResult/Content/Actions"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 19
+text = "SALIR"
+
 [node name="PausePanel" type="ColorRect" parent="HUD"]
 visible = false
 z_index = 50

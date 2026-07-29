@@ -46,7 +46,8 @@ func _setup() -> void:
 		_position: Vector3,
 		_velocity: Vector3,
 		_yaw: float,
-		_body_mask: int
+		_body_mask: int,
+		_health: int
 	) -> void:
 		saw_remote_state = true
 	)

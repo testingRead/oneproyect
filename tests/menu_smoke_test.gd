@@ -27,7 +27,32 @@ func _run() -> void:
 			rounds.get_item_id(index) == NET.MATCH_ROUND_OPTIONS[index],
 			"Match length option IDs must match shared rules"
 		)
-	print("MENU_SMOKE_OK round_options=%d default=%d" % [
+	menu.call(
+		"_on_room_waiting",
+		2,
+		2,
+		true,
+		2,
+		true,
+		true,
+		PackedStringArray(["Ana", "Beto"]),
+		PackedByteArray([1, 1]),
+		PackedByteArray([2, 3]),
+		PackedInt32Array([4, 7]),
+		PackedInt32Array([21, 34]),
+		3
+	)
+	var waiting_players := menu.find_child("WaitingPlayers", true, false) as Label
+	_require(
+		waiting_players.text.contains("Ana · LINCE · 4 victorias · 21 XP")
+		and waiting_players.text.contains("Beto · TÉCNICO · 7 victorias · 34 XP"),
+		"Waiting room must show names, characters, ready state, wins and XP"
+	)
+	_require(
+		menu.find_child("WaitingRoom", true, false).visible,
+		"Waiting room payload must switch to the room screen"
+	)
+	print("MENU_SMOKE_OK round_options=%d selected=%d" % [
 		rounds.item_count,
 		rounds.get_item_id(rounds.selected),
 	])

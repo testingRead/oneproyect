@@ -26,8 +26,9 @@ rutas visuales o del cliente.
 - canal 1 `unreliable_ordered`: estados propietarios y snapshots;
 - canal 2 fiable: eventos críticos.
 
-Un estado propietario ocupa 22 bytes. El snapshot ocupa 20 bytes más 24 por jugador
-conectado. Para dos jugadores son 68 bytes, no 140 con tres slots vacíos.
+Un estado propietario ocupa 22 bytes. El snapshot ocupa 24 bytes más 24 por
+jugador remoto. Para dos jugadores cada destinatario recibe 48 bytes, sin slots
+vacíos; el snapshot interno de dos jugadores usado por pruebas ocupa 72 bytes.
 
 ## Reconexión
 
@@ -38,6 +39,12 @@ del proceso, cada una con un máximo de cinco sesiones. Sólo el anfitrión pued
 iniciar, se requieren al menos dos jugadores y todos deben confirmar `ready`;
 si éste se desconecta, el rol pasa al siguiente jugador conectado. El servidor
 conserva sólo el índice lógico de personaje, nunca su modelo o material.
+
+Al finalizar la cantidad elegida de rondas, la sala permanece en resultado
+hasta que un jugador pide volver. Entonces se reutiliza la misma sala, se
+limpian puntuación y estados `ready`, y se conservan identidad y progreso de
+sesión. La RPC de sala incluye sólo índices y cifras de perfil; nunca recursos
+visuales.
 
 ## Medición
 

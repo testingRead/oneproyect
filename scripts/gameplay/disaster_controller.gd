@@ -1,6 +1,8 @@
 class_name DisasterController
 extends Node3D
 
+const NET := preload("res://shared/net_constants.gd")
+
 signal state_changed(title: String, detail: String)
 signal clock_changed(seconds_left: int)
 signal round_survived(round_number: int)
@@ -156,7 +158,10 @@ func apply_network_state(
 	)
 	var previous_state := state
 	var previous_round := round_number
-	state = clampi(network_state, RoundState.COUNTDOWN, RoundState.RESULT) as RoundState
+	var mapped_state := _round_state_from_network(network_state)
+	if mapped_state < 0:
+		return
+	state = mapped_state as RoundState
 	round_number = maxi(0, network_round)
 	_time_left = maxf(0.0, network_time_left)
 	_last_clock_second = -1
@@ -184,6 +189,19 @@ func apply_network_state(
 			state_changed.emit("RONDA TERMINADA", "Calculando clasificación…")
 			if previous_state != RoundState.RESULT or previous_round != round_number:
 				round_survived.emit(round_number)
+
+
+func _round_state_from_network(network_state: int) -> int:
+	match network_state:
+		NET.RoomPhase.COUNTDOWN:
+			return RoundState.COUNTDOWN
+		NET.RoomPhase.ACTIVE:
+			return RoundState.ACTIVE
+		NET.RoomPhase.RESULT:
+			return RoundState.RESULT
+		_:
+			push_warning("Ignoring non-gameplay room phase: %d" % network_state)
+			return -1
 
 
 func sync_as_host() -> void:

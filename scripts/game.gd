@@ -46,6 +46,12 @@ const FPS_LIMITS := [30, 45, 60]
 @onready var pause_title: Label = $HUD/PausePanel/Center/Title
 @onready var pause_restart: Button = $HUD/PausePanel/Center/Restart
 @onready var touch_debug: Label = $HUD/TouchDebug
+@onready var match_result: ColorRect = $HUD/MatchResult
+@onready var result_title: Label = $HUD/MatchResult/Content/Title
+@onready var result_standings: Label = $HUD/MatchResult/Content/Standings
+@onready var result_reward: Label = $HUD/MatchResult/Content/Reward
+@onready var return_room_button: Button = $HUD/MatchResult/Content/Actions/ReturnRoom
+@onready var exit_match_button: Button = $HUD/MatchResult/Content/Actions/Exit
 
 var _stats_elapsed := 0.0
 var _state_send_elapsed := 0.0
@@ -58,6 +64,13 @@ var _first_person_enabled := false
 var _quality_level := 0
 var _fps_limit_index := 2
 var _total_victories := 0
+var _multiplayer_experience := 0
+var _multiplayer_matches := 0
+var _multiplayer_rounds := 0
+var _multiplayer_survivals := 0
+var _last_reward_match_id := 0
+var _last_reward_round := 0
+var _last_completed_match_id := 0
 var _install_id := ""
 var _defeated_this_round := false
 var _participating_round := false
@@ -115,6 +128,9 @@ func _ready() -> void:
 	network.simulation_host_changed.connect(_on_simulation_host_changed)
 	network.push_received.connect(_on_push_received)
 	network.standings_received.connect(_on_standings_received)
+	network.room_reopened.connect(_on_room_reopened)
+	return_room_button.pressed.connect(_return_to_same_room)
+	exit_match_button.pressed.connect(_exit_match_to_lobby)
 	_load_profile()
 	_on_health_changed(100, 100)
 	if network.is_online():
@@ -285,6 +301,7 @@ func _on_round_started(_round_number: int) -> void:
 	_defeated_this_round = false
 	_participating_round = true
 	_match_finished = false
+	match_result.visible = false
 	player.reset_to_spawn()
 	player.set_controls_enabled(true)
 	$HUD/Joystick.set_input_enabled(true)
@@ -421,7 +438,8 @@ func _on_standings_received(
 	round_number: int,
 	total_rounds: int,
 	match_finished: bool,
-	winner_player_id: int
+	winner_player_id: int,
+	match_id: int
 ) -> void:
 	_match_total_rounds = total_rounds
 	_match_finished = match_finished
@@ -445,6 +463,30 @@ func _on_standings_received(
 			]
 		)
 	score_label.text = "\n".join(rows)
+	var local_index := player_ids.find(network.get_local_player_id())
+	var local_round_points := (
+		int(round_points[local_index])
+		if local_index >= 0 and local_index < round_points.size()
+		else 0
+	)
+	var local_survived := (
+		local_index >= 0
+		and local_index < health_values.size()
+		and health_values[local_index] > 0
+	)
+	if (
+		match_id > 0
+		and (
+			match_id != _last_reward_match_id
+			or round_number > _last_reward_round
+		)
+	):
+		_last_reward_match_id = match_id
+		_last_reward_round = round_number
+		_multiplayer_experience += local_round_points
+		_multiplayer_rounds += 1
+		_multiplayer_survivals += int(local_survived)
+		_save_profile()
 	if match_finished:
 		player.set_controls_enabled(false)
 		$HUD/Joystick.set_input_enabled(false)
@@ -458,13 +500,24 @@ func _on_standings_received(
 		)
 		round_title.text = "GANADOR: %s" % winner_name
 		round_detail.text = "Clasificación final tras %d rondas" % total_rounds
-		if (
-			winner_player_id == network.get_local_player_id()
-			and not _match_victory_awarded
-		):
-			_match_victory_awarded = true
-			_total_victories += 1
-			_save_profile()
+		if match_id > 0 and match_id != _last_completed_match_id:
+			_last_completed_match_id = match_id
+			_multiplayer_matches += 1
+			if winner_player_id == network.get_local_player_id():
+				_match_victory_awarded = true
+				_total_victories += 1
+		network.profile_victories = _total_victories
+		network.profile_experience = _multiplayer_experience
+		_save_profile()
+		result_title.text = "GANADOR: %s" % winner_name
+		result_standings.text = "\n".join(rows)
+		result_reward.text = (
+			"+%d XP esta ronda · %d XP total · %d victorias"
+			% [local_round_points, _multiplayer_experience, _total_victories]
+		)
+		return_room_button.disabled = false
+		exit_match_button.disabled = false
+		match_result.visible = true
 
 
 func _on_remote_player_joined(peer_id: int, player_name: String, player_color: int) -> void:
@@ -491,12 +544,48 @@ func _on_remote_snapshot(
 	position: Vector3,
 	velocity: Vector3,
 	facing_yaw: float,
-	limb_mask: int
+	limb_mask: int,
+	health: int
 ) -> void:
 	var avatar: RemoteAvatar = _remote_avatars.get(peer_id)
 	if avatar != null:
 		avatar.set_snapshot(position, velocity, facing_yaw)
 		avatar.set_limb_mask(limb_mask)
+		avatar.set_health(health)
+
+
+func _return_to_same_room() -> void:
+	if not network.is_online():
+		return
+	return_room_button.disabled = true
+	exit_match_button.disabled = true
+	result_reward.text = "Volviendo a la sala…"
+	network.reopen_room()
+
+
+func _on_room_reopened(_room_id: int) -> void:
+	_save_profile()
+	get_tree().paused = false
+	get_tree().change_scene_to_file(MENU_SCENE)
+
+
+func _exit_match_to_lobby() -> void:
+	if _returning_to_menu:
+		return
+	_returning_to_menu = true
+	_save_profile()
+	return_room_button.disabled = true
+	exit_match_button.disabled = true
+	network.returned_to_lobby.connect(_finish_leave_to_lobby, CONNECT_ONE_SHOT)
+	network.leave_room()
+
+
+func _finish_leave_to_lobby() -> void:
+	if not _returning_to_menu:
+		return
+	_returning_to_menu = false
+	get_tree().paused = false
+	get_tree().change_scene_to_file(MENU_SCENE)
 
 
 func _on_simulation_host_changed(peer_id: int) -> void:
@@ -519,6 +608,32 @@ func _load_profile() -> void:
 			network.display_name = saved_name
 		_best_rounds = maxi(0, int(config.get_value("player", "best_rounds", 0)))
 		_total_victories = maxi(0, int(config.get_value("player", "total_victories", 0)))
+		_multiplayer_experience = maxi(
+			0,
+			int(config.get_value("player", "multiplayer_experience", 0))
+		)
+		_multiplayer_matches = maxi(
+			0,
+			int(config.get_value("player", "multiplayer_matches", 0))
+		)
+		_multiplayer_rounds = maxi(
+			0,
+			int(config.get_value("player", "multiplayer_rounds", 0))
+		)
+		_multiplayer_survivals = maxi(
+			0,
+			int(config.get_value("player", "multiplayer_survivals", 0))
+		)
+		_last_reward_match_id = int(
+			config.get_value("player", "last_reward_match_id", 0)
+		)
+		_last_reward_round = maxi(
+			0,
+			int(config.get_value("player", "last_reward_round", 0))
+		)
+		_last_completed_match_id = int(
+			config.get_value("player", "last_completed_match_id", 0)
+		)
 		_install_id = str(config.get_value("player", "install_id", ""))
 		network.color_index = clampi(int(config.get_value("player", "character", 0)), 0, 4)
 		sounds.set_enabled(bool(config.get_value("settings", "sound", true)))
@@ -538,6 +653,8 @@ func _load_profile() -> void:
 			_fps_limit_index = 2
 	if _install_id.is_empty():
 		_install_id = Crypto.new().generate_random_bytes(16).hex_encode()
+	network.profile_victories = _total_victories
+	network.profile_experience = _multiplayer_experience
 	name_input.text = network.display_name
 	sound_toggle.button_pressed = sounds.is_enabled()
 	vibration_toggle.button_pressed = _vibration_enabled
@@ -558,6 +675,13 @@ func _save_profile() -> void:
 	config.set_value("player", "name", network.display_name)
 	config.set_value("player", "best_rounds", _best_rounds)
 	config.set_value("player", "total_victories", _total_victories)
+	config.set_value("player", "multiplayer_experience", _multiplayer_experience)
+	config.set_value("player", "multiplayer_matches", _multiplayer_matches)
+	config.set_value("player", "multiplayer_rounds", _multiplayer_rounds)
+	config.set_value("player", "multiplayer_survivals", _multiplayer_survivals)
+	config.set_value("player", "last_reward_match_id", _last_reward_match_id)
+	config.set_value("player", "last_reward_round", _last_reward_round)
+	config.set_value("player", "last_completed_match_id", _last_completed_match_id)
 	config.set_value("player", "install_id", _install_id)
 	config.set_value("player", "character", network.color_index)
 	config.set_value("settings", "sound", sounds.is_enabled())

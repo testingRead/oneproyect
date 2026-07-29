@@ -65,7 +65,8 @@ func _setup() -> void:
 		position: Vector3,
 		_velocity: Vector3,
 		_yaw: float,
-		body_mask: int
+		body_mask: int,
+		_health: int
 	) -> void:
 		if body_mask == 0b111111111111 and position.x > 0.45:
 			saw_remote_movement = true
