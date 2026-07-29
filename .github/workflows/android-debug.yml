@@ -263,6 +263,55 @@ jobs:
           fi
           echo "$metrics_line"
 
+      - name: Verify real player movement reconciliation
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT="$HOME/.cache/oneproyect-godot/godot"
+          TEST_DIR="$RUNNER_TEMP/oneproyect-real-movement"
+          mkdir -p "$TEST_DIR"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" -- \
+            --server --port=19995 > "$TEST_DIR/server.log" 2>&1 &
+          server_pid=$!
+          cleanup_movement() {
+            kill "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup_movement EXIT
+          for attempt in {1..40}; do
+            if grep -q "ONEPROYECT_SERVER_READY udp=19995" "$TEST_DIR/server.log"; then
+              break
+            fi
+            sleep 0.25
+          done
+          grep -q "ONEPROYECT_SERVER_READY udp=19995" "$TEST_DIR/server.log"
+
+          timeout 20 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/network_load_probe.gd -- \
+            --client=5 --port=19995 > "$TEST_DIR/observer.log" 2>&1 &
+          observer_pid=$!
+          sleep 0.5
+          set +e
+          timeout 20 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/real_movement_probe.gd -- \
+            --port=19995 > "$TEST_DIR/movement.log" 2>&1
+          movement_code=$?
+          wait "$observer_pid"
+          observer_code=$?
+          set -e
+          if [[ "$movement_code" -ne 0 || "$observer_code" -ne 0 ]]; then
+            cat "$TEST_DIR/server.log" "$TEST_DIR/observer.log" \
+              "$TEST_DIR/movement.log"
+            exit 1
+          fi
+          grep -q "REAL_MOVEMENT_RESULT" "$TEST_DIR/movement.log"
+          grep -q "hard=0 soft=0 correction_back_m=0.000" \
+            "$TEST_DIR/movement.log"
+          if grep -qE "SCRIPT ERROR|REAL_MOVEMENT_FAIL|NETWORK_LOAD_FAIL|ERROR:" \
+            "$TEST_DIR"/*.log; then
+            cat "$TEST_DIR"/*.log
+            exit 1
+          fi
+
       - name: Export and boot stripped dedicated server
         shell: bash
         run: |

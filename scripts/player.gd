@@ -18,6 +18,15 @@ signal health_changed(current: int, maximum: int)
 signal damaged(amount: int, current: int)
 signal defeated
 signal push_requested
+signal network_correction_applied(
+	hard: bool,
+	horizontal_error: float,
+	local_position: Vector3,
+	authoritative_position: Vector3,
+	local_velocity: Vector3,
+	authoritative_velocity: Vector3,
+	move: Vector2
+)
 signal limb_detached(
 	part_transform: Transform3D,
 	part_scale: Vector3,
@@ -85,6 +94,10 @@ var _jump_requested := false
 var _network_jump_event := false
 var _network_move_world := Vector2.ZERO
 var _network_idle_elapsed := NETWORK_SETTLE_DELAY
+var _network_hard_correction_count := 0
+var _network_soft_correction_count := 0
+var _network_backward_correction_distance := 0.0
+var _network_max_horizontal_error := 0.0
 var _spawn_transform: Transform3D
 var _health := MAX_HEALTH
 var _invulnerability := 0.0
@@ -266,6 +279,10 @@ func apply_authoritative_state(
 		position.z - global_position.z
 	)
 	var horizontal_distance := horizontal_error.length()
+	_network_max_horizontal_error = maxf(
+		_network_max_horizontal_error,
+		horizontal_distance
+	)
 	var vertical_error := position.y - global_position.y
 	var authoritative_horizontal_speed := Vector2(
 		authoritative_velocity.x,
@@ -275,11 +292,22 @@ func apply_authoritative_state(
 		_network_idle_elapsed >= NETWORK_SETTLE_DELAY
 		and authoritative_horizontal_speed <= NETWORK_SETTLED_SPEED
 	)
+	var position_before_correction := global_position
 	if (
 		horizontal_distance > NETWORK_HARD_SNAP_DISTANCE
 		or absf(vertical_error) > NETWORK_HARD_SNAP_HEIGHT
 	):
 		global_position = position
+		_network_hard_correction_count += 1
+		network_correction_applied.emit(
+			true,
+			horizontal_distance,
+			position_before_correction,
+			position,
+			velocity,
+			authoritative_velocity,
+			_network_move_world
+		)
 	elif simulation_settled:
 		# The local CharacterBody runs at 60 Hz while the compact authoritative
 		# simulation runs at 20 Hz. Small differences are expected and must not
@@ -303,6 +331,25 @@ func apply_authoritative_state(
 			else 0.0
 		)
 		global_position.y += vertical_error * vertical_correction
+		if horizontal_correction > 0.0 or vertical_correction > 0.0:
+			_network_soft_correction_count += 1
+			network_correction_applied.emit(
+				false,
+				horizontal_distance,
+				position_before_correction,
+				position,
+				velocity,
+				authoritative_velocity,
+				_network_move_world
+			)
+	var correction := Vector2(
+		global_position.x - position_before_correction.x,
+		global_position.z - position_before_correction.z
+	)
+	if _network_move_world.length_squared() > 0.01:
+		var correction_along_move := correction.dot(_network_move_world.normalized())
+		if correction_along_move < 0.0:
+			_network_backward_correction_distance -= correction_along_move
 	var velocity_error := Vector2(
 		velocity.x - authoritative_velocity.x,
 		velocity.z - authoritative_velocity.z
@@ -325,6 +372,29 @@ func apply_authoritative_state(
 				not _is_limb_attached(limb)
 			)
 		HUMANOID_RIG.apply_limb_mask(visual, _limb_mask, _character_variant_index)
+
+
+func reset_network_correction_diagnostics() -> void:
+	_network_hard_correction_count = 0
+	_network_soft_correction_count = 0
+	_network_backward_correction_distance = 0.0
+	_network_max_horizontal_error = 0.0
+
+
+func get_network_hard_correction_count() -> int:
+	return _network_hard_correction_count
+
+
+func get_network_soft_correction_count() -> int:
+	return _network_soft_correction_count
+
+
+func get_network_backward_correction_distance() -> float:
+	return _network_backward_correction_distance
+
+
+func get_network_max_horizontal_error() -> float:
+	return _network_max_horizontal_error
 
 
 func get_limb_mask() -> int:

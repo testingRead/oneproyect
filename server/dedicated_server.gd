@@ -33,8 +33,8 @@ func _ready() -> void:
 		server_port,
 		NET.MAX_SERVER_CONNECTIONS,
 		NET.ENET_CHANNEL_COUNT,
-		262144,
-		262144
+		0,
+		0
 	)
 	if error != OK:
 		push_error("Dedicated server startup failed: %s" % error)
@@ -493,6 +493,15 @@ func _broadcast_round_state_to_peer(room: Node, peer_id: int) -> void:
 
 
 func _on_peer_connected(peer_id: int) -> void:
+	var transport := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	var connected_peer: ENetPacketPeer = transport.get_peer(peer_id)
+	if connected_peer != null:
+		connected_peer.throttle_configure(
+			1000,
+			ENetPacketPeer.PACKET_THROTTLE_SCALE,
+			1
+		)
+		connected_peer.ping_interval(250)
 	print("PEER_CONNECTED peer=%d" % peer_id)
 
 

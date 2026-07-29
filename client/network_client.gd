@@ -609,8 +609,8 @@ func _start_client_peer(address: String) -> Error:
 		address,
 		server_port,
 		NET.ENET_CHANNEL_COUNT,
-		131072,
-		131072
+		0,
+		0
 	)
 	if error != OK:
 		status_changed.emit("No se pudo iniciar ENet", false)
@@ -621,6 +621,15 @@ func _start_client_peer(address: String) -> Error:
 
 
 func _on_connected_to_server() -> void:
+	var transport := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	var server_peer: ENetPacketPeer = transport.get_peer(1)
+	if server_peer != null:
+		server_peer.throttle_configure(
+			1000,
+			ENetPacketPeer.PACKET_THROTTLE_SCALE,
+			1
+		)
+		server_peer.ping_interval(250)
 	_online = true
 	_session_accepted = false
 	if _room_id > 0 and not _reconnect_token.is_empty():
