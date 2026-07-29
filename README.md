@@ -22,3 +22,6 @@ binarios y export templates oficiales. Genera APK separados:
 - `oneproyect-debug-arm32.apk`: teléfonos antiguos de 32 bits.
 
 Se ejecuta en pushes a `main`/`agent/graybox` y manualmente desde GitHub Actions.
+Las builds de prueba usan una firma estable guardada únicamente en GitHub
+Actions Secrets, por lo que las siguientes versiones podrán instalarse como
+actualizaciones sin cambiar la identidad de la aplicación.

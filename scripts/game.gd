@@ -5,6 +5,7 @@ extends Node3D
 @onready var status_label: Label = $HUD/Status
 @onready var pause_panel: Control = $HUD/PausePanel
 @onready var pause_button: Button = $HUD/TopBar/Pause
+@onready var touch_debug: Label = $HUD/TouchDebug
 
 var _completed := false
 var _stats_elapsed := 0.0
@@ -12,7 +13,7 @@ var _stats_elapsed := 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	$HUD/Joystick.value_changed.connect(player.set_touch_move)
+	$HUD/Joystick.value_changed.connect(_on_touch_move)
 	$HUD/LookPad.look_delta.connect(player.add_touch_look)
 	$HUD/Jump.action_pressed.connect(player.request_jump)
 	$HUD/TopBar/Pause.pressed.connect(toggle_pause)
@@ -75,3 +76,8 @@ func _on_goal_body_entered(body: Node3D) -> void:
 	$HUD/PausePanel/Center/Resume.visible = false
 	if not OS.has_feature("mobile"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _on_touch_move(value: Vector2) -> void:
+	player.set_touch_move(value)
+	touch_debug.text = "JOY  %.2f  %.2f" % [value.x, value.y]

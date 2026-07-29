@@ -83,8 +83,32 @@ jobs:
           set -euo pipefail
           "$HOME/.cache/oneproyect-godot/godot" --headless --editor --path "$GITHUB_WORKSPACE" --quit
 
+      - name: Prepare stable debug signing
+        shell: bash
+        env:
+          SIGNING_STORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          test -n "$SIGNING_STORE_BASE64"
+          test -n "$SIGNING_STORE_PASSWORD"
+          test -n "$SIGNING_KEY_PASSWORD"
+          test -n "$SIGNING_KEY_ALIAS"
+          printf '%s' "$SIGNING_STORE_BASE64" | base64 --decode > "$RUNNER_TEMP/oneproyect-signing.jks"
+          chmod 600 "$RUNNER_TEMP/oneproyect-signing.jks"
+          keytool -list \
+            -keystore "$RUNNER_TEMP/oneproyect-signing.jks" \
+            -storepass "$SIGNING_STORE_PASSWORD" \
+            -alias "$SIGNING_KEY_ALIAS" > /dev/null
+
       - name: Export Android debug APKs
         shell: bash
+        env:
+          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ runner.temp }}/oneproyect-signing.jks
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: ${{ secrets.ANDROID_KEY_ALIAS }}
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           mkdir -p build/android
@@ -95,6 +119,10 @@ jobs:
           test -s build/android/oneproyect-debug-arm64.apk
           test -s build/android/oneproyect-debug-arm32.apk
           ls -lh build/android/oneproyect-debug-arm64.apk build/android/oneproyect-debug-arm32.apk
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose --print-certs \
+            build/android/oneproyect-debug-arm64.apk
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose --print-certs \
+            build/android/oneproyect-debug-arm32.apk
           (
             cd build/android
             sha256sum oneproyect-debug-arm64.apk > oneproyect-debug-arm64.apk.sha256
