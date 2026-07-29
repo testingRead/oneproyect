@@ -237,11 +237,16 @@ jobs:
           GODOT="$HOME/.cache/oneproyect-godot/godot"
           SERVER_BIN="$GITHUB_WORKSPACE/build/server/oneproyect-server"
           SERVER_PCK="$GITHUB_WORKSPACE/build/server/oneproyect-server.pck"
+          SERVER_TEMPLATE="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}/linux_release.x86_64"
           SERVER_LOG="$RUNNER_TEMP/oneproyect-exported-server.log"
           mkdir -p "$(dirname "$SERVER_BIN")"
-          phase="export_release"
+          phase="export_pack"
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
-            --export-release "Linux Dedicated Server" "$SERVER_BIN"
+            --export-pack "Linux Dedicated Server" "$SERVER_PCK"
+          phase="install_template"
+          test -s "$SERVER_TEMPLATE"
+          cp "$SERVER_TEMPLATE" "$SERVER_BIN"
+          chmod 755 "$SERVER_BIN"
           phase="validate_files"
           test -s "$SERVER_BIN"
           test -x "$SERVER_BIN"
@@ -255,7 +260,10 @@ jobs:
             false
           fi
           phase="start_exported_server"
-          "$SERVER_BIN" --headless -- --server --port=19998 > "$SERVER_LOG" 2>&1 &
+          (
+            cd "$(dirname "$SERVER_BIN")"
+            exec "./$(basename "$SERVER_BIN")" --headless -- --server --port=19998
+          ) > "$SERVER_LOG" 2>&1 &
           server_pid=$!
           cleanup_server_export() {
             kill "$server_pid" 2>/dev/null || true
