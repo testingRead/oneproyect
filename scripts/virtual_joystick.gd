@@ -11,6 +11,7 @@ var _center := Vector2.ZERO
 var _knob := Vector2.ZERO
 var _value := Vector2.ZERO
 var _touch_origin := Vector2.ZERO
+var _input_enabled := true
 
 
 func _ready() -> void:
@@ -21,6 +22,8 @@ func _ready() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if not _input_enabled:
+		return
 	if event is InputEventScreenTouch:
 		if event.pressed and _finger_id == -1 and _is_in_activation_zone(event.position):
 			_finger_id = event.index
@@ -101,4 +104,10 @@ func _viewport_to_local(viewport_position: Vector2) -> Vector2:
 
 func _is_in_activation_zone(viewport_position: Vector2) -> bool:
 	var viewport_size := get_viewport().get_visible_rect().size
-	return viewport_position.x <= viewport_size.x * 0.5 and viewport_position.y >= viewport_size.y * 0.35
+	return viewport_position.x <= viewport_size.x * 0.5
+
+
+func set_input_enabled(enabled: bool) -> void:
+	_input_enabled = enabled
+	if not enabled and _finger_id != -1:
+		_release()

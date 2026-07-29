@@ -4,6 +4,7 @@ extends Node3D
 signal state_changed(title: String, detail: String)
 signal clock_changed(seconds_left: int)
 signal round_survived(round_number: int)
+signal round_started(round_number: int)
 signal meteor_warning
 signal meteor_impact
 signal shockwave_warning
@@ -18,11 +19,14 @@ enum RoundState {
 enum DisasterMode {
 	METEORS,
 	SHOCKWAVES,
+	FLOOD,
 }
 
 const METEOR_SCENE := preload("res://scenes/components/meteor.tscn")
 const SHOCKWAVE_SCENE := preload("res://scenes/components/shockwave_ring.tscn")
+const FLOOD_SCENE := preload("res://scenes/components/flood_hazard.tscn")
 const POOL_SIZE := 8
+const FLOOD_DURATION := 36.0
 
 @export var active_duration := 42.0
 @export var countdown_duration := 5.0
@@ -40,6 +44,7 @@ var _last_clock_second := -1
 var _network_sync_elapsed := 0.0
 var _pool: Array[MeteorSlot] = []
 var _shockwave: ShockwaveRing
+var _flood: Node3D
 var _random := RandomNumberGenerator.new()
 
 
@@ -56,6 +61,8 @@ func _ready() -> void:
 	add_child(_shockwave)
 	_shockwave.warning_started.connect(shockwave_warning.emit)
 	_shockwave.wave_started.connect(shockwave_started.emit)
+	_flood = FLOOD_SCENE.instantiate()
+	add_child(_flood)
 	_begin_countdown()
 
 
@@ -65,6 +72,9 @@ func _physics_process(delta: float) -> void:
 	if displayed_second != _last_clock_second:
 		_last_clock_second = displayed_second
 		clock_changed.emit(displayed_second)
+
+	if state == RoundState.ACTIVE and current_mode == DisasterMode.FLOOD:
+		_flood.sync_active(_time_left, FLOOD_DURATION)
 
 	if network.is_online() and not network.is_simulation_host():
 		return
@@ -81,15 +91,20 @@ func _physics_process(delta: float) -> void:
 		RoundState.ACTIVE:
 			_spawn_cooldown -= delta
 			if _spawn_cooldown <= 0.0:
-				if current_mode == DisasterMode.METEORS:
-					_spawn_meteor()
-				else:
-					_spawn_shockwave()
+				match current_mode:
+					DisasterMode.METEORS:
+						_spawn_meteor()
+					DisasterMode.SHOCKWAVES:
+						_spawn_shockwave()
+					DisasterMode.FLOOD:
+						pass
 				var intensity: float = 1.0 - clampf(_time_left / active_duration, 0.0, 1.0)
 				if current_mode == DisasterMode.METEORS:
 					_spawn_cooldown = lerpf(1.45, 0.72, intensity)
-				else:
+				elif current_mode == DisasterMode.SHOCKWAVES:
 					_spawn_cooldown = lerpf(4.5, 3.25, intensity)
+				else:
+					_spawn_cooldown = 1.0
 			if _time_left <= 0.0:
 				_begin_result()
 		RoundState.RESULT:
@@ -101,6 +116,7 @@ func restart_cycle() -> void:
 	for meteor in _pool:
 		meteor.reset_slot()
 	_shockwave.reset_ring()
+	_flood.stop()
 	round_number = 0
 	_begin_countdown()
 
@@ -110,10 +126,7 @@ func _begin_countdown() -> void:
 	_time_left = countdown_duration
 	_last_clock_second = -1
 	var next_mode := _mode_for_round(round_number + 1)
-	if next_mode == DisasterMode.METEORS:
-		state_changed.emit("PRÓXIMO: METEORITOS", "Busca refugio y mira las marcas del suelo")
-	else:
-		state_changed.emit("PRÓXIMO: PULSO SÍSMICO", "Sube al centro o salta por encima del anillo")
+	_emit_mode_text(next_mode, true)
 	_sync_round_state()
 
 
@@ -121,13 +134,12 @@ func _begin_active_round() -> void:
 	state = RoundState.ACTIVE
 	round_number += 1
 	current_mode = _mode_for_round(round_number)
-	_time_left = active_duration if current_mode == DisasterMode.METEORS else 34.0
+	_time_left = _duration_for_mode(current_mode)
 	_spawn_cooldown = 0.25
 	_last_clock_second = -1
-	if current_mode == DisasterMode.METEORS:
-		state_changed.emit("LLUVIA DE METEORITOS", "¡Usa los refugios y sobrevive!")
-	else:
-		state_changed.emit("PULSO SÍSMICO", "¡Salta el anillo celeste o busca altura!")
+	_flood.stop()
+	_emit_mode_text(current_mode, false)
+	round_started.emit(round_number)
 	_sync_round_state()
 
 
@@ -138,6 +150,7 @@ func _begin_result() -> void:
 	for meteor in _pool:
 		meteor.reset_slot()
 	_shockwave.reset_ring()
+	_flood.stop()
 	state_changed.emit("¡SOBREVIVISTE!", "Ronda %d completada" % round_number)
 	round_survived.emit(round_number)
 	_sync_round_state()
@@ -181,6 +194,8 @@ func spawn_network_shockwave() -> void:
 func apply_network_state(network_state: int, network_round: int, network_time_left: float) -> void:
 	if not network.is_online() or network.is_simulation_host():
 		return
+	var previous_state := state
+	var previous_round := round_number
 	state = clampi(network_state, RoundState.COUNTDOWN, RoundState.RESULT) as RoundState
 	round_number = maxi(0, network_round)
 	current_mode = _mode_for_round(maxi(1, round_number))
@@ -189,20 +204,22 @@ func apply_network_state(network_state: int, network_round: int, network_time_le
 	match state:
 		RoundState.COUNTDOWN:
 			var next_mode := _mode_for_round(round_number + 1)
-			if next_mode == DisasterMode.METEORS:
-				state_changed.emit("PRÓXIMO: METEORITOS", "Busca refugio y mira las marcas del suelo")
-			else:
-				state_changed.emit("PRÓXIMO: PULSO SÍSMICO", "Sube al centro o salta por encima del anillo")
+			_flood.stop()
+			_emit_mode_text(next_mode, true)
 		RoundState.ACTIVE:
-			if current_mode == DisasterMode.METEORS:
-				state_changed.emit("LLUVIA DE METEORITOS", "¡Usa los refugios y sobrevive!")
-			else:
-				state_changed.emit("PULSO SÍSMICO", "¡Salta el anillo celeste o busca altura!")
+			if current_mode != DisasterMode.FLOOD:
+				_flood.stop()
+			_emit_mode_text(current_mode, false)
+			if previous_state != RoundState.ACTIVE or previous_round != round_number:
+				round_started.emit(round_number)
 		RoundState.RESULT:
 			for meteor in _pool:
 				meteor.reset_slot()
 			_shockwave.reset_ring()
+			_flood.stop()
 			state_changed.emit("¡SOBREVIVISTE!", "Ronda %d completada" % round_number)
+			if previous_state != RoundState.RESULT or previous_round != round_number:
+				round_survived.emit(round_number)
 
 
 func sync_as_host() -> void:
@@ -215,7 +232,45 @@ func _sync_round_state() -> void:
 
 
 func _mode_for_round(number: int) -> DisasterMode:
-	return DisasterMode.METEORS if number % 2 == 1 else DisasterMode.SHOCKWAVES
+	match (maxi(1, number) - 1) % 3:
+		0:
+			return DisasterMode.METEORS
+		1:
+			return DisasterMode.SHOCKWAVES
+		_:
+			return DisasterMode.FLOOD
+
+
+func _duration_for_mode(mode: DisasterMode) -> float:
+	match mode:
+		DisasterMode.METEORS:
+			return active_duration
+		DisasterMode.SHOCKWAVES:
+			return 34.0
+		_:
+			return FLOOD_DURATION
+
+
+func _emit_mode_text(mode: DisasterMode, upcoming: bool) -> void:
+	match mode:
+		DisasterMode.METEORS:
+			state_changed.emit(
+				"PRÓXIMO: METEORITOS" if upcoming else "LLUVIA DE METEORITOS",
+				"Busca refugio y mira las marcas del suelo" if upcoming
+				else "¡Usa los refugios y sobrevive!"
+			)
+		DisasterMode.SHOCKWAVES:
+			state_changed.emit(
+				"PRÓXIMO: PULSO SÍSMICO" if upcoming else "PULSO SÍSMICO",
+				"Sube al centro o salta por encima del anillo" if upcoming
+				else "¡Salta el anillo celeste o busca altura!"
+			)
+		DisasterMode.FLOOD:
+			state_changed.emit(
+				"PRÓXIMO: INUNDACIÓN" if upcoming else "INUNDACIÓN ASCENDENTE",
+				"Prepárate para buscar las zonas más altas" if upcoming
+				else "¡Sube antes de que el agua te alcance!"
+			)
 
 
 func _find_available_meteor() -> MeteorSlot:

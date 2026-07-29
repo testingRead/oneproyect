@@ -1,4 +1,4 @@
-[gd_scene load_steps=29 format=3]
+[gd_scene load_steps=33 format=3]
 
 [ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
 [ext_resource type="Script" path="res://scripts/player.gd" id="2_player"]
@@ -76,12 +76,9 @@ height = 2.8
 albedo_color = Color(0.15, 0.58, 0.96, 1)
 roughness = 0.84
 
-[sub_resource type="CapsuleMesh" id="MeshPlayer"]
+[sub_resource type="BoxMesh" id="MeshPlayerPart"]
 material = SubResource("MatPlayer")
-radius = 0.5
-height = 1.8
-radial_segments = 10
-rings = 4
+size = Vector3(1, 1, 1)
 
 [sub_resource type="CapsuleShape3D" id="ShapePlayer"]
 radius = 0.5
@@ -94,6 +91,21 @@ roughness = 0.32
 [sub_resource type="BoxMesh" id="MeshVisor"]
 material = SubResource("MatVisor")
 size = Vector3(0.58, 0.26, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="MatAccessory"]
+albedo_color = Color(1, 0.78, 0.2, 1)
+roughness = 0.88
+
+[sub_resource type="CylinderMesh" id="MeshPlayerCap"]
+material = SubResource("MatAccessory")
+top_radius = 0.36
+bottom_radius = 0.48
+height = 0.18
+radial_segments = 8
+
+[sub_resource type="BoxMesh" id="MeshPlayerBackpack"]
+material = SubResource("MatAccessory")
+size = Vector3(0.55, 0.62, 0.18)
 
 [sub_resource type="Environment" id="EnvironmentMain"]
 background_mode = 1
@@ -303,16 +315,61 @@ shape = SubResource("ShapePlayer")
 
 [node name="Visual" type="Node3D" parent="World/Player"]
 
-[node name="Body" type="MeshInstance3D" parent="World/Player/Visual"]
-mesh = SubResource("MeshPlayer")
+[node name="Body" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(0, 0.31, 0)
+scale = Vector3(0.76, 0.78, 0.44)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="Head" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(0, 1.04, 0)
+scale = Vector3(0.6, 0.56, 0.54)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="LeftArm" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(-0.545, 0.295, 0)
+scale = Vector3(0.23, 0.67, 0.32)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="RightArm" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(0.545, 0.295, 0)
+scale = Vector3(0.23, 0.67, 0.32)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="LeftLeg" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(-0.19, -0.515, 0)
+scale = Vector3(0.28, 0.77, 0.36)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="RightLeg" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(0.19, -0.515, 0)
+scale = Vector3(0.28, 0.77, 0.36)
+mesh = SubResource("MeshPlayerPart")
 cast_shadow = 0
 
 [node name="Visor" type="MeshInstance3D" parent="World/Player/Visual"]
-position = Vector3(0, 0.38, 0.48)
+position = Vector3(0, 1.03, 0.3)
+scale = Vector3(0.78, 0.7, 0.55)
 mesh = SubResource("MeshVisor")
 cast_shadow = 0
 
+[node name="Cap" type="MeshInstance3D" parent="World/Player/Visual"]
+position = Vector3(0, 1.43, 0)
+mesh = SubResource("MeshPlayerCap")
+cast_shadow = 0
+
+[node name="Backpack" type="MeshInstance3D" parent="World/Player/Visual"]
+visible = false
+position = Vector3(0, 0.35, -0.3)
+mesh = SubResource("MeshPlayerBackpack")
+cast_shadow = 0
+
 [node name="CameraRig" type="Node3D" parent="World/Player"]
+position = Vector3(0, 0.68, 0)
 rotation = Vector3(-0.22, 0, 0)
 
 [node name="SpringArm" type="SpringArm3D" parent="World/Player/CameraRig"]
@@ -402,6 +459,23 @@ offset_bottom = -48.0
 grow_horizontal = 0
 grow_vertical = 0
 script = ExtResource("5_button")
+
+[node name="Push" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -362.0
+offset_top = -174.0
+offset_right = -214.0
+offset_bottom = -48.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("5_button")
+label = "EMPUJAR"
+accent = Color(0.15, 0.72, 0.68, 0.88)
 
 [node name="TopBar" type="HBoxContainer" parent="HUD"]
 layout_mode = 3
@@ -532,17 +606,24 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -170.0
-offset_top = -145.0
+offset_top = -300.0
 offset_right = 170.0
-offset_bottom = 145.0
+offset_bottom = 300.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 16
+theme_override_constants/separation = 10
 
 [node name="Title" type="Label" parent="HUD/PausePanel/Center"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 32
-text = "EN PAUSA"
+text = "MENÚ Y AJUSTES"
+horizontal_alignment = 1
+
+[node name="NameLabel" type="Label" parent="HUD/PausePanel/Center"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.86, 1, 1)
+theme_override_font_sizes/font_size = 17
+text = "NOMBRE DEL JUGADOR"
 horizontal_alignment = 1
 
 [node name="NameInput" type="LineEdit" parent="HUD/PausePanel/Center"]
@@ -554,14 +635,86 @@ text = "Jugador"
 max_length = 16
 alignment = 1
 
+[node name="SettingsRow" type="HBoxContainer" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 46)
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Sound" type="CheckButton" parent="HUD/PausePanel/Center/SettingsRow"]
+custom_minimum_size = Vector2(160, 46)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+button_pressed = true
+text = "SONIDO"
+
+[node name="Vibration" type="CheckButton" parent="HUD/PausePanel/Center/SettingsRow"]
+custom_minimum_size = Vector2(160, 46)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+button_pressed = true
+text = "VIBRACIÓN"
+
+[node name="Camera" type="Button" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "CÁMARA: TERCERA PERSONA"
+
+[node name="Character" type="Button" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "PERSONAJE: EXPLORADOR"
+
+[node name="SensitivityRow" type="HBoxContainer" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="HUD/PausePanel/Center/SensitivityRow"]
+custom_minimum_size = Vector2(108, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "SENSIBILIDAD"
+vertical_alignment = 1
+
+[node name="Slider" type="HSlider" parent="HUD/PausePanel/Center/SensitivityRow"]
+custom_minimum_size = Vector2(154, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.5
+max_value = 2.0
+step = 0.1
+value = 1.0
+
+[node name="Value" type="Label" parent="HUD/PausePanel/Center/SensitivityRow"]
+custom_minimum_size = Vector2(52, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "1.0x"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="Quality" type="Button" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "CALIDAD: BAJA"
+
+[node name="FPSLimit" type="Button" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "LÍMITE: 60 FPS"
+
 [node name="Resume" type="Button" parent="HUD/PausePanel/Center"]
-custom_minimum_size = Vector2(0, 54)
+custom_minimum_size = Vector2(0, 50)
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "CONTINUAR"
 
 [node name="Restart" type="Button" parent="HUD/PausePanel/Center"]
-custom_minimum_size = Vector2(0, 54)
+custom_minimum_size = Vector2(0, 50)
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "REINICIAR"

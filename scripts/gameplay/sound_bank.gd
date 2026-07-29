@@ -8,6 +8,8 @@ extends Node
 
 const MIX_RATE := 11025
 
+var _enabled := true
+
 
 func _ready() -> void:
 	warning_player.stream = _make_tone(620.0, 0.16, 0.55, 0.82)
@@ -17,19 +19,36 @@ func _ready() -> void:
 
 
 func play_warning() -> void:
-	warning_player.play()
+	if _enabled:
+		warning_player.play()
 
 
 func play_impact() -> void:
-	impact_player.play()
+	if _enabled:
+		impact_player.play()
 
 
 func play_shockwave() -> void:
-	shockwave_player.play()
+	if _enabled:
+		shockwave_player.play()
 
 
 func play_success() -> void:
-	success_player.play()
+	if _enabled:
+		success_player.play()
+
+
+func set_enabled(enabled: bool) -> void:
+	_enabled = enabled
+	if not enabled:
+		warning_player.stop()
+		impact_player.stop()
+		shockwave_player.stop()
+		success_player.stop()
+
+
+func is_enabled() -> bool:
+	return _enabled
 
 
 func _make_tone(frequency: float, duration: float, volume: float, decay: float) -> AudioStreamWAV:

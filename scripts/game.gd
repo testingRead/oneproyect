@@ -3,12 +3,19 @@ extends Node3D
 const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn")
 const SNAPSHOT_INTERVAL := 0.1
 const PROFILE_PATH := "user://profile.cfg"
+const PUSH_RANGE := 2.8
+const PUSH_MIN_DOT := 0.62
+const QUALITY_NAMES := ["BAJA", "MEDIA-BAJA", "MEDIA", "MEDIA-ALTA", "ALTA"]
+const FPS_LIMITS := [30, 45, 60]
+const CHARACTER_NAMES := ["EXPLORADOR", "GUARDABOSQUES", "CORREDORA", "TÉCNICO", "DORADO"]
+const GOLDEN_CHARACTER_COST := 5
 
 @onready var player: GrayboxPlayer = $World/Player
 @onready var disaster: DisasterController = $World/DisasterController
 @onready var remote_players: Node3D = $World/RemotePlayers
 @onready var network: Variant = get_node("/root/Network")
 @onready var sounds: SoundBank = $SoundBank
+@onready var sun: DirectionalLight3D = $World/Sun
 @onready var fps_label: Label = $HUD/TopBar/FPS
 @onready var health_label: Label = $HUD/TopBar/Health
 @onready var round_title: Label = $HUD/RoundPanel/Title
@@ -22,6 +29,14 @@ const PROFILE_PATH := "user://profile.cfg"
 @onready var online_button: Button = $HUD/TopBar/Online
 @onready var network_status: Label = $HUD/TopBar/NetworkStatus
 @onready var name_input: LineEdit = $HUD/PausePanel/Center/NameInput
+@onready var sound_toggle: CheckButton = $HUD/PausePanel/Center/SettingsRow/Sound
+@onready var vibration_toggle: CheckButton = $HUD/PausePanel/Center/SettingsRow/Vibration
+@onready var camera_button: Button = $HUD/PausePanel/Center/Camera
+@onready var character_button: Button = $HUD/PausePanel/Center/Character
+@onready var sensitivity_slider: HSlider = $HUD/PausePanel/Center/SensitivityRow/Slider
+@onready var sensitivity_value: Label = $HUD/PausePanel/Center/SensitivityRow/Value
+@onready var quality_button: Button = $HUD/PausePanel/Center/Quality
+@onready var fps_button: Button = $HUD/PausePanel/Center/FPSLimit
 @onready var pause_title: Label = $HUD/PausePanel/Center/Title
 @onready var pause_restart: Button = $HUD/PausePanel/Center/Restart
 @onready var touch_debug: Label = $HUD/TouchDebug
@@ -32,6 +47,14 @@ var _remote_avatars: Dictionary = {}
 var _damage_flash_strength := 0.0
 var _completed_rounds := 0
 var _best_rounds := 0
+var _vibration_enabled := true
+var _first_person_enabled := false
+var _quality_level := 0
+var _fps_limit_index := 2
+var _total_victories := 0
+var _install_id := ""
+var _defeated_this_round := false
+var _participating_round := false
 
 
 func _ready() -> void:
@@ -39,17 +62,28 @@ func _ready() -> void:
 	$HUD/Joystick.value_changed.connect(_on_touch_move)
 	$HUD/LookPad.look_delta.connect(player.add_touch_look)
 	$HUD/Jump.action_pressed.connect(player.request_jump)
+	$HUD/Push.action_pressed.connect(player.request_push)
 	$HUD/TopBar/Pause.pressed.connect(toggle_pause)
 	$HUD/TopBar/Restart.pressed.connect(restart_level)
 	online_button.pressed.connect(_toggle_online)
 	$HUD/PausePanel/Center/Resume.pressed.connect(toggle_pause)
 	$HUD/PausePanel/Center/Restart.pressed.connect(restart_level)
+	sound_toggle.toggled.connect(_on_sound_toggled)
+	vibration_toggle.toggled.connect(_on_vibration_toggled)
+	camera_button.pressed.connect(_toggle_camera_mode)
+	character_button.pressed.connect(_cycle_character)
+	sensitivity_slider.value_changed.connect(_on_sensitivity_changed)
+	quality_button.pressed.connect(_cycle_quality)
+	fps_button.pressed.connect(_cycle_fps_limit)
+	name_input.text_submitted.connect(_on_name_submitted)
 	player.health_changed.connect(_on_health_changed)
 	player.damaged.connect(_on_player_damaged)
 	player.defeated.connect(_on_player_defeated)
+	player.push_requested.connect(_on_push_requested)
 	disaster.state_changed.connect(_on_disaster_state_changed)
 	disaster.clock_changed.connect(_on_disaster_clock_changed)
 	disaster.round_survived.connect(_on_round_survived)
+	disaster.round_started.connect(_on_round_started)
 	disaster.meteor_warning.connect(sounds.play_warning)
 	disaster.meteor_impact.connect(sounds.play_impact)
 	disaster.shockwave_warning.connect(sounds.play_warning)
@@ -62,6 +96,7 @@ func _ready() -> void:
 	network.shockwave_received.connect(disaster.spawn_network_shockwave)
 	network.round_state_received.connect(disaster.apply_network_state)
 	network.simulation_host_changed.connect(_on_simulation_host_changed)
+	network.push_received.connect(_on_push_received)
 	_load_profile()
 	_on_health_changed(100, 100)
 	_on_network_status_changed("MODO LOCAL", false)
@@ -95,19 +130,23 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func toggle_pause() -> void:
+	if pause_panel.visible:
+		_apply_name_setting()
 	if network.is_online():
 		var menu_open := not pause_panel.visible
 		pause_panel.visible = menu_open
-		pause_title.text = "MENÚ EN LÍNEA"
+		pause_title.text = "AJUSTES EN LÍNEA"
 		pause_button.text = "CERRAR" if menu_open else "MENÚ"
 		player.set_controls_enabled(not menu_open)
+		$HUD/Joystick.set_input_enabled(not menu_open)
 		if not OS.has_feature("mobile"):
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if menu_open else Input.MOUSE_MODE_CAPTURED
 		return
 	get_tree().paused = not get_tree().paused
 	pause_panel.visible = get_tree().paused
-	pause_title.text = "EN PAUSA"
+	pause_title.text = "MENÚ Y AJUSTES"
 	pause_button.text = "SEGUIR" if get_tree().paused else "PAUSA"
+	$HUD/Joystick.set_input_enabled(not get_tree().paused)
 	if not OS.has_feature("mobile"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if get_tree().paused else Input.MOUSE_MODE_CAPTURED
 
@@ -116,11 +155,14 @@ func restart_level() -> void:
 	get_tree().paused = false
 	pause_panel.visible = false
 	pause_button.text = "MENÚ" if network.is_online() else "PAUSA"
-	pause_title.text = "EN PAUSA"
+	pause_title.text = "MENÚ Y AJUSTES"
 	$HUD/PausePanel/Center/Resume.visible = true
 	player.set_controls_enabled(true)
+	$HUD/Joystick.set_input_enabled(true)
 	player.reset_to_spawn()
 	_reset_streak()
+	if network.is_online():
+		_defeated_this_round = true
 	if not network.is_online():
 		disaster.restart_cycle()
 	if not OS.has_feature("mobile"):
@@ -142,6 +184,7 @@ func _on_health_changed(current: int, maximum: int) -> void:
 
 func _on_player_defeated() -> void:
 	round_detail.text = "¡Te derribaron! Regresas a la plaza"
+	_defeated_this_round = true
 	_reset_streak()
 	player.reset_to_spawn()
 
@@ -156,6 +199,11 @@ func _on_disaster_clock_changed(seconds_left: int) -> void:
 
 
 func _on_round_survived(_round_number: int) -> void:
+	if not _participating_round or _defeated_this_round:
+		_participating_round = false
+		player.heal_full()
+		return
+	_participating_round = false
 	sounds.play_success()
 	player.heal_full()
 	_completed_rounds += 1
@@ -163,14 +211,52 @@ func _on_round_survived(_round_number: int) -> void:
 		_best_rounds = _completed_rounds
 		_save_profile()
 	_update_score()
+	if network.is_online():
+		_total_victories += 1
+		_save_profile()
+		_update_score()
+
+
+func _on_round_started(_round_number: int) -> void:
+	_defeated_this_round = false
+	_participating_round = true
 
 
 func _on_player_damaged(_amount: int, _current: int) -> void:
 	_damage_flash_strength = 1.0
 	damage_flash.visible = true
 	damage_flash.color.a = 0.34
-	if OS.has_feature("mobile"):
+	if OS.has_feature("mobile") and _vibration_enabled:
 		Input.vibrate_handheld(70, 0.28)
+
+
+func _on_push_requested() -> void:
+	if not network.is_online():
+		return
+	var origin := player.global_position
+	var forward := player.get_aim_forward()
+	var closest_peer := -1
+	var closest_distance := PUSH_RANGE + 1.0
+	for peer_id: int in _remote_avatars:
+		var avatar: RemoteAvatar = _remote_avatars[peer_id]
+		var offset := avatar.global_position - origin
+		if absf(offset.y) > 1.4:
+			continue
+		offset.y = 0.0
+		var distance := offset.length()
+		if distance < 0.2 or distance > PUSH_RANGE:
+			continue
+		if forward.dot(offset / distance) < PUSH_MIN_DOT:
+			continue
+		if distance < closest_distance:
+			closest_distance = distance
+			closest_peer = peer_id
+	if closest_peer != -1:
+		network.send_push(closest_peer, forward)
+
+
+func _on_push_received(_sender_id: int, direction: Vector3, force: float) -> void:
+	player.apply_external_push(direction, force)
 
 
 func _toggle_online() -> void:
@@ -199,10 +285,12 @@ func _on_network_status_changed(text: String, online: bool) -> void:
 	restart_button.text = "REAPARECER" if online else "REINICIAR"
 	pause_restart.text = "REAPARECER" if online else "REINICIAR"
 	name_input.editable = not online
+	character_button.disabled = online
 	if not online and not network.is_online():
 		if pause_panel.visible and not get_tree().paused:
 			pause_panel.visible = false
 			player.set_controls_enabled(true)
+			$HUD/Joystick.set_input_enabled(true)
 			if not OS.has_feature("mobile"):
 				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		_clear_remote_players()
@@ -215,6 +303,8 @@ func _on_remote_player_joined(peer_id: int, player_name: String, player_color: i
 	avatar.name = "Peer%d" % peer_id
 	remote_players.add_child(avatar)
 	avatar.configure(player_name, player_color, Vector3(0.0, 1.2, 8.0))
+	avatar.set_shadow_quality(_quality_level >= 3)
+	avatar.set_texture_detail(_quality_level >= 2)
 	_remote_avatars[peer_id] = avatar
 
 
@@ -244,19 +334,56 @@ func _clear_remote_players() -> void:
 
 func _load_profile() -> void:
 	var config := ConfigFile.new()
+	network.color_index = 0
 	if config.load(PROFILE_PATH) == OK:
 		var saved_name := str(config.get_value("player", "name", "")).strip_edges().substr(0, 16)
 		if not saved_name.is_empty():
 			network.display_name = saved_name
 		_best_rounds = maxi(0, int(config.get_value("player", "best_rounds", 0)))
+		_total_victories = maxi(0, int(config.get_value("player", "total_victories", 0)))
+		_install_id = str(config.get_value("player", "install_id", ""))
+		network.color_index = clampi(int(config.get_value("player", "character", 0)), 0, 4)
+		sounds.set_enabled(bool(config.get_value("settings", "sound", true)))
+		_vibration_enabled = bool(config.get_value("settings", "vibration", true))
+		_first_person_enabled = bool(config.get_value("settings", "first_person", false))
+		player.set_look_sensitivity_scale(
+			float(config.get_value("settings", "look_sensitivity", 1.0))
+		)
+		_quality_level = clampi(int(config.get_value("settings", "quality", 0)), 0, 4)
+		var saved_fps := int(config.get_value("settings", "fps_limit", 60))
+		_fps_limit_index = FPS_LIMITS.find(saved_fps)
+		if _fps_limit_index == -1:
+			_fps_limit_index = 2
+	if _install_id.is_empty():
+		_install_id = Crypto.new().generate_random_bytes(16).hex_encode()
 	name_input.text = network.display_name
+	sound_toggle.button_pressed = sounds.is_enabled()
+	vibration_toggle.button_pressed = _vibration_enabled
+	player.set_first_person(_first_person_enabled)
+	player.set_character_variant(network.color_index)
+	sensitivity_slider.value = player.get_look_sensitivity_scale()
+	_update_camera_button()
+	_update_character_button()
+	_apply_quality()
+	_apply_fps_limit()
+	_update_sensitivity_label()
 	_update_score()
+	_save_profile()
 
 
 func _save_profile() -> void:
 	var config := ConfigFile.new()
 	config.set_value("player", "name", network.display_name)
 	config.set_value("player", "best_rounds", _best_rounds)
+	config.set_value("player", "total_victories", _total_victories)
+	config.set_value("player", "install_id", _install_id)
+	config.set_value("player", "character", network.color_index)
+	config.set_value("settings", "sound", sounds.is_enabled())
+	config.set_value("settings", "vibration", _vibration_enabled)
+	config.set_value("settings", "first_person", _first_person_enabled)
+	config.set_value("settings", "look_sensitivity", player.get_look_sensitivity_scale())
+	config.set_value("settings", "quality", _quality_level)
+	config.set_value("settings", "fps_limit", FPS_LIMITS[_fps_limit_index])
 	var error := config.save(PROFILE_PATH)
 	if error != OK:
 		push_warning("No se pudo guardar el perfil del jugador: %s" % error)
@@ -268,4 +395,123 @@ func _reset_streak() -> void:
 
 
 func _update_score() -> void:
-	score_label.text = "RONDAS  %d   ·   RÉCORD  %d" % [_completed_rounds, _best_rounds]
+	score_label.text = "RONDAS %d · RÉCORD %d · VICTORIAS %d" % [
+		_completed_rounds,
+		_best_rounds,
+		_total_victories,
+	]
+
+
+func _on_sound_toggled(enabled: bool) -> void:
+	sounds.set_enabled(enabled)
+	_save_profile()
+
+
+func _on_vibration_toggled(enabled: bool) -> void:
+	_vibration_enabled = enabled
+	_save_profile()
+
+
+func _toggle_camera_mode() -> void:
+	_first_person_enabled = not _first_person_enabled
+	player.set_first_person(_first_person_enabled)
+	_update_camera_button()
+	_save_profile()
+
+
+func _update_camera_button() -> void:
+	camera_button.text = (
+		"CÁMARA: PRIMERA PERSONA" if _first_person_enabled
+		else "CÁMARA: TERCERA PERSONA"
+	)
+
+
+func _on_name_submitted(_new_text: String) -> void:
+	_apply_name_setting()
+
+
+func _apply_name_setting() -> void:
+	if network.is_online():
+		return
+	var safe_name := name_input.text.strip_edges().substr(0, 16)
+	if safe_name.is_empty():
+		safe_name = network.display_name
+	name_input.text = safe_name
+	network.display_name = safe_name
+	_save_profile()
+
+
+func _on_sensitivity_changed(value: float) -> void:
+	player.set_look_sensitivity_scale(value)
+	_update_sensitivity_label()
+	_save_profile()
+
+
+func _update_sensitivity_label() -> void:
+	sensitivity_value.text = "%.1fx" % player.get_look_sensitivity_scale()
+
+
+func _cycle_quality() -> void:
+	_quality_level = (_quality_level + 1) % QUALITY_NAMES.size()
+	_apply_quality()
+	_save_profile()
+
+
+func _apply_quality() -> void:
+	var viewport := get_viewport()
+	match _quality_level:
+		0:
+			viewport.msaa_3d = Viewport.MSAA_DISABLED
+			sun.shadow_enabled = false
+		1:
+			viewport.msaa_3d = Viewport.MSAA_2X
+			sun.shadow_enabled = false
+		2:
+			viewport.msaa_3d = Viewport.MSAA_2X
+			sun.shadow_enabled = false
+		3:
+			viewport.msaa_3d = Viewport.MSAA_4X
+			sun.shadow_enabled = true
+		_:
+			viewport.msaa_3d = Viewport.MSAA_8X
+			sun.shadow_enabled = true
+	for mesh in get_tree().get_nodes_in_group("quality_shadow"):
+		var geometry := mesh as GeometryInstance3D
+		if geometry != null:
+			geometry.cast_shadow = (
+				GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+				if _quality_level >= 3
+				else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			)
+	for avatar: RemoteAvatar in _remote_avatars.values():
+		avatar.set_shadow_quality(_quality_level >= 3)
+		avatar.set_texture_detail(_quality_level >= 2)
+	player.set_texture_detail(_quality_level >= 2)
+	quality_button.text = "CALIDAD: %s" % QUALITY_NAMES[_quality_level]
+
+
+func _cycle_fps_limit() -> void:
+	_fps_limit_index = (_fps_limit_index + 1) % FPS_LIMITS.size()
+	_apply_fps_limit()
+	_save_profile()
+
+
+func _apply_fps_limit() -> void:
+	var limit: int = FPS_LIMITS[_fps_limit_index]
+	Engine.max_fps = limit
+	fps_button.text = "LÍMITE: %d FPS" % limit
+
+
+func _cycle_character() -> void:
+	var next_index: int = (int(network.color_index) + 1) % CHARACTER_NAMES.size()
+	if next_index == 4 and _total_victories < GOLDEN_CHARACTER_COST:
+		next_index = 0
+		round_detail.text = "Dorado requiere %d victorias multijugador" % GOLDEN_CHARACTER_COST
+	network.color_index = next_index
+	player.set_character_variant(next_index)
+	_update_character_button()
+	_save_profile()
+
+
+func _update_character_button() -> void:
+	character_button.text = "PERSONAJE: %s" % CHARACTER_NAMES[network.color_index]

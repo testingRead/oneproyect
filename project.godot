@@ -52,6 +52,10 @@ jump={
 "deadzone": 0.3,
 "events": [Object(InputEventKey,"physical_keycode":32)]
 }
+push={
+"deadzone": 0.3,
+"events": [Object(InputEventKey,"physical_keycode":69)]
+}
 pause={
 "deadzone": 0.3,
 "events": [Object(InputEventKey,"physical_keycode":80), Object(InputEventKey,"physical_keycode":4194305)]

@@ -7,14 +7,16 @@ gama baja. Usa Godot 4.7.1, GDScript y el renderer Compatibility/OpenGL.
 
 - Escritorio: WASD o flechas para moverse, ratón para cámara, Espacio para
   saltar, `P`/Escape para pausa y `R` para reiniciar.
-- Android: joystick izquierdo, arrastre en la mitad derecha para cámara y botón
-  **SALTO**. Pausa y reinicio están en la barra superior.
+- Android: toda la mitad izquierda acepta un joystick flotante y toda la
+  derecha queda para mirar, salvo los botones **SALTO** y **EMPUJAR**.
+  El empujón alcanza solamente a un jugador cercano frente a la cámara.
 
-La primera arena, **Plaza Caos**, alterna dos desastres:
+La primera arena, **Plaza Caos**, alterna tres desastres:
 
 - lluvia de meteoritos con marcas, refugios, daño e impulso físico;
 - pulso sísmico, un único anillo reutilizable que debe saltarse o evitarse
   subiendo a la plataforma central.
+- inundación ascendente, un único plano de agua que obliga a buscar altura.
 
 Los techos bloquean físicamente las explosiones: refugiarse es una mecánica real,
 no solamente decorativa. Ninguno de los dos modos crea nodos durante la ronda.
@@ -22,11 +24,21 @@ El contador superior muestra FPS y tiempo aproximado por frame. El daño tiene
 respuesta visual y vibración breve en Android; una racha de rondas y el récord
 personal guardado dan un objetivo inmediato sin añadir recursos pesados.
 
+El menú guarda nombre, personaje, sonido, vibración, cámara en primera/tercera
+persona, sensibilidad, límite de 30/45/60 FPS y cinco perfiles de calidad. Los
+perfiles reutilizan los mismos recursos: escalan antialiasing y sombras sin
+meter cinco copias de cada textura en el APK. Cuatro variantes low-poly son
+gratuitas; la variante dorada requiere cinco victorias multijugador.
+
 ## Multijugador de prueba
 
 El botón **CONECTAR** entra a una sala ENet/UDP de hasta cinco personas. Cada
 jugador tiene nombre y color, y los avatares remotos se interpolan a partir de
 10 actualizaciones de posición por segundo.
+
+Los empujones se envían como eventos fiables pequeños únicamente al jugador
+objetivo. Las victorias multijugador se guardan por separado de las rondas
+locales; por ahora son progreso local de prototipo, no una economía segura.
 
 El VPS escucha en UDP `9999` y actúa sólo como retransmisor. El teléfono con
 mayor capacidad declarada simula la ronda y envía los eventos del desastre; a
@@ -55,3 +67,5 @@ Los artifacts se conservan solamente 1 día para limitar almacenamiento.
 
 La ruta recomendada para exportar directamente en el teléfono está documentada
 en [docs/ANDROID_LOCAL_BUILD.md](docs/ANDROID_LOCAL_BUILD.md).
+Las decisiones de escalado y persistencia están en
+[docs/QUALITY_AND_PROGRESSION.md](docs/QUALITY_AND_PROGRESSION.md).
