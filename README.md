@@ -53,23 +53,28 @@ el jugador local, los avatares remotos y la previsualización.
 La guía para añadir modos, mapas y personajes sin acoplarlos al núcleo está en
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Multijugador de prueba
+## Menú y multijugador de prueba
 
-El botón **CONECTAR** entra a una sala ENet/UDP de hasta cinco personas. Cada
-jugador tiene nombre y color, y los avatares remotos se interpolan a partir de
-10 actualizaciones de posición por segundo. La misma instantánea incluye
-orientación y estado corporal, sin enviar nodos ni físicas por red.
+El arranque muestra dos rutas separadas. **JUGAR LOCAL** abre la arena sin
+conectarse a ningún servidor. **MULTIJUGADOR** abre un lobby ENet/UDP con hasta
+cinco salas simultáneas de cinco personas cada una. El creador es el anfitrión
+de la sala y puede iniciar cuando hay entre dos y cinco jugadores; si se
+desconecta, el siguiente jugador conectado hereda ese rol.
+
+Cada jugador tiene nombre y color, y los avatares remotos se interpolan a
+partir de 10 actualizaciones de posición por segundo. La misma instantánea
+incluye orientación y estado corporal, sin enviar nodos ni físicas visuales por
+red.
 
 Los empujones se envían como eventos fiables pequeños únicamente al jugador
 objetivo. Las victorias multijugador se guardan por separado de las rondas
 locales; por ahora son progreso local de prototipo, no una economía segura.
 
-El VPS escucha en UDP `9999` y actúa sólo como retransmisor. El teléfono con
-mayor capacidad declarada simula la ronda y envía los eventos del desastre; a
-igualdad de capacidad, el relay favorece una latencia al menos 40 ms mejor y
-evita cambios pequeños que harían oscilar el rol. Si el host se desconecta, se
-elige otro automáticamente. Así, la máquina pequeña no procesa el mapa, los
-meteoritos ni las colisiones.
+El VPS escucha en UDP `9999` y es autoritativo únicamente para sesión, fase,
+inputs, movimiento simplificado, daño y eventos que afectan el resultado. No
+carga mapas visuales, cámaras, luces, texturas, animaciones, partículas ni
+audio. Cada cliente conserva la física visual completa, predicción,
+reconciliación, interpolación, efectos y ajustes de calidad.
 
 ## Exportación reproducible
 
@@ -80,9 +85,10 @@ binarios y export templates oficiales. Genera APK separados:
 - `oneproyect-debug-arm32.apk`: teléfonos antiguos de 32 bits.
 
 Se ejecuta en pushes a `main`/`agent/graybox` y manualmente desde GitHub Actions.
-Antes de exportar, CI ejecuta una prueba de movimiento/colisiones/refugio y otra
-con un servidor más dos clientes reales, verificando posiciones, elección de
-host, meteoritos y sincronización de ronda. Las builds de prueba usan una firma
+Antes de exportar, CI ejecuta pruebas del menú y la arena, reglas de cinco salas,
+una conexión de lobby con dos clientes, movimiento y reconexión autoritativos,
+y una sala completa de cinco clientes con límites de memoria y tráfico. Las
+builds de prueba usan una firma
 estable guardada únicamente en GitHub
 Actions Secrets, por lo que las siguientes versiones podrán instalarse como
 actualizaciones sin cambiar la identidad de la aplicación.

@@ -1,6 +1,6 @@
 extends Node
 
-const GAME_SCENE := "res://scenes/main.tscn"
+const MENU_SCENE := "res://scenes/menu.tscn"
 const SERVER_SCENE := "res://server/scenes/dedicated_server.tscn"
 
 
@@ -12,11 +12,11 @@ func _ready() -> void:
 		var client_script: Script = load("res://client/network_client.gd")
 		var network: Node = client_script.new()
 		network.name = "Network"
-		network.ready.connect(_start_game, CONNECT_ONE_SHOT)
+		network.ready.connect(_start_menu, CONNECT_ONE_SHOT)
 		get_tree().root.add_child.call_deferred(network)
 		return
-	_start_game()
+	_start_menu()
 
 
-func _start_game() -> void:
-	get_tree().call_deferred("change_scene_to_file", GAME_SCENE)
+func _start_menu() -> void:
+	get_tree().call_deferred("change_scene_to_file", MENU_SCENE)

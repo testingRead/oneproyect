@@ -83,6 +83,17 @@ func mark_disconnected(peer_id: int, server_tick: int) -> RefCounted:
 	return session
 
 
+func remove_by_peer_id(peer_id: int) -> RefCounted:
+	for index in sessions.size():
+		var session: RefCounted = sessions[index]
+		if session.connected and session.peer_id == peer_id:
+			sessions.remove_at(index)
+			session.connected = false
+			session.peer_id = 0
+			return session
+	return null
+
+
 func purge_expired(server_tick: int) -> void:
 	for index in range(sessions.size() - 1, -1, -1):
 		var session: RefCounted = sessions[index]

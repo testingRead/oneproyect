@@ -19,6 +19,27 @@ func _ensure_network() -> void:
 
 func _run() -> void:
 	_ensure_network()
+	var menu_packed: PackedScene = load("res://scenes/menu.tscn")
+	_require(menu_packed != null, "Main menu scene must load")
+	var menu := menu_packed.instantiate()
+	root.add_child(menu)
+	await process_frame
+	_require(
+		menu.get_node("MenuPanel/Screens/Main/PlayLocal") is Button,
+		"Menu must expose a dedicated offline play action"
+	)
+	_require(
+		menu.get_node("MenuPanel/Screens/Main/Multiplayer") is Button,
+		"Menu must expose the multiplayer lobby action"
+	)
+	_require(
+		menu.find_child("CreateRoom", true, false) is Button
+		and menu.find_child("StartRoom", true, false) is Button,
+		"Lobby must expose room creation and host-controlled start"
+	)
+	menu.queue_free()
+	await process_frame
+
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	_require(packed != null, "Main scene must load")
 	var game := packed.instantiate()

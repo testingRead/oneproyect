@@ -1,0 +1,365 @@
+extends Control
+
+const NET := preload("res://shared/net_constants.gd")
+const GAME_SCENE := "res://scenes/main.tscn"
+const PROFILE_PATH := "user://profile.cfg"
+
+@onready var network: OneProjectNetwork = get_node("/root/Network")
+
+var _main_screen: VBoxContainer
+var _lobby_screen: VBoxContainer
+var _waiting_screen: VBoxContainer
+var _name_input: LineEdit
+var _lobby_status: Label
+var _empty_rooms: Label
+var _create_button: Button
+var _refresh_button: Button
+var _waiting_title: Label
+var _waiting_detail: Label
+var _start_button: Button
+var _room_buttons: Array[Button] = []
+var _room_ids := PackedInt32Array()
+var _room_count := 0
+var _maximum_rooms := NET.MAX_ROOMS
+var _loading_game := false
+
+
+func _ready() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_build_interface()
+	_connect_network()
+	_load_name()
+	_show_screen(_main_screen)
+
+
+func _build_interface() -> void:
+	var background := ColorRect.new()
+	background.name = "Background"
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	background.color = Color(0.025, 0.035, 0.055, 1.0)
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(background)
+
+	var accent := ColorRect.new()
+	accent.name = "Accent"
+	accent.anchor_right = 1.0
+	accent.offset_bottom = 8.0
+	accent.color = Color(0.12, 0.72, 0.76, 1.0)
+	accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(accent)
+
+	var panel := PanelContainer.new()
+	panel.name = "MenuPanel"
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = Vector2(-330.0, -285.0)
+	panel.size = Vector2(660.0, 570.0)
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.055, 0.075, 0.11, 0.98)
+	panel_style.border_color = Color(0.18, 0.45, 0.52, 0.9)
+	panel_style.set_border_width_all(2)
+	panel_style.set_corner_radius_all(18)
+	panel_style.content_margin_left = 36.0
+	panel_style.content_margin_right = 36.0
+	panel_style.content_margin_top = 28.0
+	panel_style.content_margin_bottom = 28.0
+	panel.add_theme_stylebox_override("panel", panel_style)
+	add_child(panel)
+
+	var screens := Control.new()
+	screens.name = "Screens"
+	screens.custom_minimum_size = Vector2(588.0, 514.0)
+	panel.add_child(screens)
+	_main_screen = _build_main_screen(screens)
+	_lobby_screen = _build_lobby_screen(screens)
+	_waiting_screen = _build_waiting_screen(screens)
+
+
+func _build_main_screen(parent: Control) -> VBoxContainer:
+	var screen := _new_screen("Main")
+	parent.add_child(screen)
+	screen.add_child(_title("ONE PROYECT", 42, Color(0.35, 0.95, 0.9)))
+	var subtitle := _label("Sobrevive, empuja y supera el desastre", 19)
+	subtitle.modulate = Color(0.76, 0.86, 1.0)
+	screen.add_child(subtitle)
+	screen.add_child(_spacer(16.0))
+	var name_label := _label("NOMBRE DEL JUGADOR", 16)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	screen.add_child(name_label)
+	_name_input = LineEdit.new()
+	_name_input.name = "PlayerName"
+	_name_input.custom_minimum_size = Vector2(0.0, 50.0)
+	_name_input.max_length = 16
+	_name_input.placeholder_text = "Jugador"
+	_name_input.add_theme_font_size_override("font_size", 20)
+	screen.add_child(_name_input)
+	screen.add_child(_spacer(10.0))
+	var local_button := _button("JUGAR LOCAL", "PlayLocal")
+	local_button.pressed.connect(_play_local)
+	screen.add_child(local_button)
+	var multiplayer_button := _button("MULTIJUGADOR", "Multiplayer")
+	multiplayer_button.pressed.connect(_open_multiplayer)
+	screen.add_child(multiplayer_button)
+	screen.add_child(_spacer(8.0))
+	var hint := _label(
+		"Local funciona sin servidor · Multijugador: 2–5 jugadores",
+		15
+	)
+	hint.modulate = Color(0.64, 0.74, 0.86)
+	screen.add_child(hint)
+	return screen
+
+
+func _build_lobby_screen(parent: Control) -> VBoxContainer:
+	var screen := _new_screen("Lobby")
+	parent.add_child(screen)
+	screen.add_child(_title("SALAS MULTIJUGADOR", 30, Color(0.35, 0.95, 0.9)))
+	_lobby_status = _label("Conectando al servidor…", 17)
+	screen.add_child(_lobby_status)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 10)
+	_create_button = _button("CREAR SALA", "CreateRoom")
+	_create_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_create_button.disabled = true
+	_create_button.pressed.connect(_create_room)
+	actions.add_child(_create_button)
+	_refresh_button = _button("ACTUALIZAR", "RefreshRooms")
+	_refresh_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_refresh_button.disabled = true
+	_refresh_button.pressed.connect(network.request_room_list)
+	actions.add_child(_refresh_button)
+	screen.add_child(actions)
+	_empty_rooms = _label("No hay salas. Crea la primera.", 18)
+	_empty_rooms.custom_minimum_size.y = 42.0
+	screen.add_child(_empty_rooms)
+	for index in NET.MAX_ROOMS:
+		var room_button := _button("SALA %d" % (index + 1), "Room%d" % (index + 1))
+		room_button.visible = false
+		room_button.pressed.connect(_join_room.bind(index))
+		_room_buttons.append(room_button)
+		screen.add_child(room_button)
+	var back := _button("VOLVER", "Back")
+	back.pressed.connect(_leave_multiplayer)
+	screen.add_child(back)
+	return screen
+
+
+func _build_waiting_screen(parent: Control) -> VBoxContainer:
+	var screen := _new_screen("WaitingRoom")
+	parent.add_child(screen)
+	_waiting_title = _title("SALA", 34, Color(0.35, 0.95, 0.9))
+	screen.add_child(_waiting_title)
+	_waiting_detail = _label("Esperando jugadores…", 22)
+	_waiting_detail.custom_minimum_size.y = 150.0
+	_waiting_detail.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	screen.add_child(_waiting_detail)
+	var rule := _label(
+		"Se necesitan al menos 2 jugadores.\nCapacidad máxima: 5.",
+		17
+	)
+	rule.modulate = Color(0.72, 0.82, 0.94)
+	screen.add_child(rule)
+	_start_button = _button("INICIAR PARTIDA", "StartRoom")
+	_start_button.visible = false
+	_start_button.disabled = true
+	_start_button.pressed.connect(network.start_room)
+	screen.add_child(_start_button)
+	var leave := _button("SALIR DE LA SALA", "LeaveRoom")
+	leave.pressed.connect(network.leave_room)
+	screen.add_child(leave)
+	return screen
+
+
+func _connect_network() -> void:
+	network.status_changed.connect(_on_network_status)
+	network.lobby_ready.connect(_on_lobby_ready)
+	network.room_list_updated.connect(_on_room_list)
+	network.room_waiting_updated.connect(_on_room_waiting)
+	network.room_started.connect(_on_room_started)
+	network.room_action_failed.connect(_on_room_error)
+	network.returned_to_lobby.connect(_on_returned_to_lobby)
+
+
+func _play_local() -> void:
+	_save_name()
+	network.disconnect_session()
+	_loading_game = true
+	get_tree().change_scene_to_file(GAME_SCENE)
+
+
+func _open_multiplayer() -> void:
+	_save_name()
+	_show_screen(_lobby_screen)
+	_lobby_status.text = "Conectando al servidor…"
+	_create_button.disabled = true
+	_refresh_button.disabled = true
+	var error := network.connect_to_lobby()
+	if error != OK:
+		_lobby_status.text = "No se pudo iniciar la conexión"
+
+
+func _leave_multiplayer() -> void:
+	network.disconnect_session()
+	_show_screen(_main_screen)
+
+
+func _create_room() -> void:
+	_create_button.disabled = true
+	_lobby_status.text = "Creando sala…"
+	network.create_room()
+
+
+func _join_room(index: int) -> void:
+	if index < 0 or index >= _room_ids.size():
+		return
+	for button in _room_buttons:
+		button.disabled = true
+	_lobby_status.text = "Entrando a sala %d…" % _room_ids[index]
+	network.join_room(_room_ids[index])
+
+
+func _on_network_status(text: String, _online: bool) -> void:
+	if _lobby_screen.visible:
+		_lobby_status.text = text
+
+
+func _on_lobby_ready(maximum_rooms: int, _maximum_players: int) -> void:
+	_maximum_rooms = maximum_rooms
+	_create_button.disabled = false
+	_refresh_button.disabled = false
+	_lobby_status.text = "Elige una sala o crea una nueva"
+	network.request_room_list()
+
+
+func _on_room_list(
+	room_ids: PackedInt32Array,
+	player_counts: PackedInt32Array,
+	phases: PackedInt32Array,
+	host_names: PackedStringArray
+) -> void:
+	_room_ids = room_ids
+	_room_count = room_ids.size()
+	_empty_rooms.visible = _room_count == 0
+	_create_button.disabled = _room_count >= _maximum_rooms
+	for index in _room_buttons.size():
+		var button := _room_buttons[index]
+		button.visible = index < _room_count
+		if not button.visible:
+			continue
+		var waiting := phases[index] == NET.RoomPhase.WAITING
+		var host := host_names[index] if not host_names[index].is_empty() else "Sin anfitrión"
+		button.text = "SALA %d  ·  %d/5  ·  %s" % [
+			room_ids[index],
+			player_counts[index],
+			host if waiting else "EN PARTIDA",
+		]
+		button.disabled = not waiting or player_counts[index] >= NET.MAX_PLAYERS_PER_ROOM
+	_lobby_status.text = "Salas disponibles: %d/%d" % [_room_count, _maximum_rooms]
+
+
+func _on_room_waiting(room_id: int, player_count: int, is_host: bool) -> void:
+	_show_screen(_waiting_screen)
+	_waiting_title.text = "SALA %d" % room_id
+	_waiting_detail.text = "%d/5 JUGADORES\n%s" % [
+		player_count,
+		"Puedes iniciar la partida" if is_host and player_count >= 2
+		else "Esperando al anfitrión" if not is_host
+		else "Falta al menos un jugador",
+	]
+	_start_button.visible = is_host
+	_start_button.disabled = player_count < NET.MIN_PLAYERS_TO_START
+
+
+func _on_room_started(_room_id: int) -> void:
+	if _loading_game:
+		return
+	_loading_game = true
+	_waiting_detail.text = "Iniciando partida…"
+	get_tree().change_scene_to_file(GAME_SCENE)
+
+
+func _on_room_error(reason: String) -> void:
+	var messages := {
+		"room_limit": "Ya existen cinco salas.",
+		"room_full": "La sala está llena.",
+		"room_missing": "La sala ya no existe.",
+		"room_unavailable": "La partida ya comenzó.",
+		"need_two_players": "Se necesitan al menos dos jugadores.",
+		"host_only": "Sólo el anfitrión puede iniciar.",
+	}
+	_lobby_status.text = str(messages.get(reason, "No se pudo completar la acción."))
+	_create_button.disabled = _room_count >= _maximum_rooms
+	for index in _room_buttons.size():
+		if index < _room_count:
+			_room_buttons[index].disabled = false
+
+
+func _on_returned_to_lobby() -> void:
+	_show_screen(_lobby_screen)
+	_create_button.disabled = false
+	_refresh_button.disabled = false
+	network.request_room_list()
+
+
+func _show_screen(screen: Control) -> void:
+	_main_screen.visible = screen == _main_screen
+	_lobby_screen.visible = screen == _lobby_screen
+	_waiting_screen.visible = screen == _waiting_screen
+
+
+func _load_name() -> void:
+	var config := ConfigFile.new()
+	if config.load(PROFILE_PATH) == OK:
+		var saved := str(config.get_value("player", "name", "")).strip_edges().substr(0, 16)
+		if not saved.is_empty():
+			network.display_name = saved
+	_name_input.text = network.display_name
+
+
+func _save_name() -> void:
+	var safe_name := _name_input.text.strip_edges().substr(0, 16)
+	if safe_name.is_empty():
+		safe_name = network.display_name
+	_name_input.text = safe_name
+	network.display_name = safe_name
+	var config := ConfigFile.new()
+	config.load(PROFILE_PATH)
+	config.set_value("player", "name", safe_name)
+	config.save(PROFILE_PATH)
+
+
+func _new_screen(screen_name: String) -> VBoxContainer:
+	var screen := VBoxContainer.new()
+	screen.name = screen_name
+	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	screen.add_theme_constant_override("separation", 10)
+	return screen
+
+
+func _title(text_value: String, size: int, color: Color) -> Label:
+	var result := _label(text_value, size)
+	result.add_theme_color_override("font_color", color)
+	return result
+
+
+func _label(text_value: String, size: int) -> Label:
+	var result := Label.new()
+	result.text = text_value
+	result.add_theme_font_size_override("font_size", size)
+	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	result.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	return result
+
+
+func _button(text_value: String, node_name: String) -> Button:
+	var result := Button.new()
+	result.name = node_name
+	result.text = text_value
+	result.custom_minimum_size = Vector2(0.0, 52.0)
+	result.add_theme_font_size_override("font_size", 20)
+	return result
+
+
+func _spacer(height: float) -> Control:
+	var result := Control.new()
+	result.custom_minimum_size.y = height
+	return result

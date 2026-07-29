@@ -13,6 +13,7 @@ var _bytes_received := 0
 var _bytes_sent := 0
 var _accepted_inputs := 0
 var _rejected_inputs := 0
+var _lobby_peers: Dictionary = {}
 const METRICS_INTERVAL := 5.0
 
 
@@ -30,7 +31,7 @@ func _ready() -> void:
 	peer.set_bind_ip("*")
 	var error := peer.create_server(
 		server_port,
-		NET.MAX_PLAYERS_PER_ROOM,
+		NET.MAX_SERVER_CONNECTIONS,
 		NET.ENET_CHANNEL_COUNT,
 		262144,
 		262144
@@ -41,9 +42,10 @@ func _ready() -> void:
 		return
 	multiplayer.multiplayer_peer = peer
 	print(
-		"ONEPROYECT_SERVER_READY udp=%d rooms=1 max_players=%d tick_rate=%d snapshot_rate=%d"
+		"ONEPROYECT_SERVER_READY udp=%d max_rooms=%d max_players=%d tick_rate=%d snapshot_rate=%d"
 		% [
 			server_port,
+			NET.MAX_ROOMS,
 			NET.MAX_PLAYERS_PER_ROOM,
 			NET.SERVER_TICK_RATE,
 			NET.SNAPSHOT_RATE,
@@ -60,9 +62,12 @@ func _process(delta: float) -> void:
 		var started_usec := Time.get_ticks_usec()
 		_accumulator -= NET.SERVER_TICK_DELTA
 		room_manager.tick_all()
-		var room: Node = room_manager.fixed_room()
-		if room.server_tick % NET.SNAPSHOT_INTERVAL_TICKS == 0:
-			_broadcast_snapshot(room)
+		for room: Node in room_manager.rooms:
+			if (
+				room.phase != NET.RoomPhase.WAITING
+				and room.server_tick % NET.SNAPSHOT_INTERVAL_TICKS == 0
+			):
+				_broadcast_snapshot(room)
 		_metrics_cpu_usec += Time.get_ticks_usec() - started_usec
 		catchup_ticks += 1
 	if _metrics_elapsed >= METRICS_INTERVAL:
@@ -78,6 +83,146 @@ func _rpc_register_session(
 ) -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	var room: Node = room_manager.fixed_room()
+	room.auto_start_when_ready = true
+	_register_session_in_room(
+		sender,
+		room,
+		stable_id,
+		reconnect_token,
+		requested_name,
+		requested_color
+	)
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_enter_lobby() -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	if room_manager.find_room_for_peer(sender) != null:
+		_rpc_room_action_failed.rpc_id(sender, "already_in_room")
+		return
+	_lobby_peers[sender] = true
+	_rpc_lobby_ready.rpc_id(sender, NET.MAX_ROOMS, NET.MAX_PLAYERS_PER_ROOM)
+	_send_room_list(sender)
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_request_room_list() -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	if _lobby_peers.has(sender):
+		_send_room_list(sender)
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_create_room(
+	stable_id: String,
+	reconnect_token: String,
+	requested_name: String,
+	requested_color: int
+) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	if room_manager.find_room_for_peer(sender) != null:
+		_rpc_room_action_failed.rpc_id(sender, "already_in_room")
+		return
+	var room: Node = room_manager.create_room()
+	if room == null:
+		_rpc_room_action_failed.rpc_id(sender, "room_limit")
+		return
+	if not _register_session_in_room(
+		sender,
+		room,
+		stable_id,
+		reconnect_token,
+		requested_name,
+		requested_color
+	):
+		room_manager.remove_room(room)
+		_broadcast_lobby_rooms()
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_join_room(
+	room_id: int,
+	stable_id: String,
+	reconnect_token: String,
+	requested_name: String,
+	requested_color: int
+) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	if room_manager.find_room_for_peer(sender) != null:
+		_rpc_room_action_failed.rpc_id(sender, "already_in_room")
+		return
+	var room: Node = room_manager.find_room(room_id)
+	var reconnect_room: Node = room_manager.find_room_for_stable_id(
+		stable_id.strip_edges().to_lower().substr(0, 64)
+	)
+	if reconnect_room != null:
+		room = reconnect_room
+	if room == null:
+		_rpc_room_action_failed.rpc_id(sender, "room_missing")
+		return
+	if reconnect_room == null and not room.accepts_new_players():
+		_rpc_room_action_failed.rpc_id(sender, "room_unavailable")
+		return
+	_register_session_in_room(
+		sender,
+		room,
+		stable_id,
+		reconnect_token,
+		requested_name,
+		requested_color
+	)
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_start_room() -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	var room: Node = room_manager.find_room_for_peer(sender)
+	if room == null:
+		_rpc_room_action_failed.rpc_id(sender, "not_in_room")
+		return
+	if not room.is_host_peer(sender):
+		_rpc_room_action_failed.rpc_id(sender, "host_only")
+		return
+	if not room.start_rounds():
+		_rpc_room_action_failed.rpc_id(sender, "need_two_players")
+		return
+	_broadcast_lobby_rooms()
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_leave_room() -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	var room: Node = room_manager.find_room_for_peer(sender)
+	if room == null:
+		_lobby_peers[sender] = true
+		_send_room_list(sender)
+		return
+	var removed: RefCounted = room.session_manager.remove_by_peer_id(sender)
+	if removed != null:
+		for session: RefCounted in room.session_manager.sessions:
+			if session.connected and _peer_can_receive(session.peer_id):
+				_rpc_player_left.rpc_id(session.peer_id, removed.player_id, false)
+	_lobby_peers[sender] = true
+	_rpc_returned_to_lobby.rpc_id(sender)
+	if room.session_manager.sessions.is_empty():
+		room_manager.remove_room(room)
+	else:
+		room.call_deferred("_refresh_host")
+		call_deferred("_broadcast_room_waiting", room)
+	call_deferred("_broadcast_lobby_rooms")
+
+
+func _register_session_in_room(
+	sender: int,
+	room: Node,
+	stable_id: String,
+	reconnect_token: String,
+	requested_name: String,
+	requested_color: int
+) -> bool:
+	if room == null:
+		_rpc_session_rejected.rpc_id(sender, "room_missing")
+		return false
 	var session: RefCounted = room.session_manager.register_session(
 		sender,
 		stable_id,
@@ -87,11 +232,15 @@ func _rpc_register_session(
 		room.server_tick
 	)
 	if session == null:
-		_rpc_session_rejected.rpc_id(
-			sender,
-			str(room.session_manager.last_registration_error)
-		)
-		return
+		var reason := str(room.session_manager.last_registration_error)
+		if _lobby_peers.has(sender):
+			_rpc_room_action_failed.rpc_id(sender, reason)
+		else:
+			_rpc_session_rejected.rpc_id(sender, reason)
+		return false
+	if room.host_player_id == 0:
+		room.host_player_id = session.player_id
+	_lobby_peers.erase(sender)
 	_rpc_session_accepted.rpc_id(
 		sender,
 		session.player_id,
@@ -101,7 +250,7 @@ func _rpc_register_session(
 		room.server_tick
 	)
 	for existing: RefCounted in room.session_manager.sessions:
-		if not existing.connected:
+		if not existing.connected or not _peer_can_receive(existing.peer_id):
 			continue
 		_rpc_player_joined.rpc_id(
 			sender,
@@ -119,6 +268,8 @@ func _rpc_register_session(
 				session.position
 			)
 	_broadcast_round_state_to_peer(room, sender)
+	_broadcast_room_waiting(room)
+	_broadcast_lobby_rooms()
 	print(
 		"SESSION_ACCEPTED player=%d peer=%d reconnect=%s room=%d connected=%d"
 		% [
@@ -129,6 +280,7 @@ func _rpc_register_session(
 			room.session_manager.connected_count(),
 		]
 	)
+	return true
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
@@ -149,7 +301,12 @@ func _rpc_submit_push(target_player_id: int, direction: Vector3) -> void:
 		return
 	var source: RefCounted = room.session_manager.find_by_peer_id(sender)
 	var target: RefCounted = room.session_manager.find_by_player_id(target_player_id)
-	if source != null and target != null and target.connected:
+	if (
+		source != null
+		and target != null
+		and target.connected
+		and _peer_can_receive(target.peer_id)
+	):
 		_rpc_receive_push.rpc_id(
 			target.peer_id,
 			source.player_id,
@@ -171,6 +328,45 @@ func _rpc_session_accepted(
 
 @rpc("authority", "call_remote", "reliable", 0)
 func _rpc_session_rejected(_reason: String) -> void:
+	pass
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_lobby_ready(_maximum_rooms: int, _maximum_players: int) -> void:
+	pass
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_room_list(
+	_room_ids: PackedInt32Array,
+	_player_counts: PackedInt32Array,
+	_phases: PackedInt32Array,
+	_host_names: PackedStringArray
+) -> void:
+	pass
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_room_waiting(
+	_room_id: int,
+	_player_count: int,
+	_host_player_id: int
+) -> void:
+	pass
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_room_started(_room_id: int) -> void:
+	pass
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_room_action_failed(_reason: String) -> void:
+	pass
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_returned_to_lobby() -> void:
 	pass
 
 
@@ -237,7 +433,7 @@ func _rpc_receive_push(
 func _broadcast_snapshot(room: Node) -> void:
 	var packet: PackedByteArray = room.build_snapshot()
 	for session: RefCounted in room.session_manager.sessions:
-		if not session.connected:
+		if not session.connected or not _peer_can_receive(session.peer_id):
 			continue
 		_rpc_receive_snapshot.rpc_id(session.peer_id, packet)
 		_bytes_sent += packet.size()
@@ -245,7 +441,7 @@ func _broadcast_snapshot(room: Node) -> void:
 
 func _broadcast_round_state(room: Node) -> void:
 	for session: RefCounted in room.session_manager.sessions:
-		if session.connected:
+		if session.connected and _peer_can_receive(session.peer_id):
 			_broadcast_round_state_to_peer(room, session.peer_id)
 
 
@@ -270,6 +466,7 @@ func _on_peer_connected(peer_id: int) -> void:
 
 
 func _on_peer_disconnected(peer_id: int) -> void:
+	_lobby_peers.erase(peer_id)
 	var room: Node = room_manager.find_room_for_peer(peer_id)
 	if room == null:
 		return
@@ -280,6 +477,8 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	if session == null:
 		return
 	call_deferred("_notify_session_suspended", room, session.player_id)
+	call_deferred("_broadcast_room_waiting", room)
+	call_deferred("_broadcast_lobby_rooms")
 	print(
 		"SESSION_SUSPENDED player=%d reconnect_until_tick=%d"
 		% [session.player_id, session.reconnect_until_tick]
@@ -291,12 +490,19 @@ func _notify_session_suspended(room: Node, player_id: int) -> void:
 		return
 	var connected_peers := multiplayer.get_peers()
 	for other: RefCounted in room.session_manager.sessions:
-		if other.connected and other.peer_id in connected_peers:
+		if (
+			other.connected
+			and other.peer_id in connected_peers
+			and _peer_can_receive(other.peer_id)
+		):
 			_rpc_player_left.rpc_id(other.peer_id, player_id, true)
 
 
 func _on_phase_changed(room: Node) -> void:
 	_broadcast_round_state(room)
+	if room.phase == NET.RoomPhase.COUNTDOWN:
+		_broadcast_room_started(room)
+	_broadcast_lobby_rooms()
 
 
 func _on_meteor_spawned(
@@ -307,7 +513,7 @@ func _on_meteor_spawned(
 	force: float
 ) -> void:
 	for session: RefCounted in room.session_manager.sessions:
-		if session.connected:
+		if session.connected and _peer_can_receive(session.peer_id):
 			_rpc_receive_meteor.rpc_id(
 				session.peer_id,
 				target,
@@ -319,16 +525,99 @@ func _on_meteor_spawned(
 
 func _on_shockwave_started(room: Node) -> void:
 	for session: RefCounted in room.session_manager.sessions:
-		if session.connected:
+		if session.connected and _peer_can_receive(session.peer_id):
 			_rpc_receive_shockwave.rpc_id(session.peer_id)
 
 
 func _on_session_expired(room: Node, player_id: int) -> void:
 	var connected_peers := multiplayer.get_peers()
 	for session: RefCounted in room.session_manager.sessions:
-		if session.connected and session.peer_id in connected_peers:
+		if (
+			session.connected
+			and session.peer_id in connected_peers
+			and _peer_can_receive(session.peer_id)
+		):
 			_rpc_player_left.rpc_id(session.peer_id, player_id, false)
 	print("SESSION_EXPIRED player=%d room=%d" % [player_id, room.room_id])
+	call_deferred("_remove_room_if_empty", room)
+
+
+func _remove_room_if_empty(room: Node) -> void:
+	if not is_instance_valid(room):
+		return
+	if room.session_manager.sessions.is_empty():
+		room_manager.remove_room(room)
+	else:
+		_broadcast_room_waiting(room)
+	_broadcast_lobby_rooms()
+
+
+func _send_room_list(peer_id: int) -> void:
+	if not _peer_can_receive(peer_id):
+		_lobby_peers.erase(peer_id)
+		return
+	var room_ids := PackedInt32Array()
+	var player_counts := PackedInt32Array()
+	var phases := PackedInt32Array()
+	var host_names := PackedStringArray()
+	for room: Node in room_manager.rooms:
+		room_ids.append(room.room_id)
+		player_counts.append(room.connected_count())
+		phases.append(room.phase)
+		host_names.append(room.host_name())
+	_rpc_room_list.rpc_id(peer_id, room_ids, player_counts, phases, host_names)
+
+
+func _broadcast_lobby_rooms() -> void:
+	var connected_peers := multiplayer.get_peers()
+	for peer_id: int in _lobby_peers.keys():
+		if peer_id in connected_peers and _peer_can_receive(peer_id):
+			_send_room_list(peer_id)
+		else:
+			_lobby_peers.erase(peer_id)
+
+
+func _broadcast_room_waiting(room: Node) -> void:
+	if not is_instance_valid(room):
+		return
+	room._refresh_host()
+	var connected_peers := multiplayer.get_peers()
+	for session: RefCounted in room.session_manager.sessions:
+		if (
+			session.connected
+			and session.peer_id in connected_peers
+			and _peer_can_receive(session.peer_id)
+		):
+			_rpc_room_waiting.rpc_id(
+				session.peer_id,
+				room.room_id,
+				room.connected_count(),
+				room.host_player_id
+			)
+
+
+func _broadcast_room_started(room: Node) -> void:
+	var connected_peers := multiplayer.get_peers()
+	for session: RefCounted in room.session_manager.sessions:
+		if (
+			session.connected
+			and session.peer_id in connected_peers
+			and _peer_can_receive(session.peer_id)
+		):
+			_rpc_room_started.rpc_id(session.peer_id, room.room_id)
+
+
+func _peer_can_receive(peer_id: int) -> bool:
+	var transport := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if transport == null:
+		return false
+	var packet_peer: ENetPacketPeer = transport.get_peer(peer_id)
+	return (
+		packet_peer != null
+		and packet_peer.is_active()
+		and packet_peer.get_state() == ENetPacketPeer.STATE_CONNECTED
+		and packet_peer.get_channels() > 0
+	)
 
 
 func _print_metrics() -> void:

@@ -12,12 +12,14 @@ const SESSION_MANAGER_SCRIPT := preload("res://server/session_manager.gd")
 
 var room_id := 1
 var server_tick := 0
-var phase := NET.RoomPhase.COUNTDOWN
+var phase := NET.RoomPhase.WAITING
 var round_number := 0
 var round_seed := 1
 var phase_end_tick := 0
 var mode_id := NET.ModeId.METEORS
 var session_manager: Node
+var host_player_id := 0
+var auto_start_when_ready := false
 
 var _snapshot_buffer := PackedByteArray()
 var _random := RandomNumberGenerator.new()
@@ -33,7 +35,7 @@ func _ready() -> void:
 	_snapshot_buffer = CODEC.create_snapshot_buffer()
 	_random.seed = int(Time.get_unix_time_from_system()) ^ room_id
 	round_seed = int(_random.randi() & 0x7fffffff)
-	phase_end_tick = 5 * NET.SERVER_TICK_RATE
+	phase_end_tick = 0
 
 
 func tick() -> void:
@@ -41,7 +43,14 @@ func tick() -> void:
 	for session: RefCounted in session_manager.sessions:
 		session.simulate(server_tick)
 	session_manager.purge_expired(server_tick)
-	if server_tick >= phase_end_tick:
+	_refresh_host()
+	if (
+		phase == NET.RoomPhase.WAITING
+		and auto_start_when_ready
+		and session_manager.connected_count() >= NET.MIN_PLAYERS_TO_START
+	):
+		start_rounds()
+	if phase != NET.RoomPhase.WAITING and server_tick >= phase_end_tick:
 		_advance_phase()
 	if phase == NET.RoomPhase.ACTIVE:
 		_tick_mode_events()
@@ -109,10 +118,56 @@ func apply_push(peer_id: int, target_player_id: int, direction: Vector3) -> bool
 
 
 func seconds_left() -> float:
+	if phase == NET.RoomPhase.WAITING:
+		return 0.0
 	return maxf(
 		0.0,
 		float(phase_end_tick - server_tick) / float(NET.SERVER_TICK_RATE)
 	)
+
+
+func accepts_new_players() -> bool:
+	return (
+		phase == NET.RoomPhase.WAITING
+		and session_manager.sessions.size() < NET.MAX_PLAYERS_PER_ROOM
+	)
+
+
+func start_rounds() -> bool:
+	if (
+		phase != NET.RoomPhase.WAITING
+		or session_manager.connected_count() < NET.MIN_PLAYERS_TO_START
+	):
+		return false
+	phase = NET.RoomPhase.COUNTDOWN
+	phase_end_tick = server_tick + 5 * NET.SERVER_TICK_RATE
+	phase_changed.emit()
+	return true
+
+
+func is_host_peer(peer_id: int) -> bool:
+	var session: RefCounted = session_manager.find_by_peer_id(peer_id)
+	return session != null and session.player_id == host_player_id
+
+
+func connected_count() -> int:
+	return session_manager.connected_count()
+
+
+func host_name() -> String:
+	var host: RefCounted = session_manager.find_by_player_id(host_player_id)
+	return host.display_name if host != null else ""
+
+
+func _refresh_host() -> void:
+	var current: RefCounted = session_manager.find_by_player_id(host_player_id)
+	if current != null and current.connected:
+		return
+	host_player_id = 0
+	for session: RefCounted in session_manager.sessions:
+		if session.connected:
+			host_player_id = session.player_id
+			return
 
 
 func _advance_phase() -> void:

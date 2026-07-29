@@ -165,6 +165,54 @@ jobs:
             exit 1
           fi
 
+      - name: Verify multiplayer lobby and room start rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT="$HOME/.cache/oneproyect-godot/godot"
+          TEST_DIR="$RUNNER_TEMP/oneproyect-lobby"
+          mkdir -p "$TEST_DIR"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" -- \
+            --server --port=19996 > "$TEST_DIR/server.log" 2>&1 &
+          server_pid=$!
+          cleanup_lobby() {
+            kill "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup_lobby EXIT
+          for attempt in {1..40}; do
+            if grep -q "ONEPROYECT_SERVER_READY udp=19996" "$TEST_DIR/server.log"; then
+              break
+            fi
+            sleep 0.25
+          done
+          grep -q "ONEPROYECT_SERVER_READY udp=19996" "$TEST_DIR/server.log"
+
+          timeout 15 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/lobby_probe.gd -- \
+            --role=joiner --port=19996 > "$TEST_DIR/joiner.log" 2>&1 &
+          joiner_pid=$!
+          sleep 0.5
+          timeout 15 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/lobby_probe.gd -- \
+            --role=host --port=19996 > "$TEST_DIR/host.log" 2>&1 &
+          host_pid=$!
+          set +e
+          wait "$host_pid"
+          host_code=$?
+          wait "$joiner_pid"
+          joiner_code=$?
+          set -e
+          if [[ "$host_code" -ne 0 || "$joiner_code" -ne 0 ]]; then
+            cat "$TEST_DIR/server.log" "$TEST_DIR/host.log" "$TEST_DIR/joiner.log"
+            exit 1
+          fi
+          grep -q "LOBBY_PROBE_OK role=host" "$TEST_DIR/host.log"
+          grep -q "LOBBY_PROBE_OK role=joiner" "$TEST_DIR/joiner.log"
+          if grep -qE "SCRIPT ERROR|LOBBY_PROBE_FAIL|ERROR:" "$TEST_DIR/"*.log; then
+            cat "$TEST_DIR/"*.log
+            exit 1
+          fi
+
       - name: Verify full five-player room budget
         shell: bash
         run: |

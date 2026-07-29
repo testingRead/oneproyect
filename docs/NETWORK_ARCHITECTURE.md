@@ -39,7 +39,8 @@ client/
 El bootstrap crea exactamente una rama:
 
 - `--server`: cambia a la escena dedicada y no crea `NetworkClient`;
-- normal: crea `/root/Network` y luego carga `scenes/main.tscn`.
+- normal: crea `/root/Network` y luego carga `scenes/menu.tscn`; el menú decide
+  entre juego local y lobby multijugador.
 
 ## Frecuencias y canales
 
@@ -95,6 +96,8 @@ segundos, el servidor asocia el nuevo `peer_id` con la sesión anterior y
 continúa posición, vida y puntuación. Al vencer, la sala purga la sesión y
 notifica su eliminación.
 
-La primera etapa mantiene una sala fija de cinco personas. `RoomManager` ya
-posee el límite entre salas, pero no implementa matchmaking público, migración
-de host, P2P, cuentas ni persistencia del lado servidor.
+El lobby admite como máximo cinco salas dentro de un solo proceso y cada sala
+reserva hasta cinco sesiones. El creador puede iniciar con un mínimo de dos
+personas. El proceso ENet admite 25 clientes simultáneos, pero cada
+`SessionManager` aplica por separado el límite de cinco. No hay matchmaking
+público, migración de proceso, P2P, cuentas ni persistencia del lado servidor.

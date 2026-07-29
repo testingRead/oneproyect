@@ -4,6 +4,7 @@ const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn
 const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.gd")
 const INPUT_INTERVAL := 0.05
 const PROFILE_PATH := "user://profile.cfg"
+const MENU_SCENE := "res://scenes/menu.tscn"
 const PUSH_RANGE := 2.8
 const PUSH_MIN_DOT := 0.62
 const QUALITY_NAMES := ["BAJA", "MEDIA", "ALTA"]
@@ -58,6 +59,7 @@ var _total_victories := 0
 var _install_id := ""
 var _defeated_this_round := false
 var _participating_round := false
+var _returning_to_menu := false
 
 
 func _ready() -> void:
@@ -107,7 +109,13 @@ func _ready() -> void:
 	network.push_received.connect(_on_push_received)
 	_load_profile()
 	_on_health_changed(100, 100)
-	_on_network_status_changed("MODO LOCAL", false)
+	if network.is_online():
+		_on_network_status_changed(
+			"EN LÍNEA · SALA %d" % network.get_room_id(),
+			true
+		)
+	else:
+		_on_network_status_changed("MODO LOCAL", false)
 
 
 func _process(delta: float) -> void:
@@ -292,20 +300,28 @@ func _on_push_received(_sender_id: int, direction: Vector3, force: float) -> voi
 
 
 func _toggle_online() -> void:
-	if network.is_online():
-		network.disconnect_session()
-		_clear_remote_players()
-		online_button.text = "CONECTAR"
-		disaster.restart_cycle()
+	if _returning_to_menu:
 		return
-	var requested_name := name_input.text.strip_edges().substr(0, 16)
-	if not requested_name.is_empty():
-		network.display_name = requested_name
+	_returning_to_menu = true
+	_apply_name_setting()
 	_save_profile()
-	online_button.disabled = true
-	var error: int = network.connect_to_server()
-	if error != OK:
-		online_button.disabled = false
+	if network.is_online():
+		network.returned_to_lobby.connect(_finish_return_to_menu, CONNECT_ONE_SHOT)
+		network.leave_room()
+		get_tree().create_timer(0.75, true, false, true).timeout.connect(
+			_finish_return_to_menu
+		)
+		return
+	_finish_return_to_menu()
+
+
+func _finish_return_to_menu() -> void:
+	if not _returning_to_menu:
+		return
+	_returning_to_menu = false
+	network.disconnect_session()
+	get_tree().paused = false
+	get_tree().change_scene_to_file(MENU_SCENE)
 
 
 func _on_network_status_changed(text: String, online: bool) -> void:
@@ -318,7 +334,7 @@ func _on_network_status_changed(text: String, online: bool) -> void:
 			or text.to_upper().begins_with("VALIDANDO")
 		)
 	)
-	online_button.text = "SALIR" if online else "CONECTAR"
+	online_button.text = "SALIR" if online else "MENÚ"
 	pause_button.text = "MENÚ" if online else "PAUSA"
 	restart_button.text = "REAPARECER" if online else "REINICIAR"
 	pause_restart.text = "REAPARECER" if online else "REINICIAR"

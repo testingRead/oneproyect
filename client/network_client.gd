@@ -33,6 +33,17 @@ signal simulation_host_changed(peer_id: int)
 signal push_received(sender_id: int, direction: Vector3, force: float)
 signal session_resumed(player_id: int)
 signal remote_session_suspended(player_id: int)
+signal lobby_ready(maximum_rooms: int, maximum_players: int)
+signal room_list_updated(
+	room_ids: PackedInt32Array,
+	player_counts: PackedInt32Array,
+	phases: PackedInt32Array,
+	host_names: PackedStringArray
+)
+signal room_waiting_updated(room_id: int, player_count: int, is_host: bool)
+signal room_started(room_id: int)
+signal room_action_failed(reason: String)
+signal returned_to_lobby
 
 const NET := preload("res://shared/net_constants.gd")
 const CODEC := preload("res://shared/net_codec.gd")
@@ -58,6 +69,7 @@ var _stable_id := ""
 var _reconnect_token := ""
 var _prediction: RefCounted
 var _persist_identity := true
+var _lobby_mode := false
 
 
 func _ready() -> void:
@@ -83,6 +95,7 @@ func _process(delta: float) -> void:
 
 
 func connect_to_server(address: String = "") -> Error:
+	_lobby_mode = false
 	_manual_disconnect = false
 	_reconnect_pending = false
 	var target := address.strip_edges()
@@ -90,6 +103,56 @@ func connect_to_server(address: String = "") -> Error:
 		target = server_address
 	server_address = target
 	return _start_client_peer(target)
+
+
+func connect_to_lobby(address: String = "") -> Error:
+	_lobby_mode = true
+	_room_id = 0
+	_manual_disconnect = false
+	_reconnect_pending = false
+	var target := address.strip_edges()
+	if target.is_empty():
+		target = server_address
+	server_address = target
+	return _start_client_peer(target)
+
+
+func request_room_list() -> void:
+	if multiplayer.multiplayer_peer != null:
+		_rpc_request_room_list.rpc_id(1)
+
+
+func create_room() -> void:
+	_rpc_create_room.rpc_id(
+		1,
+		_stable_id,
+		_reconnect_token,
+		display_name,
+		color_index
+	)
+
+
+func join_room(room_id: int) -> void:
+	if room_id <= 0:
+		return
+	_rpc_join_room.rpc_id(
+		1,
+		room_id,
+		_stable_id,
+		_reconnect_token,
+		display_name,
+		color_index
+	)
+
+
+func start_room() -> void:
+	if _session_accepted:
+		_rpc_start_room.rpc_id(1)
+
+
+func leave_room() -> void:
+	if _session_accepted:
+		_rpc_leave_room.rpc_id(1)
 
 
 func disconnect_session() -> void:
@@ -118,6 +181,10 @@ func get_player_count() -> int:
 
 func get_local_player_id() -> int:
 	return _local_player_id
+
+
+func get_room_id() -> int:
+	return _room_id
 
 
 func set_prediction_origin(position: Vector3, velocity := Vector3.ZERO) -> void:
@@ -202,6 +269,47 @@ func _rpc_register_session(
 	pass
 
 
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_enter_lobby() -> void:
+	pass
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_request_room_list() -> void:
+	pass
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_create_room(
+	_stable_id_value: String,
+	_reconnect_token_value: String,
+	_requested_name: String,
+	_requested_color: int
+) -> void:
+	pass
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_join_room(
+	_room_id_value: int,
+	_stable_id_value: String,
+	_reconnect_token_value: String,
+	_requested_name: String,
+	_requested_color: int
+) -> void:
+	pass
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_start_room() -> void:
+	pass
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_leave_room() -> void:
+	pass
+
+
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
 func _rpc_submit_input(_packet: PackedByteArray) -> void:
 	pass
@@ -242,6 +350,67 @@ func _rpc_session_rejected(reason: String) -> void:
 	_reconnect_pending = false
 	_close_peer()
 	_reset_runtime_state()
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_lobby_ready(maximum_rooms: int, maximum_players: int) -> void:
+	status_changed.emit("LOBBY CONECTADO", false)
+	lobby_ready.emit(maximum_rooms, maximum_players)
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_room_list(
+	room_ids: PackedInt32Array,
+	player_counts: PackedInt32Array,
+	phases: PackedInt32Array,
+	host_names: PackedStringArray
+) -> void:
+	room_list_updated.emit(room_ids, player_counts, phases, host_names)
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_room_waiting(
+	room_id: int,
+	player_count: int,
+	host_player_id: int
+) -> void:
+	_room_id = room_id
+	status_changed.emit(
+		"SALA %d · %d/%d JUGADORES" % [
+			room_id,
+			player_count,
+			NET.MAX_PLAYERS_PER_ROOM,
+		],
+		true
+	)
+	room_waiting_updated.emit(
+		room_id,
+		player_count,
+		host_player_id == _local_player_id
+	)
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_room_started(room_id: int) -> void:
+	if room_id == _room_id:
+		room_started.emit(room_id)
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_room_action_failed(reason: String) -> void:
+	status_changed.emit("NO SE PUDO · %s" % reason, false)
+	room_action_failed.emit(reason)
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_returned_to_lobby() -> void:
+	_players.clear()
+	_session_accepted = false
+	_room_id = 0
+	_local_player_id = 0
+	_lobby_mode = true
+	status_changed.emit("LOBBY CONECTADO", false)
+	returned_to_lobby.emit()
 
 
 @rpc("authority", "call_remote", "reliable", 0)
@@ -380,6 +549,21 @@ func _start_client_peer(address: String) -> Error:
 func _on_connected_to_server() -> void:
 	_online = true
 	_session_accepted = false
+	if _room_id > 0 and not _reconnect_token.is_empty():
+		_rpc_join_room.rpc_id(
+			1,
+			_room_id,
+			_stable_id,
+			_reconnect_token,
+			display_name,
+			color_index
+		)
+		status_changed.emit("RECONECTANDO A SALA %d…" % _room_id, false)
+		return
+	if _lobby_mode:
+		_rpc_enter_lobby.rpc_id(1)
+		status_changed.emit("ENTRANDO AL LOBBY…", false)
+		return
 	_rpc_register_session.rpc_id(
 		1,
 		_stable_id,
@@ -427,6 +611,7 @@ func _reset_runtime_state() -> void:
 	_local_player_id = 0
 	_room_id = 0
 	_input_sequence = 0
+	_lobby_mode = false
 
 
 func _load_identity() -> void:
