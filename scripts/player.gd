@@ -27,6 +27,12 @@ signal limb_detached(
 
 const MAX_HEALTH := 100
 const ALL_LIMBS_MASK := HUMANOID_RIG.ALL_BODY_PARTS_MASK
+const NETWORK_HARD_SNAP_DISTANCE := 4.5
+const NETWORK_HARD_SNAP_HEIGHT := 3.0
+const NETWORK_SETTLE_DELAY := 0.35
+const NETWORK_SETTLED_SPEED := 0.75
+const NETWORK_POSITION_DEADZONE := 1.25
+const NETWORK_HEIGHT_DEADZONE := 0.75
 const LIMB_MAX_HEALTH := [24, 34, 34, 20, 20, 38, 38]
 const ACCESSORY_MAX_HEALTH := 12
 const LIMB_VISUAL_PATHS := [
@@ -78,6 +84,7 @@ var _touch_move := Vector2.ZERO
 var _jump_requested := false
 var _network_jump_event := false
 var _network_move_world := Vector2.ZERO
+var _network_idle_elapsed := NETWORK_SETTLE_DELAY
 var _spawn_transform: Transform3D
 var _health := MAX_HEALTH
 var _invulnerability := 0.0
@@ -120,6 +127,10 @@ func _physics_process(delta: float) -> void:
 	if direction.length_squared() > 1.0:
 		direction = direction.normalized()
 	_network_move_world = Vector2(direction.x, direction.z)
+	if _network_move_world.length_squared() > 0.01:
+		_network_idle_elapsed = 0.0
+	else:
+		_network_idle_elapsed += delta
 
 	var movement_scale := _get_leg_movement_scale()
 	var acceleration := ground_acceleration if is_on_floor() else air_acceleration
@@ -254,24 +265,41 @@ func apply_authoritative_state(
 		position.x - global_position.x,
 		position.z - global_position.z
 	)
+	var horizontal_distance := horizontal_error.length()
 	var vertical_error := position.y - global_position.y
-	if horizontal_error.length() > 4.5 or absf(vertical_error) > 3.0:
+	var authoritative_horizontal_speed := Vector2(
+		authoritative_velocity.x,
+		authoritative_velocity.z
+	).length()
+	var simulation_settled := (
+		_network_idle_elapsed >= NETWORK_SETTLE_DELAY
+		and authoritative_horizontal_speed <= NETWORK_SETTLED_SPEED
+	)
+	if (
+		horizontal_distance > NETWORK_HARD_SNAP_DISTANCE
+		or absf(vertical_error) > NETWORK_HARD_SNAP_HEIGHT
+	):
 		global_position = position
-	else:
+	elif simulation_settled:
+		# The local CharacterBody runs at 60 Hz while the compact authoritative
+		# simulation runs at 20 Hz. Small differences are expected and must not
+		# be fed back into an actively controlled body as a constant backwards
+		# force. Settle only meaningful idle drift; large invalid states still
+		# snap immediately above.
 		var horizontal_correction := (
-			0.04
-			if horizontal_error.length() > 1.5
-			else 0.015
-			if horizontal_error.length() > 0.65
+			0.12
+			if horizontal_distance > 2.5
+			else 0.06
+			if horizontal_distance > NETWORK_POSITION_DEADZONE
 			else 0.0
 		)
 		global_position.x += horizontal_error.x * horizontal_correction
 		global_position.z += horizontal_error.y * horizontal_correction
 		var vertical_correction := (
-			0.08
-			if absf(vertical_error) > 1.2
-			else 0.025
-			if absf(vertical_error) > 0.35
+			0.12
+			if absf(vertical_error) > 1.5
+			else 0.06
+			if absf(vertical_error) > NETWORK_HEIGHT_DEADZONE
 			else 0.0
 		)
 		global_position.y += vertical_error * vertical_correction
@@ -279,9 +307,9 @@ func apply_authoritative_state(
 		velocity.x - authoritative_velocity.x,
 		velocity.z - authoritative_velocity.z
 	).length()
-	if velocity_error > 2.0:
-		velocity.x = lerpf(velocity.x, authoritative_velocity.x, 0.05)
-		velocity.z = lerpf(velocity.z, authoritative_velocity.z, 0.05)
+	if simulation_settled and velocity_error > 2.0:
+		velocity.x = lerpf(velocity.x, authoritative_velocity.x, 0.12)
+		velocity.z = lerpf(velocity.z, authoritative_velocity.z, 0.12)
 	visual.rotation.y = lerp_angle(visual.rotation.y, facing_yaw, 0.08)
 	var safe_health := clampi(health, 0, MAX_HEALTH)
 	if safe_health != _health:

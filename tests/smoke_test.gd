@@ -174,7 +174,39 @@ func _run() -> void:
 		absf(player.get_node("Visual/LeftArm").rotation.x) > 0.01,
 		"Moving player must drive the procedural walk animation"
 	)
+	player.global_position = Vector3(2.0, 1.2, 8.0)
+	player.velocity = Vector3(6.0, 0.0, 0.0)
+	player._network_move_world = Vector2.RIGHT
+	player._network_idle_elapsed = 0.0
+	var predicted_local_position := player.global_position
+	for snapshot in 60:
+		predicted_local_position.x += 0.1
+		player.global_position = predicted_local_position
+		player.apply_authoritative_state(
+			predicted_local_position - Vector3(1.0, 0.0, 0.0),
+			Vector3(6.0, 0.0, 0.0),
+			0.0,
+			player.get_health(),
+			player.get_limb_mask()
+		)
+	_require(
+		player.global_position.is_equal_approx(predicted_local_position),
+		"Sustained authoritative latency must not drag an actively moving player backwards"
+	)
+	player.apply_authoritative_state(
+		Vector3(-4.0, 1.2, 8.0),
+		Vector3.ZERO,
+		0.0,
+		player.get_health(),
+		player.get_limb_mask()
+	)
+	_require(
+		player.global_position.is_equal_approx(Vector3(-4.0, 1.2, 8.0)),
+		"Gross authoritative divergence must still correct the local player"
+	)
+	player.global_position = Vector3(0.0, 1.2, 8.0)
 	player.velocity = Vector3.ZERO
+	await physics_frame
 	player.set_controls_enabled(false)
 	var locked_position := player.global_position
 	player.set_touch_move(Vector2(1.0, 0.0))
