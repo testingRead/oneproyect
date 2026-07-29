@@ -223,7 +223,14 @@ jobs:
           report_export_failure() {
             code=$?
             trap - ERR
-            echo "::error title=Dedicated server validation failed::phase=$phase exit=$code"
+            detail=""
+            if [[ -n "${SERVER_LOG:-}" && -s "$SERVER_LOG" ]]; then
+              detail="$(tail -20 "$SERVER_LOG" | tr '\n' ' ' | cut -c1-1200)"
+              detail="${detail//'%'/'%25'}"
+              detail="${detail//$'\r'/'%0D'}"
+              detail="${detail//$'\n'/'%0A'}"
+            fi
+            echo "::error title=Dedicated server validation failed::phase=$phase exit=$code log=$detail"
             exit "$code"
           }
           trap report_export_failure ERR
