@@ -14,6 +14,8 @@ const PROFILE_PATH := "user://profile.cfg"
 @onready var round_title: Label = $HUD/RoundPanel/Title
 @onready var round_detail: Label = $HUD/RoundPanel/Detail
 @onready var round_clock: Label = $HUD/RoundPanel/Clock
+@onready var score_label: Label = $HUD/RoundPanel/Score
+@onready var damage_flash: ColorRect = $HUD/DamageFlash
 @onready var pause_panel: Control = $HUD/PausePanel
 @onready var pause_button: Button = $HUD/TopBar/Pause
 @onready var restart_button: Button = $HUD/TopBar/Restart
@@ -27,6 +29,9 @@ const PROFILE_PATH := "user://profile.cfg"
 var _stats_elapsed := 0.0
 var _snapshot_elapsed := 0.0
 var _remote_avatars: Dictionary = {}
+var _damage_flash_strength := 0.0
+var _completed_rounds := 0
+var _best_rounds := 0
 
 
 func _ready() -> void:
@@ -40,6 +45,7 @@ func _ready() -> void:
 	$HUD/PausePanel/Center/Resume.pressed.connect(toggle_pause)
 	$HUD/PausePanel/Center/Restart.pressed.connect(restart_level)
 	player.health_changed.connect(_on_health_changed)
+	player.damaged.connect(_on_player_damaged)
 	player.defeated.connect(_on_player_defeated)
 	disaster.state_changed.connect(_on_disaster_state_changed)
 	disaster.clock_changed.connect(_on_disaster_clock_changed)
@@ -73,6 +79,10 @@ func _process(delta: float) -> void:
 		if _snapshot_elapsed >= SNAPSHOT_INTERVAL:
 			network.send_snapshot(player.global_position, player.get_visual_yaw())
 			_snapshot_elapsed = 0.0
+	if _damage_flash_strength > 0.0:
+		_damage_flash_strength = maxf(0.0, _damage_flash_strength - delta * 1.7)
+		damage_flash.color.a = _damage_flash_strength * 0.34
+		damage_flash.visible = _damage_flash_strength > 0.0
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -110,6 +120,7 @@ func restart_level() -> void:
 	$HUD/PausePanel/Center/Resume.visible = true
 	player.set_controls_enabled(true)
 	player.reset_to_spawn()
+	_reset_streak()
 	if not network.is_online():
 		disaster.restart_cycle()
 	if not OS.has_feature("mobile"):
@@ -131,6 +142,7 @@ func _on_health_changed(current: int, maximum: int) -> void:
 
 func _on_player_defeated() -> void:
 	round_detail.text = "¡Te derribaron! Regresas a la plaza"
+	_reset_streak()
 	player.reset_to_spawn()
 
 
@@ -146,6 +158,19 @@ func _on_disaster_clock_changed(seconds_left: int) -> void:
 func _on_round_survived(_round_number: int) -> void:
 	sounds.play_success()
 	player.heal_full()
+	_completed_rounds += 1
+	if _completed_rounds > _best_rounds:
+		_best_rounds = _completed_rounds
+		_save_profile()
+	_update_score()
+
+
+func _on_player_damaged(_amount: int, _current: int) -> void:
+	_damage_flash_strength = 1.0
+	damage_flash.visible = true
+	damage_flash.color.a = 0.34
+	if OS.has_feature("mobile"):
+		Input.vibrate_handheld(70, 0.28)
 
 
 func _toggle_online() -> void:
@@ -223,12 +248,24 @@ func _load_profile() -> void:
 		var saved_name := str(config.get_value("player", "name", "")).strip_edges().substr(0, 16)
 		if not saved_name.is_empty():
 			network.display_name = saved_name
+		_best_rounds = maxi(0, int(config.get_value("player", "best_rounds", 0)))
 	name_input.text = network.display_name
+	_update_score()
 
 
 func _save_profile() -> void:
 	var config := ConfigFile.new()
 	config.set_value("player", "name", network.display_name)
+	config.set_value("player", "best_rounds", _best_rounds)
 	var error := config.save(PROFILE_PATH)
 	if error != OK:
-		push_warning("No se pudo guardar el nombre del jugador: %s" % error)
+		push_warning("No se pudo guardar el perfil del jugador: %s" % error)
+
+
+func _reset_streak() -> void:
+	_completed_rounds = 0
+	_update_score()
+
+
+func _update_score() -> void:
+	score_label.text = "RONDAS  %d   ·   RÉCORD  %d" % [_completed_rounds, _best_rounds]

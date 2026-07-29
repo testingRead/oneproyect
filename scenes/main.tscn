@@ -492,8 +492,29 @@ theme_override_font_sizes/font_size = 18
 text = "Busca altura y mira las marcas del suelo"
 horizontal_alignment = 1
 
+[node name="Score" type="Label" parent="HUD/RoundPanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.58, 0.88, 1, 0.92)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
+theme_override_font_sizes/font_size = 16
+text = "RONDAS  0   ·   RÉCORD  0"
+horizontal_alignment = 1
+
+[node name="DamageFlash" type="ColorRect" parent="HUD"]
+visible = false
+z_index = 40
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 0.06, 0.02, 0)
+
 [node name="PausePanel" type="ColorRect" parent="HUD"]
 visible = false
+z_index = 50
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

@@ -12,6 +12,7 @@ extends CharacterBody3D
 @onready var camera_rig: Node3D = $CameraRig
 
 signal health_changed(current: int, maximum: int)
+signal damaged(amount: int, current: int)
 signal defeated
 
 const MAX_HEALTH := 100
@@ -125,6 +126,7 @@ func apply_damage_and_knockback(origin: Vector3, force: float, damage: int) -> v
 	_health = maxi(0, _health - damage)
 	_invulnerability = 0.45
 	health_changed.emit(_health, MAX_HEALTH)
+	damaged.emit(damage, _health)
 	if _health == 0:
 		defeated.emit()
 

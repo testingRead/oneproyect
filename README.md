@@ -18,7 +18,9 @@ La primera arena, **Plaza Caos**, alterna dos desastres:
 
 Los techos bloquean físicamente las explosiones: refugiarse es una mecánica real,
 no solamente decorativa. Ninguno de los dos modos crea nodos durante la ronda.
-El contador superior muestra FPS y tiempo aproximado por frame.
+El contador superior muestra FPS y tiempo aproximado por frame. El daño tiene
+respuesta visual y vibración breve en Android; una racha de rondas y el récord
+personal guardado dan un objetivo inmediato sin añadir recursos pesados.
 
 ## Multijugador de prueba
 

@@ -65,6 +65,13 @@ func _run() -> void:
 	)
 	player.set_controls_enabled(true)
 
+	player.heal_full()
+	player.apply_damage_and_knockback(Vector3(0.0, 0.0, 8.0), 2.0, 7)
+	await process_frame
+	var damage_flash: ColorRect = game.get_node("HUD/DamageFlash")
+	_require(damage_flash.visible and damage_flash.color.a > 0.0, "Damage must trigger reusable HUD flash")
+	player.heal_full()
+
 	player.global_position = Vector3(0.0, 1.25, 0.0)
 	player.velocity = Vector3.ZERO
 	var meteor: MeteorSlot = meteors[0]
@@ -114,6 +121,13 @@ func _run() -> void:
 		"Remote avatar must expose exactly one cheap visual variant"
 	)
 	remote.queue_free()
+
+	disaster.round_survived.emit(99)
+	await process_frame
+	var score: Label = game.get_node("HUD/RoundPanel/Score")
+	_require(score.text.contains("RONDAS  1"), "Completed round must update persistent score HUD")
+	for frame in 40:
+		await physics_frame
 
 	print("SMOKE_OK lights=%d meshes=%d meteors=%d meteor_health=%d shelter_health=%d wave_health=%d elevated_health=%d" % [
 		lights.size(),
