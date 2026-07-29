@@ -13,6 +13,7 @@ signal meteor_spawned(
 )
 signal shockwave_started(room: Node)
 signal session_expired(room: Node, player_id: int)
+signal standings_changed(room: Node)
 
 const ROOM_SCRIPT := preload("res://server/room_state.gd")
 
@@ -47,6 +48,9 @@ func create_room(room_id := 0) -> Node:
 	room.shockwave_started.connect(func() -> void: shockwave_started.emit(room))
 	room.session_expired.connect(func(player_id: int) -> void:
 		session_expired.emit(room, player_id)
+	)
+	room.standings_changed.connect(func() -> void:
+		standings_changed.emit(room)
 	)
 	return room
 

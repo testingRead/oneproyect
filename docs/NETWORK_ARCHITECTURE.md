@@ -13,6 +13,7 @@ El servidor continúa siendo autoridad de:
 - salas, capacidad, anfitrión y estado `ready`;
 - identidad estable, token y ventana de reconexión;
 - fase, tiempo, semilla y selección de minijuego;
+- cantidad de rondas, eliminación, clasificación y puntuación acumulada;
 - generación y retransmisión de eventos compartidos;
 - pertenencia de cada estado al jugador que lo envía.
 
@@ -47,8 +48,9 @@ con `/root/Network` y las escenas visuales.
 
 ## Flujo frecuente
 
-El propietario simula a la frecuencia física local y envía 20 veces por segundo
-un `PackedByteArray` de 22 bytes:
+El propietario simula a la frecuencia física local y envía un
+`PackedByteArray` de 22 bytes a 20 Hz mientras se mueve y 5 Hz cuando está
+quieto. Los cambios de vida o máscara corporal se envían inmediatamente:
 
 ```text
 sequence + position + velocity + yaw + health + body_mask
@@ -56,8 +58,10 @@ sequence + position + velocity + yaw + health + body_mask
 
 El servidor comprueba versión, orden, números finitos y límites amplios para
 evitar estados corruptos. Después conserva el resultado sin recalcularlo. A 10
-Hz genera un snapshot de 20 bytes de cabecera más 24 bytes por jugador
-conectado: 44 bytes para uno, 68 para dos y 140 para cinco.
+Hz genera para cada destinatario un snapshot de 24 bytes de cabecera más 24
+bytes por jugador remoto. La cabecera incluye la confirmación del estado propio,
+por lo que no devuelve su transformación redundante: 24 bytes si está solo, 48
+con dos jugadores y 120 con cinco.
 
 - canal 0 `reliable`: sesión, lobby, reconexión y fase;
 - canal 1 `unreliable_ordered`: estados propietarios y snapshots;
@@ -67,6 +71,24 @@ Los clientes remotos interpolan y extrapolan brevemente posición/velocidad. El
 cliente propietario nunca aplica a su cuerpo el snapshot devuelto por el
 servidor; sólo usa la secuencia como confirmación de relay. Así el RTT no puede
 detener, arrastrar o hacer flotar al jugador local.
+
+El HUD consulta directamente las estadísticas de `ENetPacketPeer` y muestra el
+RTT medio. La pérdida sólo aparece cuando llega al 1 %, para no añadir ruido
+visual en una conexión sana.
+
+## Rondas, eliminación y clasificación
+
+El anfitrión elige 3, 5 o 7 rondas antes de iniciar. Al llegar a cero de vida,
+el propietario pasa a una cámara superior, deja de colisionar y replica vida
+cero. El servidor bloquea cualquier intento posterior de volver a vida durante
+esa ronda. El siguiente minijuego reutiliza el mismo jugador y restaura salud,
+colisiones y partes.
+
+Al terminar una ronda, el servidor ordena a los supervivientes por vida. Los
+puestos reciben 5, 4, 3, 2 o 1 puntos; los empates de vida reciben los mismos
+puntos y los eliminados reciben cero. Una RPC fiable publica nombres, vida,
+puntos de ronda y total. Después de la cantidad elegida se conserva la
+clasificación final y se anuncia al jugador con mayor puntuación.
 
 ## Peligros y empujes
 
@@ -91,8 +113,8 @@ mismo `player_id` y ese estado.
 
 El lobby admite cinco salas en un proceso y cinco jugadores por sala. Sólo el
 anfitrión inicia, se requieren al menos dos personas y todas deben marcarse
-listas. No hay matchmaking público, migración de proceso, P2P, cuentas ni
-persistencia de servidor.
+listas. El anfitrión también fija la longitud de partida. No hay matchmaking
+público, migración de proceso, P2P, cuentas ni persistencia de servidor.
 
 ## Límite futuro
 

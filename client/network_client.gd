@@ -46,7 +46,19 @@ signal room_waiting_updated(
 	local_ready: bool,
 	all_ready: bool,
 	player_names: PackedStringArray,
-	ready_flags: PackedByteArray
+	ready_flags: PackedByteArray,
+	total_rounds: int
+)
+signal standings_received(
+	player_ids: PackedInt32Array,
+	player_names: PackedStringArray,
+	health_values: PackedByteArray,
+	round_points: PackedByteArray,
+	total_scores: PackedInt32Array,
+	round_number: int,
+	total_rounds: int,
+	match_finished: bool,
+	winner_player_id: int
 )
 signal room_started(room_id: int)
 signal room_action_failed(reason: String)
@@ -160,6 +172,11 @@ func set_room_profile(ready: bool) -> void:
 		_rpc_set_room_profile.rpc_id(1, clampi(color_index, 0, 4), ready)
 
 
+func set_room_rules(total_rounds: int) -> void:
+	if _session_accepted:
+		_rpc_set_room_rules.rpc_id(1, total_rounds)
+
+
 func leave_room() -> void:
 	if _session_accepted:
 		_rpc_leave_room.rpc_id(1)
@@ -199,6 +216,33 @@ func get_room_id() -> int:
 
 func get_local_spawn_position() -> Vector3:
 	return _local_spawn_position
+
+
+func get_latency_msec() -> int:
+	if not is_online():
+		return -1
+	var transport := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if transport == null:
+		return -1
+	var server_peer: ENetPacketPeer = transport.get_peer(1)
+	if server_peer == null or not server_peer.is_active():
+		return -1
+	return int(server_peer.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME))
+
+
+func get_packet_loss_ratio() -> float:
+	if not is_online():
+		return 0.0
+	var transport := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if transport == null:
+		return 0.0
+	var server_peer: ENetPacketPeer = transport.get_peer(1)
+	if server_peer == null or not server_peer.is_active():
+		return 0.0
+	return (
+		float(server_peer.get_statistic(ENetPacketPeer.PEER_PACKET_LOSS))
+		/ float(ENetPacketPeer.PACKET_LOSS_SCALE)
+	)
 
 
 func replay_remote_players() -> void:
@@ -353,6 +397,11 @@ func _rpc_set_room_profile(_character_index: int, _ready: bool) -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_set_room_rules(_total_rounds: int) -> void:
+	pass
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
 func _rpc_leave_room() -> void:
 	pass
 
@@ -424,7 +473,8 @@ func _rpc_room_waiting(
 	local_ready: bool,
 	all_ready: bool,
 	player_names: PackedStringArray,
-	ready_flags: PackedByteArray
+	ready_flags: PackedByteArray,
+	total_rounds: int
 ) -> void:
 	_room_id = room_id
 	status_changed.emit(
@@ -443,7 +493,8 @@ func _rpc_room_waiting(
 		local_ready,
 		all_ready,
 		player_names,
-		ready_flags
+		ready_flags,
+		total_rounds
 	)
 
 
@@ -534,6 +585,7 @@ func _rpc_receive_snapshot(packet: PackedByteArray) -> void:
 	if not CODEC.is_valid_snapshot(packet):
 		return
 	var server_tick := CODEC.snapshot_server_tick(packet)
+	owned_state_confirmed.emit(CODEC.snapshot_ack_sequence(packet), server_tick)
 	for slot in CODEC.snapshot_player_count(packet):
 		var player_id := CODEC.snapshot_player_id(packet, slot)
 		var position := CODEC.snapshot_player_position(packet, slot)
@@ -542,10 +594,6 @@ func _rpc_receive_snapshot(packet: PackedByteArray) -> void:
 		var body_mask := CODEC.snapshot_player_body_mask(packet, slot)
 		if player_id == _local_player_id:
 			_local_spawn_position = position
-			owned_state_confirmed.emit(
-				CODEC.snapshot_player_state_sequence(packet, slot),
-				server_tick
-			)
 		else:
 			if _players.has(player_id):
 				_players[player_id].position = position
@@ -594,6 +642,31 @@ func _rpc_receive_round_state(
 		player_profile_id,
 		spawn_policy_id,
 		spectator_policy_id
+	)
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_receive_standings(
+	player_ids: PackedInt32Array,
+	player_names: PackedStringArray,
+	health_values: PackedByteArray,
+	round_points: PackedByteArray,
+	total_scores: PackedInt32Array,
+	round_number: int,
+	total_rounds: int,
+	match_finished: bool,
+	winner_player_id: int
+) -> void:
+	standings_received.emit(
+		player_ids,
+		player_names,
+		health_values,
+		round_points,
+		total_scores,
+		round_number,
+		total_rounds,
+		match_finished,
+		winner_player_id
 	)
 
 

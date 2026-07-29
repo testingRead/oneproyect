@@ -61,7 +61,9 @@ func _run() -> void:
 	)
 	first.ready = true
 	second.ready = true
+	_require(room.set_total_rounds(3), "Host must be able to select a supported match length")
 	_require(room.start_rounds(), "Host-ready room must enter countdown with two players")
+	_require(room.total_rounds == 3, "Selected match length must survive match startup")
 	room.phase_end_tick = room.server_tick + 1
 	room.tick()
 	_require(room.phase == NET.RoomPhase.ACTIVE, "Countdown must advance to active play")
@@ -87,14 +89,97 @@ func _run() -> void:
 		not room.apply_owned_state(20, owned_state),
 		"Duplicate state sequence must be rejected"
 	)
+	var eliminated_state := CODEC.create_owned_state_buffer()
+	CODEC.write_owned_state(
+		eliminated_state,
+		2,
+		first.position,
+		Vector3.ZERO,
+		0.5,
+		0,
+		0
+	)
+	_require(room.apply_owned_state(20, eliminated_state), "Elimination state must be accepted")
+	var illegal_revive := CODEC.create_owned_state_buffer()
+	CODEC.write_owned_state(
+		illegal_revive,
+		3,
+		first.position,
+		Vector3.ZERO,
+		0.5,
+		100,
+		NET.ALL_BODY_PARTS_MASK
+	)
+	_require(room.apply_owned_state(20, illegal_revive), "Later movement state must still relay")
+	_require(first.health == 0 and not first.active, "Eliminated player must stay out for the round")
+	second.health = 64
+	second.active = true
+	room.phase_end_tick = room.server_tick + 1
+	room.tick()
+	_require(room.phase == NET.RoomPhase.RESULT, "Active round must advance to results")
+	_require(
+		first.round_points == 0 and second.round_points == 5 and second.score == 5,
+		"Only surviving players must receive health-ranked round points"
+	)
 
 	var snapshot: PackedByteArray = room.build_snapshot()
 	_require(CODEC.is_valid_snapshot(snapshot), "Room snapshot must use compact shared codec")
 	_require(CODEC.snapshot_player_count(snapshot) == 2, "Snapshot must include connected players")
-	_require(snapshot.size() == 68, "Two-player snapshot must omit three unused player slots")
+	_require(snapshot.size() == 72, "Two-player snapshot must omit three unused player slots")
 	_require(
-		CODEC.snapshot_player_state_sequence(snapshot, 0) == 1,
+		CODEC.snapshot_player_state_sequence(snapshot, 0) == 3,
 		"Snapshot must expose the last relayed state sequence"
+	)
+	var recipient_snapshot: PackedByteArray = room.build_snapshot_for(first.player_id)
+	_require(
+		recipient_snapshot.size() == 48
+		and CODEC.snapshot_player_count(recipient_snapshot) == 1,
+		"Recipient snapshot must omit its redundant local transform"
+	)
+	_require(
+		CODEC.snapshot_ack_sequence(recipient_snapshot) == 3,
+		"Recipient snapshot must retain a compact owner confirmation"
+	)
+	for expected_round in [2, 3]:
+		room.phase_end_tick = room.server_tick + 1
+		room.tick()
+		_require(
+			room.phase == NET.RoomPhase.COUNTDOWN
+			and first.health == 100
+			and first.active,
+			"Next countdown must restore eliminated players"
+		)
+		room.phase_end_tick = room.server_tick + 1
+		room.tick()
+		_require(
+			room.phase == NET.RoomPhase.ACTIVE
+			and room.round_number == expected_round,
+			"Countdown must start the expected configured round"
+		)
+		first.health = 90
+		first.active = true
+		second.health = 80
+		second.active = true
+		room.phase_end_tick = room.server_tick + 1
+		room.tick()
+	_require(
+		room.match_finished
+		and room.round_number == room.total_rounds
+		and room.phase == NET.RoomPhase.RESULT
+		and room.phase_end_tick == 0,
+		"Configured final round must freeze on the final classification"
+	)
+	var final_standings: Array[RefCounted] = room.standings()
+	_require(
+		final_standings[0] == second
+		and second.score == 13
+		and first.score == 10,
+		"Accumulated points must determine the match winner across rounds"
+	)
+	room.tick()
+	_require(
+		room.phase == NET.RoomPhase.RESULT,
+		"Finished match must not revive or start another minigame automatically"
 	)
 
 	var first_id: int = first.player_id

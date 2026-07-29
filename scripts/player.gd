@@ -92,10 +92,15 @@ var _head_accessory_health := ACCESSORY_MAX_HEALTH
 var _torso_accessory_health := ACCESSORY_MAX_HEALTH
 var _character_color: Color = CHARACTER_CATALOG.COLORS[0]
 var _character_variant_index := 0
+var _defeated_state := false
+var _gameplay_collision_layer := 0
+var _gameplay_collision_mask := 0
 
 
 func _ready() -> void:
 	_spawn_transform = global_transform
+	_gameplay_collision_layer = collision_layer
+	_gameplay_collision_mask = collision_mask
 	floor_snap_length = 0.35
 	add_to_group("players")
 	_reset_limbs()
@@ -153,8 +158,8 @@ func _physics_process(delta: float) -> void:
 	)
 
 	move_and_slide()
-	if global_position.y < -8.0:
-		reset_to_spawn()
+	if global_position.y < -8.0 and not _defeated_state:
+		_take_damage(MAX_HEALTH, -1, global_position)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -190,19 +195,42 @@ func request_push() -> void:
 
 
 func set_controls_enabled(enabled: bool) -> void:
-	_controls_enabled = enabled
-	if not enabled:
+	_controls_enabled = enabled and not _defeated_state
+	if not _controls_enabled:
 		_touch_move = Vector2.ZERO
 		_jump_requested = false
 
 
 func reset_to_spawn() -> void:
+	_defeated_state = false
+	collision_layer = _gameplay_collision_layer
+	collision_mask = _gameplay_collision_mask
 	global_transform = _spawn_transform
 	velocity = Vector3.ZERO
 	_touch_move = Vector2.ZERO
 	camera_rig.rotation = Vector3(-0.22, 0.0, 0.0)
 	_reset_limbs()
 	heal_full(false)
+	visual.visible = not _first_person
+
+
+func enter_spectator() -> void:
+	if not _defeated_state:
+		return
+	_controls_enabled = false
+	_touch_move = Vector2.ZERO
+	_jump_requested = false
+	velocity = Vector3.ZERO
+	collision_layer = 0
+	collision_mask = 0
+	_limb_mask = 0
+	visual.visible = false
+	global_position = Vector3(0.0, 15.0, 0.0)
+	camera_rig.rotation = Vector3(-0.85, 0.0, 0.0)
+
+
+func is_defeated() -> bool:
+	return _defeated_state
 
 
 func set_spawn_transform(spawn_transform: Transform3D, teleport := true) -> void:
@@ -262,7 +290,7 @@ func apply_hazard_damage(damage: int, lift_force := 0.0) -> void:
 
 func set_first_person(enabled: bool) -> void:
 	_first_person = enabled
-	visual.visible = not enabled
+	visual.visible = not enabled and not _defeated_state
 	$CameraRig/SpringArm.spring_length = 0.08 if enabled else 5.8
 	$CameraRig/SpringArm/Camera.near = 0.05 if enabled else 0.1
 
@@ -311,7 +339,7 @@ func apply_limb_damage(limb: int, damage: int, origin: Vector3) -> void:
 
 
 func _take_damage(damage: int, limb: int, origin: Vector3) -> void:
-	if _invulnerability > 0.0:
+	if _invulnerability > 0.0 or _defeated_state:
 		return
 	var safe_damage := maxi(1, damage)
 	_health = maxi(0, _health - safe_damage)
@@ -336,6 +364,7 @@ func _take_damage(damage: int, limb: int, origin: Vector3) -> void:
 	health_changed.emit(_health, MAX_HEALTH)
 	damaged.emit(safe_damage, _health)
 	if _health == 0:
+		_defeated_state = true
 		defeated.emit()
 
 

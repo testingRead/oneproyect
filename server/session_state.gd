@@ -23,6 +23,7 @@ var facing_yaw := 0.0
 var health := 100
 var active := true
 var score := 0
+var round_points := 0
 var body_mask := NET.ALL_BODY_PARTS_MASK
 var last_state_sequence := 0
 var last_state_tick := 0
@@ -50,10 +51,20 @@ func accept_owned_state(packet: PackedByteArray, server_tick: int) -> bool:
 	position = next_position
 	velocity = next_velocity
 	facing_yaw = wrapf(CODEC.owned_state_yaw(packet), -PI, PI)
-	health = clampi(CODEC.owned_state_health(packet), 0, 100)
+	var reported_health := clampi(CODEC.owned_state_health(packet), 0, 100)
+	# Once eliminated, a client cannot revive itself until the room opens
+	# the next round. Physics remain client-owned; this is only a round rule.
+	health = 0 if not active else reported_health
 	body_mask = CODEC.owned_state_body_mask(packet) & NET.ALL_BODY_PARTS_MASK
 	active = health > 0
 	return true
+
+
+func prepare_next_round() -> void:
+	health = 100
+	active = true
+	round_points = 0
+	body_mask = NET.ALL_BODY_PARTS_MASK
 
 
 func player_flags() -> int:

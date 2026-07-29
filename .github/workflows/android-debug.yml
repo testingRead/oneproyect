@@ -93,6 +93,8 @@ jobs:
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/server_room_test.gd
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/menu_smoke_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/smoke_test.gd
           set +e
           timeout 3 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \

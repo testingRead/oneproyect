@@ -24,6 +24,7 @@ const SNAPSHOT_ROUND := 8
 const SNAPSHOT_SEED := 10
 const SNAPSHOT_PHASE_END_TICK := 14
 const SNAPSHOT_ROOM_ID := 18
+const SNAPSHOT_ACK_SEQUENCE := 20
 
 const PLAYER_ID := 0
 const PLAYER_FLAGS := 2
@@ -135,7 +136,8 @@ static func write_snapshot_header(
 	round_number: int,
 	round_seed: int,
 	phase_end_tick: int,
-	room_id: int
+	room_id: int,
+	ack_sequence := 0
 ) -> void:
 	packet[SNAPSHOT_VERSION] = NET.PROTOCOL_VERSION
 	packet[SNAPSHOT_PHASE] = phase & 0xff
@@ -146,6 +148,7 @@ static func write_snapshot_header(
 	packet.encode_u32(SNAPSHOT_SEED, round_seed)
 	packet.encode_u32(SNAPSHOT_PHASE_END_TICK, phase_end_tick)
 	packet.encode_u16(SNAPSHOT_ROOM_ID, room_id)
+	packet.encode_u32(SNAPSHOT_ACK_SEQUENCE, ack_sequence)
 
 
 static func write_snapshot_player(
@@ -216,6 +219,10 @@ static func snapshot_phase_end_tick(packet: PackedByteArray) -> int:
 
 static func snapshot_room_id(packet: PackedByteArray) -> int:
 	return packet.decode_u16(SNAPSHOT_ROOM_ID)
+
+
+static func snapshot_ack_sequence(packet: PackedByteArray) -> int:
+	return packet.decode_u32(SNAPSHOT_ACK_SEQUENCE)
 
 
 static func player_offset(slot: int) -> int:

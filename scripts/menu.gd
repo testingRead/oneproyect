@@ -23,6 +23,7 @@ var _character_preview: RemoteAvatar
 var _character_viewport: SubViewport
 var _ready_button: Button
 var _start_button: Button
+var _rounds_button: OptionButton
 var _room_buttons: Array[Button] = []
 var _room_ids := PackedInt32Array()
 var _room_count := 0
@@ -188,6 +189,15 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	)
 	rule.modulate = Color(0.72, 0.82, 0.94)
 	screen.add_child(rule)
+	_rounds_button = OptionButton.new()
+	_rounds_button.name = "MatchRounds"
+	_rounds_button.custom_minimum_size = Vector2(0.0, 48.0)
+	_rounds_button.add_theme_font_size_override("font_size", 18)
+	for rounds: int in NET.MATCH_ROUND_OPTIONS:
+		_rounds_button.add_item("PARTIDA: %d RONDAS" % rounds, rounds)
+	_rounds_button.select(NET.MATCH_ROUND_OPTIONS.find(NET.DEFAULT_MATCH_ROUNDS))
+	_rounds_button.item_selected.connect(_on_round_count_selected)
+	screen.add_child(_rounds_button)
 	_ready_button = _button("MARCAR LISTO", "ReadyRoom")
 	_ready_button.pressed.connect(_toggle_ready)
 	screen.add_child(_ready_button)
@@ -297,7 +307,8 @@ func _on_room_waiting(
 	local_ready: bool,
 	all_ready: bool,
 	player_names: PackedStringArray,
-	ready_flags: PackedByteArray
+	ready_flags: PackedByteArray,
+	total_rounds: int
 ) -> void:
 	_show_screen(_waiting_screen)
 	_is_host = is_host
@@ -317,6 +328,10 @@ func _on_room_waiting(
 		"  ·  ".join(player_states),
 	]
 	_character_button.disabled = local_ready
+	_rounds_button.disabled = not is_host
+	var rounds_index := NET.MATCH_ROUND_OPTIONS.find(total_rounds)
+	if rounds_index >= 0:
+		_rounds_button.select(rounds_index)
 	_ready_button.disabled = false
 	_ready_button.text = "CANCELAR LISTO" if local_ready else "MARCAR LISTO"
 	_start_button.visible = is_host
@@ -431,6 +446,12 @@ func _toggle_ready() -> void:
 		return
 	_ready_button.disabled = true
 	network.set_room_profile(not _local_ready)
+
+
+func _on_round_count_selected(index: int) -> void:
+	if not _is_host or _loading_game:
+		return
+	network.set_room_rules(_rounds_button.get_item_id(index))
 
 
 func _save_character() -> void:

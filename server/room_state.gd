@@ -5,6 +5,7 @@ signal phase_changed
 signal meteor_spawned(target: Vector3, drift: Vector2, damage: int, force: float)
 signal shockwave_started
 signal session_expired(player_id: int)
+signal standings_changed
 
 const NET := preload("res://shared/net_constants.gd")
 const CODEC := preload("res://shared/net_codec.gd")
@@ -20,8 +21,10 @@ var mode_id := NET.ModeId.METEORS
 var session_manager: Node
 var host_player_id := 0
 var auto_start_when_ready := false
+var total_rounds := NET.DEFAULT_MATCH_ROUNDS
+var match_finished := false
 
-var _snapshot_buffer := PackedByteArray()
+var _snapshot_buffers: Dictionary = {}
 var _random := RandomNumberGenerator.new()
 var _next_mode_event_tick := 0
 
@@ -32,7 +35,6 @@ func _ready() -> void:
 	session_manager.room_id = room_id
 	add_child(session_manager)
 	session_manager.session_expired.connect(session_expired.emit)
-	_snapshot_buffer = CODEC.create_snapshot_buffer()
 	_random.seed = int(Time.get_unix_time_from_system()) ^ room_id
 	round_seed = int(_random.randi() & 0x7fffffff)
 	phase_end_tick = 0
@@ -48,32 +50,48 @@ func tick() -> void:
 		and session_manager.connected_count() >= NET.MIN_PLAYERS_TO_START
 	):
 		start_rounds(true)
-	if phase != NET.RoomPhase.WAITING and server_tick >= phase_end_tick:
+	if (
+		phase != NET.RoomPhase.WAITING
+		and phase_end_tick > 0
+		and server_tick >= phase_end_tick
+	):
 		_advance_phase()
 	if phase == NET.RoomPhase.ACTIVE:
 		_tick_mode_events()
 
 
 func build_snapshot() -> PackedByteArray:
-	var connected_count: int = int(session_manager.connected_count())
-	_snapshot_buffer.resize(CODEC.snapshot_size(connected_count))
+	return build_snapshot_for(0)
+
+
+func build_snapshot_for(recipient_player_id: int) -> PackedByteArray:
+	var recipient: RefCounted = session_manager.find_by_player_id(recipient_player_id)
+	var player_count: int = int(session_manager.connected_count())
+	if recipient != null and recipient.connected:
+		player_count -= 1
+	var buffer_key := recipient_player_id
+	if not _snapshot_buffers.has(buffer_key):
+		_snapshot_buffers[buffer_key] = CODEC.create_snapshot_buffer()
+	var snapshot_buffer: PackedByteArray = _snapshot_buffers[buffer_key]
+	snapshot_buffer.resize(CODEC.snapshot_size(player_count))
 	CODEC.write_snapshot_header(
-		_snapshot_buffer,
+		snapshot_buffer,
 		phase,
-		connected_count,
+		player_count,
 		mode_id,
 		server_tick,
 		round_number,
 		round_seed,
 		phase_end_tick,
-		room_id
+		room_id,
+		recipient.last_state_sequence if recipient != null else 0
 	)
 	var slot := 0
 	for session: RefCounted in session_manager.sessions:
-		if not session.connected:
+		if not session.connected or session.player_id == recipient_player_id:
 			continue
 		CODEC.write_snapshot_player(
-			_snapshot_buffer,
+			snapshot_buffer,
 			slot,
 			session.player_id,
 			session.player_flags(),
@@ -85,7 +103,8 @@ func build_snapshot() -> PackedByteArray:
 			session.body_mask
 		)
 		slot += 1
-	return _snapshot_buffer
+	_snapshot_buffers[buffer_key] = snapshot_buffer
+	return snapshot_buffer
 
 
 func apply_owned_state(peer_id: int, packet: PackedByteArray) -> bool:
@@ -138,10 +157,37 @@ func start_rounds(ignore_ready := false) -> bool:
 		or (not ignore_ready and not session_manager.all_connected_ready())
 	):
 		return false
+	round_number = 0
+	match_finished = false
+	for session: RefCounted in session_manager.sessions:
+		session.score = 0
+		session.round_points = 0
+		session.prepare_next_round()
 	phase = NET.RoomPhase.COUNTDOWN
 	phase_end_tick = server_tick + 5 * NET.SERVER_TICK_RATE
 	phase_changed.emit()
 	return true
+
+
+func set_total_rounds(value: int) -> bool:
+	if phase != NET.RoomPhase.WAITING or value not in NET.MATCH_ROUND_OPTIONS:
+		return false
+	total_rounds = value
+	return true
+
+
+func standings() -> Array[RefCounted]:
+	var ranked: Array[RefCounted] = []
+	for session: RefCounted in session_manager.sessions:
+		ranked.append(session)
+	ranked.sort_custom(func(a: RefCounted, b: RefCounted) -> bool:
+		if a.score != b.score:
+			return a.score > b.score
+		if a.health != b.health:
+			return a.health > b.health
+		return a.player_id < b.player_id
+	)
+	return ranked
 
 
 func is_host_peer(peer_id: int) -> bool:
@@ -178,6 +224,7 @@ func _refresh_host() -> void:
 
 
 func _advance_phase() -> void:
+	var publish_standings := false
 	match phase:
 		NET.RoomPhase.COUNTDOWN:
 			phase = NET.RoomPhase.ACTIVE
@@ -185,9 +232,17 @@ func _advance_phase() -> void:
 			phase_end_tick = server_tick + NET.mode_duration_ticks(mode_id)
 			_next_mode_event_tick = server_tick + 5
 		NET.RoomPhase.ACTIVE:
+			_score_round()
 			phase = NET.RoomPhase.RESULT
-			phase_end_tick = server_tick + 6 * NET.SERVER_TICK_RATE
+			match_finished = round_number >= total_rounds
+			publish_standings = true
+			phase_end_tick = (
+				0
+				if match_finished
+				else server_tick + 6 * NET.SERVER_TICK_RATE
+			)
 		_:
+			_prepare_next_round()
 			phase = NET.RoomPhase.COUNTDOWN
 			var previous_mode := mode_id
 			while mode_id == previous_mode:
@@ -195,6 +250,39 @@ func _advance_phase() -> void:
 			round_seed = int(_random.randi() & 0x7fffffff)
 			phase_end_tick = server_tick + 5 * NET.SERVER_TICK_RATE
 	phase_changed.emit()
+	if publish_standings:
+		standings_changed.emit()
+
+
+func _score_round() -> void:
+	var ranked: Array[RefCounted] = []
+	for session: RefCounted in session_manager.sessions:
+		session.round_points = 0
+		if session.connected and session.active and session.health > 0:
+			ranked.append(session)
+	ranked.sort_custom(func(a: RefCounted, b: RefCounted) -> bool:
+		if a.health != b.health:
+			return a.health > b.health
+		return a.player_id < b.player_id
+	)
+	var previous_health := -1
+	var previous_points := 0
+	for index in ranked.size():
+		var session: RefCounted = ranked[index]
+		var points: int
+		if session.health == previous_health:
+			points = previous_points
+		else:
+			points = NET.ROUND_PLACE_POINTS[mini(index, NET.ROUND_PLACE_POINTS.size() - 1)]
+		previous_health = session.health
+		previous_points = points
+		session.round_points = points
+		session.score += points
+
+
+func _prepare_next_round() -> void:
+	for session: RefCounted in session_manager.sessions:
+		session.prepare_next_round()
 
 
 func _tick_mode_events() -> void:

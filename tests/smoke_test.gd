@@ -415,6 +415,24 @@ func _run() -> void:
 	await process_frame
 	var score: Label = game.get_node("HUD/RoundPanel/Score")
 	_require(score.text.contains("RONDAS 1"), "Completed round must update persistent score HUD")
+	disaster.round_started.emit(100)
+	player.apply_hazard_damage(GrayboxPlayer.MAX_HEALTH)
+	await process_frame
+	_require(
+		player.is_defeated()
+		and player.get_health() == 0
+		and player.get_limb_mask() == 0
+		and player.global_position.y > 10.0,
+		"Defeated player must remain eliminated in the overhead spectator state"
+	)
+	disaster.round_survived.emit(100)
+	await process_frame
+	_require(
+		not player.is_defeated()
+		and player.get_health() == GrayboxPlayer.MAX_HEALTH
+		and player.get_limb_mask() == GrayboxPlayer.ALL_LIMBS_MASK,
+		"Round completion must restore the reusable player for the next minigame"
+	)
 	var previous_mode_id := StringName(initial_plan.mode_id)
 	disaster._activate_plan(initial_plan)
 	for selection in 8:

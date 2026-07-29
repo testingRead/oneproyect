@@ -27,6 +27,7 @@ func _ready() -> void:
 	room_manager.meteor_spawned.connect(_on_meteor_spawned)
 	room_manager.shockwave_started.connect(_on_shockwave_started)
 	room_manager.session_expired.connect(_on_session_expired)
+	room_manager.standings_changed.connect(_on_standings_changed)
 	var peer := ENetMultiplayerPeer.new()
 	peer.set_bind_ip("*")
 	var error := peer.create_server(
@@ -216,6 +217,22 @@ func _rpc_set_room_profile(character_index: int, ready: bool) -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_set_room_rules(total_rounds: int) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	var room: Node = room_manager.find_room_for_peer(sender)
+	if room == null:
+		_rpc_room_action_failed.rpc_id(sender, "not_in_room")
+		return
+	if not room.is_host_peer(sender):
+		_rpc_room_action_failed.rpc_id(sender, "host_only")
+		return
+	if not room.set_total_rounds(total_rounds):
+		_rpc_room_action_failed.rpc_id(sender, "invalid_round_count")
+		return
+	_broadcast_room_waiting(room)
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
 func _rpc_leave_room() -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	var room: Node = room_manager.find_room_for_peer(sender)
@@ -294,6 +311,7 @@ func _register_session_in_room(
 				session.position
 			)
 	_broadcast_round_state_to_peer(room, sender)
+	_send_standings_to_peer(room, sender)
 	_broadcast_room_waiting(room)
 	_broadcast_lobby_rooms()
 	print(
@@ -381,7 +399,8 @@ func _rpc_room_waiting(
 	_local_ready: bool,
 	_all_ready: bool,
 	_player_names: PackedStringArray,
-	_ready_flags: PackedByteArray
+	_ready_flags: PackedByteArray,
+	_total_rounds: int
 ) -> void:
 	pass
 
@@ -452,6 +471,21 @@ func _rpc_receive_round_state(
 	pass
 
 
+@rpc("authority", "call_remote", "reliable", 0)
+func _rpc_receive_standings(
+	_player_ids: PackedInt32Array,
+	_player_names: PackedStringArray,
+	_health_values: PackedByteArray,
+	_round_points: PackedByteArray,
+	_total_scores: PackedInt32Array,
+	_round_number: int,
+	_total_rounds: int,
+	_match_finished: bool,
+	_winner_player_id: int
+) -> void:
+	pass
+
+
 @rpc("authority", "call_remote", "reliable", 2)
 func _rpc_receive_push(
 	_sender_player_id: int,
@@ -462,10 +496,10 @@ func _rpc_receive_push(
 
 
 func _broadcast_snapshot(room: Node) -> void:
-	var packet: PackedByteArray = room.build_snapshot()
 	for session: RefCounted in room.session_manager.sessions:
 		if not session.connected or not _peer_can_receive(session.peer_id):
 			continue
+		var packet: PackedByteArray = room.build_snapshot_for(session.player_id)
 		_rpc_receive_snapshot.rpc_id(session.peer_id, packet)
 		_bytes_sent += packet.size()
 
@@ -489,6 +523,44 @@ func _broadcast_round_state_to_peer(room: Node, peer_id: int) -> void:
 		"default",
 		"spread",
 		"overhead"
+	)
+
+
+func _on_standings_changed(room: Node) -> void:
+	for session: RefCounted in room.session_manager.sessions:
+		if session.connected and _peer_can_receive(session.peer_id):
+			_send_standings_to_peer(room, session.peer_id)
+
+
+func _send_standings_to_peer(room: Node, peer_id: int) -> void:
+	var player_ids := PackedInt32Array()
+	var player_names := PackedStringArray()
+	var health_values := PackedByteArray()
+	var round_points := PackedByteArray()
+	var total_scores := PackedInt32Array()
+	var ranked: Array[RefCounted] = room.standings()
+	for session: RefCounted in ranked:
+		player_ids.append(session.player_id)
+		player_names.append(session.display_name)
+		health_values.append(clampi(session.health, 0, 100))
+		round_points.append(clampi(session.round_points, 0, 255))
+		total_scores.append(session.score)
+	var winner_player_id: int = (
+		ranked[0].player_id
+		if room.match_finished and not ranked.is_empty()
+		else 0
+	)
+	_rpc_receive_standings.rpc_id(
+		peer_id,
+		player_ids,
+		player_names,
+		health_values,
+		round_points,
+		total_scores,
+		room.round_number,
+		room.total_rounds,
+		room.match_finished,
+		winner_player_id
 	)
 
 
@@ -646,7 +718,8 @@ func _broadcast_room_waiting(room: Node) -> void:
 				session.ready,
 				all_ready,
 				player_names,
-				ready_flags
+				ready_flags,
+				room.total_rounds
 			)
 
 

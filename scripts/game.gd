@@ -3,7 +3,8 @@ extends Node3D
 const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn")
 const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.gd")
 const NET := preload("res://shared/net_constants.gd")
-const STATE_SEND_INTERVAL := 1.0 / float(NET.STATE_SEND_RATE)
+const MOVING_STATE_SEND_INTERVAL := 1.0 / float(NET.STATE_SEND_RATE)
+const IDLE_STATE_SEND_INTERVAL := 1.0 / float(NET.IDLE_STATE_SEND_RATE)
 const PROFILE_PATH := "user://profile.cfg"
 const MENU_SCENE := "res://scenes/menu.tscn"
 const PUSH_RANGE := 2.8
@@ -61,6 +62,12 @@ var _install_id := ""
 var _defeated_this_round := false
 var _participating_round := false
 var _returning_to_menu := false
+var _last_sent_health := -1
+var _last_sent_limb_mask := -1
+var _network_status_base := "MODO LOCAL"
+var _match_total_rounds := NET.DEFAULT_MATCH_ROUNDS
+var _match_finished := false
+var _match_victory_awarded := false
 
 
 func _ready() -> void:
@@ -107,6 +114,7 @@ func _ready() -> void:
 	network.round_state_received.connect(disaster.apply_network_state)
 	network.simulation_host_changed.connect(_on_simulation_host_changed)
 	network.push_received.connect(_on_push_received)
+	network.standings_received.connect(_on_standings_received)
 	_load_profile()
 	_on_health_changed(100, 100)
 	if network.is_online():
@@ -128,6 +136,7 @@ func _process(delta: float) -> void:
 		var fps := Engine.get_frames_per_second()
 		var frame_ms := 1000.0 / maxf(float(fps), 1.0)
 		fps_label.text = "%d FPS  %.1f ms" % [fps, frame_ms]
+		_update_network_metrics()
 		_stats_elapsed = 0.0
 	if _damage_flash_strength > 0.0:
 		_damage_flash_strength = maxf(0.0, _damage_flash_strength - delta * 1.7)
@@ -141,15 +150,27 @@ func _physics_process(delta: float) -> void:
 	if not network.is_online():
 		return
 	_state_send_elapsed += delta
-	if _state_send_elapsed >= STATE_SEND_INTERVAL:
-		_state_send_elapsed -= STATE_SEND_INTERVAL
+	var moving := player.velocity.length_squared() > 0.01
+	var send_interval := (
+		MOVING_STATE_SEND_INTERVAL if moving else IDLE_STATE_SEND_INTERVAL
+	)
+	var health := player.get_health()
+	var limb_mask := player.get_limb_mask()
+	var state_changed := (
+		health != _last_sent_health
+		or limb_mask != _last_sent_limb_mask
+	)
+	if state_changed or _state_send_elapsed >= send_interval:
+		_state_send_elapsed = 0.0
 		network.submit_owned_state(
 			player.global_position,
 			player.velocity,
 			player.get_visual_yaw(),
-			player.get_health(),
-			player.get_limb_mask()
+			health,
+			limb_mask
 		)
+		_last_sent_health = health
+		_last_sent_limb_mask = limb_mask
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -169,8 +190,8 @@ func toggle_pause() -> void:
 		pause_panel.visible = menu_open
 		pause_title.text = "AJUSTES EN LÍNEA"
 		pause_button.text = "CERRAR" if menu_open else "MENÚ"
-		player.set_controls_enabled(not menu_open)
-		$HUD/Joystick.set_input_enabled(not menu_open)
+		player.set_controls_enabled(not menu_open and not player.is_defeated())
+		$HUD/Joystick.set_input_enabled(not menu_open and not player.is_defeated())
 		if not OS.has_feature("mobile"):
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if menu_open else Input.MOUSE_MODE_CAPTURED
 		return
@@ -184,6 +205,9 @@ func toggle_pause() -> void:
 
 
 func restart_level() -> void:
+	if network.is_online() and (_participating_round or player.is_defeated()):
+		round_detail.text = "No puedes reaparecer hasta terminar la ronda"
+		return
 	get_tree().paused = false
 	pause_panel.visible = false
 	pause_button.text = "MENÚ" if network.is_online() else "PAUSA"
@@ -215,10 +239,14 @@ func _on_health_changed(current: int, maximum: int) -> void:
 
 
 func _on_player_defeated() -> void:
-	round_detail.text = "¡Te derribaron! Regresas a la plaza"
+	round_title.text = "ELIMINADO"
+	round_detail.text = "Observa desde arriba hasta que termine la ronda"
 	_defeated_this_round = true
 	_reset_streak()
-	player.reset_to_spawn()
+	player.enter_spectator()
+	$HUD/Joystick.set_input_enabled(false)
+	restart_button.disabled = true
+	pause_restart.disabled = true
 
 
 func _on_disaster_state_changed(title: String, detail: String) -> void:
@@ -231,27 +259,39 @@ func _on_disaster_clock_changed(seconds_left: int) -> void:
 
 
 func _on_round_survived(_round_number: int) -> void:
-	if not _participating_round or _defeated_this_round:
-		_participating_round = false
-		player.heal_full()
-		return
 	_participating_round = false
+	player.reset_to_spawn()
+	player.set_controls_enabled(not _match_finished)
+	$HUD/Joystick.set_input_enabled(not _match_finished)
+	restart_button.disabled = _match_finished
+	pause_restart.disabled = _match_finished
+	if network.is_online():
+		if not _defeated_this_round:
+			sounds.play_success()
+		return
+	if _defeated_this_round:
+		return
 	sounds.play_success()
-	player.heal_full()
 	_completed_rounds += 1
 	if _completed_rounds > _best_rounds:
 		_best_rounds = _completed_rounds
 		_save_profile()
 	_update_score()
-	if network.is_online():
-		_total_victories += 1
-		_save_profile()
-		_update_score()
 
 
 func _on_round_started(_round_number: int) -> void:
+	if _round_number == 1:
+		_match_victory_awarded = false
 	_defeated_this_round = false
 	_participating_round = true
+	_match_finished = false
+	player.reset_to_spawn()
+	player.set_controls_enabled(true)
+	$HUD/Joystick.set_input_enabled(true)
+	restart_button.disabled = false
+	pause_restart.disabled = false
+	if network.is_online():
+		score_label.text = "RONDA %d/%d" % [_round_number, _match_total_rounds]
 
 
 func _on_experience_selected(plan: Dictionary) -> void:
@@ -335,6 +375,7 @@ func _finish_return_to_menu() -> void:
 
 
 func _on_network_status_changed(text: String, online: bool) -> void:
+	_network_status_base = text
 	network_status.text = text
 	network_status.modulate = Color(0.4, 1.0, 0.62) if online else Color(0.76, 0.87, 1.0)
 	online_button.disabled = (
@@ -358,6 +399,72 @@ func _on_network_status_changed(text: String, online: bool) -> void:
 			if not OS.has_feature("mobile"):
 				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		_clear_remote_players()
+
+
+func _update_network_metrics() -> void:
+	if not network.is_online():
+		network_status.text = _network_status_base
+		return
+	var latency: int = int(network.get_latency_msec())
+	var loss_percent: float = float(network.get_packet_loss_ratio()) * 100.0
+	network_status.text = "%s · PING %d ms" % [_network_status_base, maxi(0, latency)]
+	if loss_percent >= 1.0:
+		network_status.text += " · PÉRDIDA %.1f%%" % loss_percent
+
+
+func _on_standings_received(
+	player_ids: PackedInt32Array,
+	player_names: PackedStringArray,
+	health_values: PackedByteArray,
+	round_points: PackedByteArray,
+	total_scores: PackedInt32Array,
+	round_number: int,
+	total_rounds: int,
+	match_finished: bool,
+	winner_player_id: int
+) -> void:
+	_match_total_rounds = total_rounds
+	_match_finished = match_finished
+	if round_number <= 0:
+		return
+	var rows := PackedStringArray()
+	var count := player_ids.size()
+	count = mini(count, player_names.size())
+	count = mini(count, health_values.size())
+	count = mini(count, round_points.size())
+	count = mini(count, total_scores.size())
+	for index in count:
+		rows.append(
+			"%d. %s · %d vida · +%d · %d pts"
+			% [
+				index + 1,
+				player_names[index],
+				health_values[index],
+				round_points[index],
+				total_scores[index],
+			]
+		)
+	score_label.text = "\n".join(rows)
+	if match_finished:
+		player.set_controls_enabled(false)
+		$HUD/Joystick.set_input_enabled(false)
+		restart_button.disabled = true
+		pause_restart.disabled = true
+		var winner_index := player_ids.find(winner_player_id)
+		var winner_name := (
+			player_names[winner_index]
+			if winner_index >= 0
+			else "Sin ganador"
+		)
+		round_title.text = "GANADOR: %s" % winner_name
+		round_detail.text = "Clasificación final tras %d rondas" % total_rounds
+		if (
+			winner_player_id == network.get_local_player_id()
+			and not _match_victory_awarded
+		):
+			_match_victory_awarded = true
+			_total_victories += 1
+			_save_profile()
 
 
 func _on_remote_player_joined(peer_id: int, player_name: String, player_color: int) -> void:

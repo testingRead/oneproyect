@@ -127,9 +127,10 @@ La futura votación ofrecerá dos o tres planes completos generados por el host,
 no un mapa y un modo incompatibles por separado. Cada cliente enviará una
 elección; el host desempatará con la semilla de sesión y publicará el ganador.
 
-Al morir, el jugador cambiará de vivo a espectador. La política seleccionada
-controlará su cámara, mientras el estado lógico conservará nombre, variante,
-equipo, victorias y condición de vivo. No se destruye el controlador principal.
+Al morir, el jugador cambia de vivo a espectador superior hasta terminar la
+ronda. Conserva nombre, variante, puntuación y condición de eliminado, sin
+destruir el controlador principal. Los futuros modos podrán sustituir esta
+política por seguimiento libre o reaparición explícita.
 
 ## Contratos que no deben romperse
 
