@@ -218,27 +218,41 @@ jobs:
       - name: Export and boot stripped dedicated server
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
+          phase="initialize"
+          report_export_failure() {
+            code=$?
+            trap - ERR
+            echo "::error title=Dedicated server validation failed::phase=$phase exit=$code"
+            exit "$code"
+          }
+          trap report_export_failure ERR
           GODOT="$HOME/.cache/oneproyect-godot/godot"
           SERVER_BIN="$GITHUB_WORKSPACE/build/server/oneproyect-server.x86_64"
           SERVER_PCK="$GITHUB_WORKSPACE/build/server/oneproyect-server.pck"
           SERVER_TEMPLATE="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}/linux_release.x86_64"
           SERVER_LOG="$RUNNER_TEMP/oneproyect-exported-server.log"
           mkdir -p "$(dirname "$SERVER_BIN")"
+          phase="export_pack"
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --export-pack "Linux Dedicated Server" "$SERVER_PCK"
+          phase="install_template"
           test -s "$SERVER_TEMPLATE"
           cp "$SERVER_TEMPLATE" "$SERVER_BIN"
           chmod 755 "$SERVER_BIN"
+          phase="validate_files"
           test -s "$SERVER_BIN"
           test -x "$SERVER_BIN"
           test -s "$SERVER_PCK"
+          phase="validate_pack_size"
           test "$(stat -c '%s' "$SERVER_PCK")" -lt $((2 * 1024 * 1024))
+          phase="validate_resource_filter"
           if strings "$SERVER_PCK" | grep -qE \
             'assets/textures|scenes/components'; then
             echo "Dedicated PCK contains a client/visual resource"
-            exit 1
+            false
           fi
+          phase="start_exported_server"
           "$SERVER_BIN" -- --port=19998 > "$SERVER_LOG" 2>&1 &
           server_pid=$!
           cleanup_server_export() {
@@ -251,12 +265,16 @@ jobs:
             fi
             sleep 0.1
           done
+          phase="verify_server_ready"
           grep -q "ONEPROYECT_SERVER_READY udp=19998" "$SERVER_LOG"
+          phase="verify_server_tree"
           grep -q "SERVER_TREE_OK" "$SERVER_LOG"
+          phase="verify_server_log"
           if grep -qE "SCRIPT ERROR|ERROR:|Parse Error" "$SERVER_LOG"; then
             cat "$SERVER_LOG"
-            exit 1
+            false
           fi
+          trap - ERR
           ls -lh "$SERVER_BIN" "$GITHUB_WORKSPACE/build/server/"*.pck 2>/dev/null || \
             ls -lh "$SERVER_BIN"
 
