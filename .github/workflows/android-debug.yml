@@ -260,7 +260,7 @@ jobs:
             false
           fi
           phase="start_exported_server"
-          "$SERVER_BIN" -- --port=19998 > "$SERVER_LOG" 2>&1 &
+          "$SERVER_BIN" --headless -- --server --port=19998 > "$SERVER_LOG" 2>&1 &
           server_pid=$!
           cleanup_server_export() {
             kill "$server_pid" 2>/dev/null || true
