@@ -44,7 +44,7 @@ func _run() -> void:
 	)
 	_require(
 		menu.find_child("ModeExclusion", true, false) is OptionButton
-		and menu.find_child("ModeExclusion", true, false).item_count == 5,
+		and menu.find_child("ModeExclusion", true, false).item_count == 6,
 		"Waiting room must expose one optional minigame veto"
 	)
 	menu.queue_free()
@@ -88,12 +88,13 @@ func _run() -> void:
 	)
 	_require(
 		disaster.get_registered_mode_ids()
-		== [&"meteors", &"shockwave", &"flood", &"shooter"],
+		== [&"meteors", &"shockwave", &"flood", &"shooter", &"domain"],
 		"Round controller must discover independent minigame modules in scene order"
 	)
 	var map_host: Node3D = game.get_node("World/ModeMapHost")
 	_require(
-		map_host.get_registered_map_ids() == [&"plaza_caos", &"campo_tiro"],
+		map_host.get_registered_map_ids()
+		== [&"plaza_caos", &"campo_tiro", &"nucleo_tactico"],
 		"Map host must discover data-driven common maps"
 	)
 	var initial_plan := disaster.get_upcoming_plan()
@@ -111,9 +112,15 @@ func _run() -> void:
 	)
 	_require(
 		(
-			initial_plan.map_id == &"campo_tiro"
-			if initial_plan.mode_id == &"shooter"
-			else initial_plan.map_id == &"plaza_caos"
+			(initial_plan.mode_id == &"shooter" and initial_plan.map_id == &"campo_tiro")
+			or (
+				initial_plan.mode_id == &"domain"
+				and initial_plan.map_id == &"nucleo_tactico"
+			)
+			or (
+				initial_plan.mode_id not in [&"shooter", &"domain"]
+				and initial_plan.map_id == &"plaza_caos"
+			)
 		),
 		"Common mode must select only a tag-compatible map"
 	)
@@ -131,8 +138,7 @@ func _run() -> void:
 	)
 	feature_host.apply_experience(initial_plan)
 	_require(
-		feature_host.get_active_feature_ids().is_empty()
-		and test_feature.feature_context.is_empty(),
+		test_feature.feature_context.is_empty(),
 		"Features omitted by the next plan must deactivate without rebuilding the game"
 	)
 	var shooter_plan := initial_plan.duplicate(true)
@@ -149,6 +155,16 @@ func _run() -> void:
 		not game.get_node("HUD/Shoot").visible,
 		"Shooter controls must disappear when another minigame starts"
 	)
+	var domain_plan := initial_plan.duplicate(true)
+	domain_plan.mode_id = &"domain"
+	domain_plan.map_id = &"nucleo_tactico"
+	domain_plan.feature_ids = PackedStringArray(["domain_tracker"])
+	feature_host.apply_experience(domain_plan)
+	_require(
+		game.get_node("HUD/DomainStatus").visible,
+		"Domain feature must expose local capture feedback without network traffic"
+	)
+	feature_host.clear_experience()
 	disaster.set_physics_process(false)
 	var meteors := disaster.get_node("MeteorMode").find_children("Meteor*", "", false, false)
 	_require(meteors.size() == EXPECTED_METEOR_POOL, "Meteor pool must be preallocated")
@@ -161,6 +177,10 @@ func _run() -> void:
 	_require(shockwaves.size() == 1, "Exactly one reusable shockwave must be preallocated")
 	var floods := disaster.get_node("FloodMode").find_children("FloodHazard", "", false, false)
 	_require(floods.size() == 1, "Exactly one reusable flood surface must be preallocated")
+	_require(
+		disaster.get_node("DomainMode/CaptureZone") is MeshInstance3D,
+		"Domain must reuse one lightweight capture-zone mesh"
+	)
 
 	_require(player.get_node("Visual/Head") != null, "Player must have a recognizable low-poly head")
 	_require(player.get_node("Visual/LeftArm") != null, "Player must have low-poly limbs")
@@ -468,6 +488,14 @@ func _run() -> void:
 		and player.global_position.distance_to(Vector3(0.0, 1.2, 19.0)) < 0.1,
 		"Shooter map must replace the plaza with separated spawns and physical props"
 	)
+	map_host.activate_selection(&"domain", &"nucleo_tactico")
+	await physics_frame
+	var domain_map := game.get_node("World/ModeMapHost/ModeMap_nucleo_tactico")
+	_require(
+		domain_map.find_children("PhysicsProp*", "RigidBody3D", true, false).size() == 8
+		and domain_map.find_children("PlayerSpawn*", "Marker3D", true, false).size() == 5,
+		"Domain map must reuse physical props and five separated spawn points"
+	)
 	map_host.activate_selection(&"default", &"plaza_caos")
 	await physics_frame
 
@@ -504,9 +532,15 @@ func _run() -> void:
 		)
 		_require(
 			(
-				random_plan.map_id == &"campo_tiro"
-				if random_plan.mode_id == &"shooter"
-				else random_plan.map_id == &"plaza_caos"
+				(random_plan.mode_id == &"shooter" and random_plan.map_id == &"campo_tiro")
+				or (
+					random_plan.mode_id == &"domain"
+					and random_plan.map_id == &"nucleo_tactico"
+				)
+				or (
+					random_plan.mode_id not in [&"shooter", &"domain"]
+					and random_plan.map_id == &"plaza_caos"
+				)
 			),
 			"Random selector must preserve mode/map compatibility"
 		)

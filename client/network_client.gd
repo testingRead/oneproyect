@@ -35,7 +35,8 @@ signal shot_received(
 	target_player_id: int,
 	origin: Vector3,
 	hit_position: Vector3,
-	damage: int
+	damage: int,
+	weapon_id: int
 )
 signal session_resumed(player_id: int)
 signal remote_session_suspended(player_id: int)
@@ -191,7 +192,7 @@ func start_room() -> void:
 
 func set_room_profile(ready: bool, mode_exclusion: int = excluded_mode_id) -> void:
 	if _session_accepted:
-		excluded_mode_id = clampi(mode_exclusion, -1, 3)
+		excluded_mode_id = clampi(mode_exclusion, -1, NET.ModeId.size() - 1)
 		_rpc_set_room_profile.rpc_id(
 			1,
 			clampi(color_index, 0, 4),
@@ -807,14 +808,16 @@ func _rpc_receive_shot(
 	target_player_id: int,
 	origin: Vector3,
 	hit_position: Vector3,
-	damage: int
+	damage: int,
+	weapon_id: int
 ) -> void:
 	shot_received.emit(
 		shooter_player_id,
 		target_player_id,
 		origin,
 		hit_position,
-		damage
+		damage,
+		weapon_id
 	)
 
 

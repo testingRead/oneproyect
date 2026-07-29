@@ -31,6 +31,7 @@ var body_mask := NET.ALL_BODY_PARTS_MASK
 var last_state_sequence := 0
 var last_state_tick := 0
 var last_shot_tick := -1000
+var objective_ticks := 0
 
 
 func accept_owned_state(
@@ -78,6 +79,7 @@ func prepare_next_round() -> void:
 	round_points = 0
 	body_mask = NET.ALL_BODY_PARTS_MASK
 	last_shot_tick = -1000
+	objective_ticks = 0
 
 
 func player_flags() -> int:

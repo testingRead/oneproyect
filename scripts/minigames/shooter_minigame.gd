@@ -63,13 +63,19 @@ func finish_round() -> void:
 	set_process(false)
 
 
-func spawn_network_shot(origin: Vector3, hit_position: Vector3) -> void:
+func spawn_network_shot(origin: Vector3, hit_position: Vector3, weapon_id := 0) -> void:
 	var direction := hit_position - origin
 	var length := direction.length()
 	if length < 0.05:
 		return
 	var slot := _find_tracer_slot()
 	var tracer := _tracers[slot]
+	var material := tracer.mesh.material as StandardMaterial3D
+	material.albedo_color = (
+		Color(0.35, 0.9, 1.0)
+		if weapon_id == 1
+		else (Color(1.0, 0.48, 0.12) if weapon_id == 2 else Color(1.0, 0.8, 0.24))
+	)
 	var midpoint := origin + direction * 0.5
 	tracer.global_position = midpoint
 	tracer.scale = Vector3(1.0, length, 1.0)

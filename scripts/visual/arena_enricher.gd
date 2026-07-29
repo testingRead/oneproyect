@@ -8,6 +8,7 @@ const INDUSTRIAL_FLOOR := preload("res://assets/textures/industrial_floor.webp")
 @export var palette_primary := Color(0.16, 0.3, 0.4)
 @export var palette_accent := Color(0.12, 0.72, 0.68)
 @export var physical_prop_count := 8
+@export var floor_texture: Texture2D = INDUSTRIAL_FLOOR
 
 var _quality_level := 0
 var _medium_details: Node3D
@@ -40,7 +41,7 @@ func _texture_existing_floor() -> void:
 	if floor_mesh == null:
 		return
 	var material := _primary_material.duplicate() as StandardMaterial3D
-	material.albedo_texture = INDUSTRIAL_FLOOR
+	material.albedo_texture = floor_texture
 	material.uv1_scale = Vector3(6.0, 6.0, 6.0)
 	floor_mesh.material_override = material
 
@@ -72,7 +73,7 @@ func _create_shared_resources() -> void:
 func _build_floor_and_boundary() -> void:
 	var floor_size := half_extent * 2.0
 	var floor_material := _primary_material.duplicate() as StandardMaterial3D
-	floor_material.albedo_texture = INDUSTRIAL_FLOOR
+	floor_material.albedo_texture = floor_texture
 	floor_material.uv1_scale = Vector3(6.0, 6.0, 6.0)
 	_add_static_box(
 		"Floor",

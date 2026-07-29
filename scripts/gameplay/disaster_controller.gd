@@ -118,10 +118,10 @@ func spawn_network_shockwave() -> void:
 		mode.call("spawn_network_shockwave")
 
 
-func spawn_network_shot(origin: Vector3, hit_position: Vector3) -> void:
+func spawn_network_shot(origin: Vector3, hit_position: Vector3, weapon_id := 0) -> void:
 	var mode := _find_mode_by_id(&"shooter")
 	if mode != null and mode.has_method("spawn_network_shot"):
-		mode.call("spawn_network_shot", origin, hit_position)
+		mode.call("spawn_network_shot", origin, hit_position, weapon_id)
 
 
 func apply_network_state(

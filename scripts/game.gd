@@ -374,10 +374,11 @@ func _on_shot_received(
 	target_player_id: int,
 	origin: Vector3,
 	hit_position: Vector3,
-	damage: int
+	damage: int,
+	weapon_id: int
 ) -> void:
-	disaster.spawn_network_shot(origin, hit_position)
-	sounds.play_shot()
+	disaster.spawn_network_shot(origin, hit_position, weapon_id)
+	sounds.play_weapon_shot(weapon_id)
 	if target_player_id == network.get_local_player_id() and damage > 0:
 		player.apply_shot_damage(damage, hit_position)
 

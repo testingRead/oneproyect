@@ -26,3 +26,16 @@ flat-lit, with no text, objects or perspective.
 
 The source was resized to 512×512 and encoded as WebP at quality 68. Godot
 generates mipmaps for stable rendering at distance.
+
+## `textures/domain_floor.webp`
+
+Generated with OpenAI image generation in built-in/default mode.
+
+Prompt summary: a seamless tactical arena floor for a capture-zone minigame,
+made from dark graphite concrete tiles with restrained cyan and safety-orange
+lane markings, realistic wear, flat diffuse lighting, no perspective, text,
+logos, objects or people.
+
+The source was resized to 512×512 and encoded on the Android development device
+as WebP at quality 70. The final source asset is approximately 8.3 KB and uses
+Godot mipmaps at runtime.

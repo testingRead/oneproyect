@@ -10,6 +10,7 @@ extends Node
 const MIX_RATE := 11025
 
 var _enabled := true
+var _weapon_streams: Array[AudioStreamWAV] = []
 
 
 func _ready() -> void:
@@ -18,6 +19,7 @@ func _ready() -> void:
 	shockwave_player.stream = _make_shockwave()
 	success_player.stream = _make_success()
 	shot_player.stream = _make_shot()
+	_weapon_streams = [_make_pistol(), _make_carbine(), _make_shotgun()]
 
 
 func play_warning() -> void:
@@ -43,6 +45,13 @@ func play_success() -> void:
 func play_shot() -> void:
 	if _enabled:
 		shot_player.play()
+
+
+func play_weapon_shot(weapon_id: int) -> void:
+	if not _enabled:
+		return
+	shot_player.stream = _weapon_streams[clampi(weapon_id, 0, _weapon_streams.size() - 1)]
+	shot_player.play()
 
 
 func set_enabled(enabled: bool) -> void:
@@ -131,6 +140,42 @@ func _make_shot() -> AudioStreamWAV:
 		var noise := float(noise_state % 2001 - 1000) / 1000.0
 		var envelope := pow(1.0 - progress, 3.2)
 		var sample := (crack * 0.62 + noise * 0.38) * envelope * 0.72
+		data[frame] = int(clampf(sample * 127.0 + 128.0, 0.0, 255.0))
+	return _build_stream(data)
+
+
+func _make_pistol() -> AudioStreamWAV:
+	return _make_weapon_crack(0.13, 940.0, 190.0, 0.76, 0.34)
+
+
+func _make_carbine() -> AudioStreamWAV:
+	return _make_weapon_crack(0.11, 1250.0, 240.0, 0.68, 0.44)
+
+
+func _make_shotgun() -> AudioStreamWAV:
+	return _make_weapon_crack(0.27, 510.0, 72.0, 0.82, 0.58)
+
+
+func _make_weapon_crack(
+	duration: float,
+	start_frequency: float,
+	end_frequency: float,
+	volume: float,
+	noise_mix: float
+) -> AudioStreamWAV:
+	var frame_count := int(MIX_RATE * duration)
+	var data := PackedByteArray()
+	data.resize(frame_count)
+	var noise_state := int(start_frequency * 913.0)
+	for frame in frame_count:
+		noise_state = (noise_state * 1103515245 + 12345) & 0x7fffffff
+		var progress := float(frame) / frame_count
+		var time := float(frame) / MIX_RATE
+		var frequency := lerpf(start_frequency, end_frequency, progress)
+		var tone := sin(TAU * frequency * time)
+		var noise := float(noise_state % 2001 - 1000) / 1000.0
+		var envelope := pow(1.0 - progress, 3.0 if duration < 0.2 else 2.1)
+		var sample := lerpf(tone, noise, noise_mix) * envelope * volume
 		data[frame] = int(clampf(sample * 127.0 + 128.0, 0.0, 255.0))
 	return _build_stream(data)
 

@@ -235,7 +235,7 @@ func _rpc_set_room_profile(
 		_rpc_room_action_failed.rpc_id(sender, "not_in_room")
 		return
 	session.color_index = clampi(character_index, 0, 4)
-	session.excluded_mode_id = clampi(excluded_mode_id, -1, 3)
+	session.excluded_mode_id = clampi(excluded_mode_id, -1, NET.ModeId.size() - 1)
 	session.ready = ready
 	_broadcast_player_profile(room, session)
 	_broadcast_room_waiting(room)
@@ -418,7 +418,8 @@ func _rpc_submit_shot(origin: Vector3, direction: Vector3) -> void:
 				room.resolved_target_player_id,
 				origin,
 				room.resolved_hit_position,
-				room.resolved_shot_damage
+				room.resolved_shot_damage,
+				room.resolved_weapon_id
 			)
 
 
@@ -532,7 +533,8 @@ func _rpc_receive_shot(
 	_target_player_id: int,
 	_origin: Vector3,
 	_hit_position: Vector3,
-	_damage: int
+	_damage: int,
+	_weapon_id: int
 ) -> void:
 	pass
 

@@ -1,16 +1,21 @@
 class_name ShooterControlsFeature
 extends "res://scripts/features/gameplay_feature.gd"
 
+const WEAPONS := preload("res://shared/weapon_profiles.gd")
+
 var _player: GrayboxPlayer
 var _shoot_button: Control
+var _weapon_label: Label
 var _network: Variant
 var _disaster: DisasterController
+var _sounds: SoundBank
 var _previous_first_person := false
 var _active := false
 var _cooldown := 0.0
 var _weapon_root: Node3D
 var _weapon_base_position := Vector3(0.34, -0.28, -0.62)
 var _recoil := 0.0
+var _weapon_id := 0
 
 
 func _ready() -> void:
@@ -22,6 +27,8 @@ func activate(context: Dictionary) -> void:
 	super.activate(context)
 	_player = context.get("player") as GrayboxPlayer
 	var hud := context.get("hud") as CanvasLayer
+	var plan := context.get("plan", {}) as Dictionary
+	_weapon_id = WEAPONS.from_round_seed(int(plan.get("round_seed", 0)))
 	_network = get_node("/root/Network")
 	var world := context.get("world") as Node3D
 	_disaster = (
@@ -29,15 +36,21 @@ func activate(context: Dictionary) -> void:
 		if world != null
 		else null
 	)
+	_sounds = (
+		world.get_parent().get_node_or_null("SoundBank") as SoundBank
+		if world != null and world.get_parent() != null
+		else null
+	)
 	_shoot_button = hud.get_node_or_null("Shoot") as Control if hud != null else null
 	if _shoot_button != null:
 		_shoot_button.visible = true
 		if not _shoot_button.action_pressed.is_connected(_request_shot):
 			_shoot_button.action_pressed.connect(_request_shot)
+	_ensure_weapon_label(hud)
 	if _player != null:
 		_previous_first_person = _player.is_first_person()
 		_player.set_first_person(true)
-		_ensure_weapon()
+		_rebuild_weapon()
 		_weapon_root.visible = true
 	_active = true
 	set_process(true)
@@ -52,6 +65,8 @@ func deactivate() -> void:
 		_player.set_first_person(_previous_first_person)
 	if _weapon_root != null:
 		_weapon_root.visible = false
+	if _weapon_label != null:
+		_weapon_label.visible = false
 	super.deactivate()
 
 
@@ -68,22 +83,30 @@ func _process(delta: float) -> void:
 func _request_shot() -> void:
 	if not _active or _player == null or _cooldown > 0.0:
 		return
-	_cooldown = 0.24
+	_cooldown = WEAPONS.cooldown_seconds(_weapon_id)
 	_recoil = 1.0
 	var origin := _player.get_shoot_origin()
 	var direction := _player.get_shoot_direction()
 	if _network.is_online():
 		_network.send_shot(origin, direction)
 	elif _disaster != null:
-		_disaster.spawn_network_shot(origin, origin + direction * 32.0)
+		_disaster.spawn_network_shot(
+			origin,
+			origin + direction * WEAPONS.maximum_range(_weapon_id),
+			_weapon_id
+		)
+		if _sounds != null:
+			_sounds.play_weapon_shot(_weapon_id)
 
 
-func _ensure_weapon() -> void:
-	if _weapon_root != null or _player == null:
+func _rebuild_weapon() -> void:
+	if _player == null:
 		return
 	var camera := _player.get_node_or_null("CameraRig/SpringArm/Camera") as Camera3D
 	if camera == null:
 		return
+	if _weapon_root != null:
+		_weapon_root.queue_free()
 	_weapon_root = Node3D.new()
 	_weapon_root.name = "ClientWeapon"
 	_weapon_root.position = _weapon_base_position
@@ -97,24 +120,81 @@ func _ensure_weapon() -> void:
 	accent.albedo_color = Color(0.96, 0.31, 0.07)
 	accent.metallic = 0.35
 	accent.roughness = 0.42
+	match _weapon_id:
+		WEAPONS.Id.C16:
+			_build_carbine(dark, accent)
+		WEAPONS.Id.T12:
+			_build_shotgun(dark, accent)
+		_:
+			_build_pistol(dark, accent)
 
-	_add_box("Receiver", Vector3(0.22, 0.17, 0.52), Vector3.ZERO, dark)
-	_add_box("Stock", Vector3(0.18, 0.20, 0.26), Vector3(0.0, -0.015, 0.36), dark)
-	_add_box("Grip", Vector3(0.11, 0.25, 0.14), Vector3(0.0, -0.18, 0.13), accent, -0.22)
-	_add_box("Sight", Vector3(0.065, 0.07, 0.13), Vector3(0.0, 0.12, -0.08), accent)
+
+func _build_pistol(dark: Material, accent: Material) -> void:
+	_add_box("Slide", Vector3(0.18, 0.14, 0.48), Vector3(0, 0.03, -0.08), dark)
+	_add_box("Frame", Vector3(0.16, 0.11, 0.34), Vector3(0, -0.07, 0), accent)
+	_add_box("Grip", Vector3(0.14, 0.30, 0.17), Vector3(0, -0.24, 0.11), dark, -0.18)
+	_add_box("FrontSight", Vector3(0.035, 0.035, 0.045), Vector3(0, 0.12, -0.25), accent)
+	_add_barrel(Vector3(0, 0.03, -0.34), 0.24, 0.024, dark)
+
+
+func _build_carbine(dark: Material, accent: Material) -> void:
+	_add_box("UpperReceiver", Vector3(0.20, 0.17, 0.58), Vector3.ZERO, dark)
+	_add_box("Handguard", Vector3(0.17, 0.15, 0.46), Vector3(0, 0.01, -0.49), accent)
+	_add_box("Stock", Vector3(0.18, 0.20, 0.34), Vector3(0, -0.01, 0.43), dark)
+	_add_box("Magazine", Vector3(0.13, 0.30, 0.18), Vector3(0, -0.23, -0.02), accent, 0.13)
+	_add_box("Grip", Vector3(0.11, 0.27, 0.15), Vector3(0, -0.20, 0.22), dark, -0.22)
+	_add_box("Sight", Vector3(0.07, 0.09, 0.18), Vector3(0, 0.15, -0.10), accent)
+	_add_barrel(Vector3(0, 0.015, -0.84), 0.42, 0.028, dark)
+
+
+func _build_shotgun(dark: Material, accent: Material) -> void:
+	_add_box("Receiver", Vector3(0.21, 0.18, 0.50), Vector3(0, 0, 0.05), dark)
+	_add_box("Stock", Vector3(0.20, 0.22, 0.48), Vector3(0, -0.02, 0.48), accent)
+	_add_box("Pump", Vector3(0.22, 0.20, 0.34), Vector3(0, -0.02, -0.42), accent)
+	_add_box("Grip", Vector3(0.12, 0.25, 0.15), Vector3(0, -0.20, 0.18), dark, -0.20)
+	_add_barrel(Vector3(0, 0.055, -0.80), 0.86, 0.036, dark)
+	_add_barrel(Vector3(0, -0.045, -0.65), 0.62, 0.029, accent)
+
+
+func _add_barrel(
+	part_position: Vector3,
+	length: float,
+	radius: float,
+	material: Material
+) -> void:
 	var barrel_mesh := CylinderMesh.new()
-	barrel_mesh.top_radius = 0.035
-	barrel_mesh.bottom_radius = 0.044
-	barrel_mesh.height = 0.48
+	barrel_mesh.top_radius = radius
+	barrel_mesh.bottom_radius = radius * 1.08
+	barrel_mesh.height = length
 	barrel_mesh.radial_segments = 12
 	var barrel := MeshInstance3D.new()
 	barrel.name = "Barrel"
 	barrel.mesh = barrel_mesh
-	barrel.material_override = dark
-	barrel.position = Vector3(0.0, 0.01, -0.50)
+	barrel.material_override = material
+	barrel.position = part_position
 	barrel.rotation.x = PI * 0.5
 	barrel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_weapon_root.add_child(barrel)
+
+
+func _ensure_weapon_label(hud: CanvasLayer) -> void:
+	if hud == null:
+		return
+	if _weapon_label == null:
+		_weapon_label = Label.new()
+		_weapon_label.name = "WeaponStatus"
+		_weapon_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		_weapon_label.position = Vector2(-330.0, 82.0)
+		_weapon_label.size = Vector2(300.0, 54.0)
+		_weapon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		_weapon_label.add_theme_font_size_override("font_size", 18)
+		_weapon_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+		hud.add_child(_weapon_label)
+	_weapon_label.text = "%s\n%s" % [
+		WEAPONS.display_name(_weapon_id),
+		WEAPONS.reference_name(_weapon_id),
+	]
+	_weapon_label.visible = true
 
 
 func _add_box(

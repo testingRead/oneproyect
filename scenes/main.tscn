@@ -1,4 +1,4 @@
-[gd_scene load_steps=52 format=3]
+[gd_scene load_steps=55 format=3]
 
 [ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
 [ext_resource type="Script" path="res://scripts/player.gd" id="2_player"]
@@ -20,6 +20,9 @@
 [ext_resource type="Script" path="res://scripts/minigames/shooter_minigame.gd" id="19_shooter_mode"]
 [ext_resource type="Resource" path="res://data/maps/campo_tiro.tres" id="20_shooter_map"]
 [ext_resource type="Script" path="res://scripts/features/shooter_controls_feature.gd" id="21_shooter_feature"]
+[ext_resource type="Script" path="res://scripts/minigames/domain_minigame.gd" id="22_domain_mode"]
+[ext_resource type="Resource" path="res://data/maps/nucleo_tactico.tres" id="23_domain_map"]
+[ext_resource type="Script" path="res://scripts/features/domain_tracker_feature.gd" id="24_domain_feature"]
 
 [sub_resource type="StandardMaterial3D" id="MatFloor"]
 albedo_texture = ExtResource("8_floor")
@@ -547,10 +550,13 @@ script = ExtResource("14_flood_mode")
 [node name="ShooterMode" type="Node3D" parent="World/DisasterController"]
 script = ExtResource("19_shooter_mode")
 
+[node name="DomainMode" type="Node3D" parent="World/DisasterController"]
+script = ExtResource("22_domain_mode")
+
 [node name="ModeMapHost" type="Node3D" parent="World"]
 script = ExtResource("15_map_host")
 default_map_path = NodePath("../Arena")
-map_definitions = Array[Resource]([ExtResource("16_plaza_map"), ExtResource("20_shooter_map")])
+map_definitions = Array[Resource]([ExtResource("16_plaza_map"), ExtResource("20_shooter_map"), ExtResource("23_domain_map")])
 
 [node name="RemotePlayers" type="Node3D" parent="World"]
 
@@ -568,6 +574,9 @@ hud_path = NodePath("../HUD")
 
 [node name="ShooterControls" type="Node" parent="ExperienceFeatureHost"]
 script = ExtResource("21_shooter_feature")
+
+[node name="DomainTracker" type="Node" parent="ExperienceFeatureHost"]
+script = ExtResource("24_domain_feature")
 
 [node name="Warning" type="AudioStreamPlayer" parent="SoundBank"]
 volume_db = -8.0

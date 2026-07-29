@@ -229,10 +229,11 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	_exclusion_button.add_item("VETO: ONDA", NET.ModeId.SHOCKWAVE)
 	_exclusion_button.add_item("VETO: INUNDACIÓN", NET.ModeId.FLOOD)
 	_exclusion_button.add_item("VETO: SHOOTER", NET.ModeId.SHOOTER)
+	_exclusion_button.add_item("VETO: DOMINIO", NET.ModeId.DOMAIN)
 	_exclusion_button.item_selected.connect(_on_exclusion_selected)
 	screen.add_child(_exclusion_button)
 	var veto_rule := _label(
-		"Un voto por jugador · el servidor siempre conserva 3 modos válidos.",
+		"Un voto por jugador · siempre quedan al menos 3 modos válidos.",
 		14
 	)
 	veto_rule.modulate = Color(0.62, 0.78, 0.9)

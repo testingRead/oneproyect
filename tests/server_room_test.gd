@@ -2,6 +2,7 @@ extends SceneTree
 
 const NET := preload("res://shared/net_constants.gd")
 const CODEC := preload("res://shared/net_codec.gd")
+const WEAPONS := preload("res://shared/weapon_profiles.gd")
 
 var _failed := false
 const ROOM_SCRIPT := preload("res://server/room_state.gd")
@@ -44,6 +45,7 @@ func _run() -> void:
 	target.position = Vector3(0.0, 1.2, -5.0)
 	shooter_room.phase = NET.RoomPhase.ACTIVE
 	shooter_room.mode_id = NET.ModeId.SHOOTER
+	shooter_room.round_seed = 1
 	shooter_room.phase_end_tick = 1000
 	_require(
 		shooter_room.apply_shot(
@@ -54,7 +56,7 @@ func _run() -> void:
 		"Shooter ray must be accepted during its dedicated mode"
 	)
 	_require(
-		target.health == 72
+		target.health == 76
 		and shooter_room.resolved_target_player_id == target.player_id,
 		"Server must resolve and damage the closest player on the ray"
 	)
@@ -69,10 +71,10 @@ func _run() -> void:
 		NET.ALL_BODY_PARTS_MASK
 	)
 	_require(
-		shooter_room.apply_owned_state(51, forged_heal) and target.health == 72,
+		shooter_room.apply_owned_state(51, forged_heal) and target.health == 76,
 		"Shooter clients must not overwrite authoritative damage with owned state"
 	)
-	for shot_index in 3:
+	for shot_index in 4:
 		shooter_room.server_tick += 5
 		shooter_room.apply_shot(
 			50,
@@ -86,6 +88,41 @@ func _run() -> void:
 		"Individual shooter must eliminate once and end when one player remains"
 	)
 	shooter_room.queue_free()
+
+	var domain_room: Node = ROOM_SCRIPT.new()
+	domain_room.name = "DomainRoomTest"
+	root.add_child(domain_room)
+	await process_frame
+	var controller: RefCounted = domain_room.session_manager.register_session(
+		60, "eeeeeeeeeeeeeeee", "", "Ema", 0, 0, 0, 0
+	)
+	var outsider: RefCounted = domain_room.session_manager.register_session(
+		61, "ffffffffffffffff", "", "Fede", 1, 0, 0, 0
+	)
+	controller.position = Vector3(1.0, 1.2, 1.0)
+	outsider.position = Vector3(15.0, 1.2, 15.0)
+	domain_room.phase = NET.RoomPhase.ACTIVE
+	domain_room.mode_id = NET.ModeId.DOMAIN
+	domain_room.phase_end_tick = 1000
+	for domain_tick in 20:
+		domain_room.tick()
+	_require(
+		controller.objective_ticks == 20 and outsider.objective_ticks == 0,
+		"Domain must score authorized positions without additional network messages"
+	)
+	domain_room.call("_score_round")
+	_require(
+		controller.round_points > outsider.round_points,
+		"Domain standings must prioritize authorized capture time"
+	)
+	_require(
+		WEAPONS.damage(WEAPONS.Id.T12, 5.0)
+		> WEAPONS.damage(WEAPONS.Id.T12, 15.0)
+		and WEAPONS.maximum_range(WEAPONS.Id.C16)
+		> WEAPONS.maximum_range(WEAPONS.Id.P9),
+		"Reusable weapon profiles must preserve distinct range and damage roles"
+	)
+	domain_room.queue_free()
 
 	var room: Node = ROOM_SCRIPT.new()
 	room.name = "RoomTest"
