@@ -88,6 +88,10 @@ func _run() -> void:
 		% [client_index, accepted, confirmed, saw_remote_state]
 	)
 	network.disconnect_session()
+	# Let MultiplayerAPI poll the intentional ENet shutdown before destroying
+	# the process. Quitting in the same frame tears down the channel underneath
+	# the server's final snapshot and produces a false server error.
+	await create_timer(0.25).timeout
 	quit(0)
 
 

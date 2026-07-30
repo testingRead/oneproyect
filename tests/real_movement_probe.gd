@@ -151,6 +151,9 @@ func _run() -> void:
 		]
 	)
 	network.disconnect_session()
+	# Keep the process alive briefly so ENet can finish its cooperative
+	# disconnect instead of losing all channels during the server's last send.
+	await create_timer(0.25).timeout
 	if failed:
 		quit(1)
 		return
