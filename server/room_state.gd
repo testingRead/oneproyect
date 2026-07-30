@@ -11,6 +11,7 @@ const NET := preload("res://shared/net_constants.gd")
 const CODEC := preload("res://shared/net_codec.gd")
 const SESSION_MANAGER_SCRIPT := preload("res://server/session_manager.gd")
 const WEAPONS := preload("res://shared/weapon_profiles.gd")
+const DIFFICULTY := preload("res://shared/difficulty_rules.gd")
 
 var room_id := 1
 var server_tick := 0
@@ -34,6 +35,7 @@ var resolved_target_player_id := 0
 var resolved_hit_position := Vector3.ZERO
 var resolved_shot_damage := 0
 var resolved_weapon_id := 0
+var resolved_push_force := 0.0
 
 
 func _ready() -> void:
@@ -145,13 +147,17 @@ func apply_push(peer_id: int, target_player_id: int, direction: Vector3) -> bool
 	safe_direction = safe_direction.normalized()
 	var offset: Vector3 = target.position - source.position
 	var horizontal_offset := Vector3(offset.x, 0.0, offset.z)
-	if horizontal_offset.length() > 2.8:
+	var is_bat_round := phase == NET.RoomPhase.ACTIVE and mode_id == NET.ModeId.DOMAIN
+	var maximum_range := 3.5 if is_bat_round else 3.0
+	var push_force := 10.5 if is_bat_round else 6.4
+	if horizontal_offset.length() > maximum_range:
 		return false
 	if horizontal_offset.normalized().dot(safe_direction) < 0.55:
 		return false
-	target.velocity.x += safe_direction.x * 5.2
-	target.velocity.z += safe_direction.z * 5.2
-	target.velocity.y = maxf(target.velocity.y, 2.2)
+	target.velocity.x += safe_direction.x * push_force
+	target.velocity.z += safe_direction.z * push_force
+	target.velocity.y = maxf(target.velocity.y, 3.1 if is_bat_round else 2.35)
+	resolved_push_force = push_force
 	return true
 
 
@@ -365,30 +371,33 @@ func _advance_phase() -> void:
 
 
 func _pick_next_mode(previous_mode: int) -> int:
-	# Every player may veto one mode, but the room excludes only the most voted
-	# one. This keeps the rotation broad even as new reusable modes are added.
-	var veto_counts := PackedInt32Array([0, 0, 0, 0, 0])
+	# Respect distinct player vetoes while preserving a useful rotation pool.
+	# When more modes are vetoed than we can honor, vote count wins and ties are
+	# shuffled by the room RNG.
+	var veto_counts := PackedInt32Array()
+	veto_counts.resize(NET.ModeId.size())
 	for session: RefCounted in session_manager.sessions:
 		if session.connected and session.excluded_mode_id >= 0:
 			veto_counts[session.excluded_mode_id] += 1
-	var excluded_mode := -1
-	var highest_votes := 0
-	var tied := PackedInt32Array()
+	var voted_modes: Array[int] = []
 	for candidate in veto_counts.size():
-		if veto_counts[candidate] > highest_votes:
-			highest_votes = veto_counts[candidate]
-			tied = PackedInt32Array([candidate])
-		elif veto_counts[candidate] == highest_votes and highest_votes > 0:
-			tied.append(candidate)
-	if not tied.is_empty():
-		excluded_mode = tied[_random.randi_range(0, tied.size() - 1)]
+		if veto_counts[candidate] > 0:
+			voted_modes.append(candidate)
+	voted_modes.shuffle()
+	voted_modes.sort_custom(func(a: int, b: int) -> bool:
+		return veto_counts[a] > veto_counts[b]
+	)
+	var maximum_exclusions := maxi(0, NET.ModeId.size() - 3)
+	var excluded_modes: Dictionary = {}
+	for index in mini(maximum_exclusions, voted_modes.size()):
+		excluded_modes[voted_modes[index]] = true
 	var candidates := PackedInt32Array()
 	for candidate in NET.ModeId.size():
-		if candidate != excluded_mode and candidate != previous_mode:
+		if not excluded_modes.has(candidate) and candidate != previous_mode:
 			candidates.append(candidate)
 	if candidates.is_empty():
 		for candidate in NET.ModeId.size():
-			if candidate != excluded_mode:
+			if not excluded_modes.has(candidate):
 				candidates.append(candidate)
 	return candidates[_random.randi_range(0, candidates.size() - 1)]
 
@@ -446,20 +455,53 @@ func _tick_mode_events() -> void:
 		return
 	match mode_id:
 		NET.ModeId.METEORS:
+			var difficulty := DIFFICULTY.from_round_seed(round_seed)
+			var intensity := DIFFICULTY.intensity(difficulty)
+			var target_extent := (
+				33.0
+				if NET.mode_map_name(mode_id, round_seed) == "muelles_altos"
+				else 23.2
+			)
 			var target := Vector3(
-				_random.randf_range(-23.2, 23.2),
+				_random.randf_range(-target_extent, target_extent),
 				0.06,
-				_random.randf_range(-23.2, 23.2)
+				_random.randf_range(-target_extent, target_extent)
 			)
 			var drift := Vector2(
 				_random.randf_range(-1.1, 1.1),
 				_random.randf_range(-1.1, 1.1)
 			)
-			meteor_spawned.emit(target, drift, 22, 10.5)
-			_next_mode_event_tick = server_tick + _random.randi_range(15, 29)
+			meteor_spawned.emit(
+				target,
+				drift * intensity,
+				roundi(22.0 * intensity),
+				10.5 * intensity
+			)
+			var meteor_min := 19 if difficulty == DIFFICULTY.Level.EASY else (
+				10 if difficulty == DIFFICULTY.Level.HARD else 15
+			)
+			var meteor_max := 34 if difficulty == DIFFICULTY.Level.EASY else (
+				21 if difficulty == DIFFICULTY.Level.HARD else 29
+			)
+			_next_mode_event_tick = server_tick + _random.randi_range(
+				meteor_min,
+				meteor_max
+			)
 		NET.ModeId.SHOCKWAVE:
+			var difficulty := DIFFICULTY.from_round_seed(round_seed)
 			shockwave_started.emit()
-			_next_mode_event_tick = server_tick + _random.randi_range(65, 90)
+			var interval_min := 65
+			var interval_max := 90
+			if difficulty == DIFFICULTY.Level.NORMAL:
+				interval_min = 50
+				interval_max = 68
+			elif difficulty == DIFFICULTY.Level.HARD:
+				interval_min = 38
+				interval_max = 50
+			_next_mode_event_tick = server_tick + _random.randi_range(
+				interval_min,
+				interval_max
+			)
 		_:
 			_next_mode_event_tick = phase_end_tick + 1
 

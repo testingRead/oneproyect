@@ -63,6 +63,10 @@ reload={
 "deadzone": 0.3,
 "events": [Object(InputEventKey,"physical_keycode":82)]
 }
+crouch={
+"deadzone": 0.3,
+"events": [Object(InputEventKey,"physical_keycode":67), Object(InputEventKey,"physical_keycode":4194327)]
+}
 pause={
 "deadzone": 0.3,
 "events": [Object(InputEventKey,"physical_keycode":80), Object(InputEventKey,"physical_keycode":4194305)]

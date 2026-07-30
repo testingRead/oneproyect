@@ -98,12 +98,17 @@ var _character_variant_index := 0
 var _defeated_state := false
 var _gameplay_collision_layer := 0
 var _gameplay_collision_mask := 0
+var _crouched := false
+var _standing_collision_height := 1.8
 
 
 func _ready() -> void:
 	_spawn_transform = global_transform
 	_gameplay_collision_layer = collision_layer
 	_gameplay_collision_mask = collision_mask
+	var collision_shape := $Collision as CollisionShape3D
+	collision_shape.shape = collision_shape.shape.duplicate()
+	_standing_collision_height = (collision_shape.shape as CapsuleShape3D).height
 	floor_snap_length = 0.35
 	add_to_group("players")
 	_reset_limbs()
@@ -128,7 +133,7 @@ func _physics_process(delta: float) -> void:
 	if direction.length_squared() > 1.0:
 		direction = direction.normalized()
 
-	var movement_scale := _get_leg_movement_scale()
+	var movement_scale := _get_leg_movement_scale() * (0.62 if _crouched else 1.0)
 	var jump_pressed := _jump_requested or Input.is_action_just_pressed("jump")
 	var acceleration := ground_acceleration if is_on_floor() else air_acceleration
 	velocity.x = move_toward(
@@ -148,6 +153,8 @@ func _physics_process(delta: float) -> void:
 	_jump_requested = false
 	if _controls_enabled and Input.is_action_just_pressed("push"):
 		request_push()
+	if _controls_enabled and Input.is_action_just_pressed("crouch"):
+		toggle_crouch()
 
 	if direction.length_squared() > 0.01:
 		visual.rotation.y = lerp_angle(visual.rotation.y, atan2(direction.x, direction.z), 12.0 * delta)
@@ -158,12 +165,18 @@ func _physics_process(delta: float) -> void:
 		Vector2(velocity.x, velocity.z).length(),
 		_walk_phase,
 		is_on_floor(),
-		clampf(_push_animation / 0.30, 0.0, 1.0),
+		clampf(_push_animation / 0.48, 0.0, 1.0),
 		clampf(_hurt_animation / 0.25, 0.0, 1.0),
 		1.0 if _combat_pose else 0.0,
 		clampf(_shoot_animation / 0.14, 0.0, 1.0),
 		clampf(_reload_animation / 1.1, 0.0, 1.0)
 	)
+	visual.scale.y = lerpf(
+		visual.scale.y,
+		0.72 if _crouched else 1.0,
+		delta * 14.0
+	)
+	$Hitboxes.scale.y = visual.scale.y
 
 	move_and_slide()
 	if global_position.y < -8.0 and not _defeated_state:
@@ -197,9 +210,18 @@ func request_push() -> void:
 		or not (_is_limb_attached(Limb.LEFT_ARM) or _is_limb_attached(Limb.RIGHT_ARM))
 	):
 		return
-	_push_cooldown = 0.72
-	_push_animation = 0.30
+	_push_cooldown = 0.78
+	_push_animation = 0.48
 	push_requested.emit()
+
+
+func toggle_crouch() -> void:
+	if _controls_enabled:
+		_set_crouched(not _crouched)
+
+
+func is_crouched() -> bool:
+	return _crouched
 
 
 func set_controls_enabled(enabled: bool) -> void:
@@ -215,6 +237,7 @@ func reset_to_spawn() -> void:
 	collision_mask = _gameplay_collision_mask
 	global_transform = _spawn_transform
 	velocity = Vector3.ZERO
+	_set_crouched(false)
 	_touch_move = Vector2.ZERO
 	camera_rig.rotation = Vector3(-0.22, 0.0, 0.0)
 	_reset_limbs()
@@ -229,6 +252,7 @@ func enter_spectator() -> void:
 	_touch_move = Vector2.ZERO
 	_jump_requested = false
 	velocity = Vector3.ZERO
+	_set_crouched(false)
 	collision_layer = 0
 	collision_mask = 0
 	_limb_mask = 0
@@ -543,6 +567,15 @@ func _get_leg_movement_scale() -> float:
 	if leg_count == 1:
 		return 0.72
 	return 0.48
+
+
+func _set_crouched(enabled: bool) -> void:
+	_crouched = enabled
+	var collision := $Collision as CollisionShape3D
+	var capsule := collision.shape as CapsuleShape3D
+	capsule.height = 1.24 if enabled else _standing_collision_height
+	collision.position.y = -0.28 if enabled else 0.0
+	camera_rig.position.y = 0.40 if enabled else 0.68
 
 
 func _apply_look(delta: Vector2) -> void:

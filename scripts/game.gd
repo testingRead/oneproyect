@@ -7,7 +7,7 @@ const MOVING_STATE_SEND_INTERVAL := 1.0 / float(NET.STATE_SEND_RATE)
 const IDLE_STATE_SEND_INTERVAL := 1.0 / float(NET.IDLE_STATE_SEND_RATE)
 const PROFILE_PATH := "user://profile.cfg"
 const MENU_SCENE := "res://scenes/menu.tscn"
-const PUSH_RANGE := 2.8
+const PUSH_RANGE := 3.5
 const PUSH_MIN_DOT := 0.62
 const QUALITY_NAMES := ["BAJA", "MEDIA", "ALTA"]
 const FPS_LIMITS := [30, 45, 60]
@@ -90,6 +90,7 @@ func _ready() -> void:
 	$HUD/LookPad.look_delta.connect(player.add_touch_look)
 	$HUD/Jump.action_pressed.connect(player.request_jump)
 	$HUD/Push.action_pressed.connect(player.request_push)
+	$HUD/Crouch.action_pressed.connect(player.toggle_crouch)
 	$HUD/TopBar/Pause.pressed.connect(toggle_pause)
 	$HUD/TopBar/Restart.pressed.connect(restart_level)
 	online_button.pressed.connect(_toggle_online)
@@ -320,6 +321,9 @@ func _on_experience_selected(plan: Dictionary) -> void:
 		StringName(plan.get("map_id", &""))
 	)
 	feature_host.apply_experience(plan)
+	var bats_enabled := StringName(plan.get("mode_id", &"")) == &"domain"
+	for avatar: RemoteAvatar in _remote_avatars.values():
+		avatar.set_bat_visible(bats_enabled)
 
 
 func _on_mode_map_activated(
@@ -365,8 +369,17 @@ func _on_push_requested() -> void:
 		network.send_push(closest_peer, forward)
 
 
-func _on_push_received(_sender_id: int, direction: Vector3, force: float) -> void:
-	player.apply_external_push(direction, force)
+func _on_push_received(
+	sender_id: int,
+	target_id: int,
+	direction: Vector3,
+	force: float
+) -> void:
+	var source_avatar: RemoteAvatar = _remote_avatars.get(sender_id)
+	if source_avatar != null:
+		source_avatar.play_push_animation(force >= 9.0)
+	if target_id == network.get_local_player_id():
+		player.apply_external_push(direction, force)
 
 
 func _on_shot_received(
@@ -551,6 +564,7 @@ func _on_remote_player_joined(peer_id: int, player_name: String, player_color: i
 	avatar.set_texture_detail(_quality_level >= 1)
 	avatar.set_model_quality(_quality_level >= 2)
 	avatar.set_detail_quality(_quality_level)
+	avatar.set_bat_visible(disaster.current_mode_id == &"domain")
 	_remote_avatars[peer_id] = avatar
 
 

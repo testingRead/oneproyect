@@ -20,6 +20,7 @@ var _weapon_id := 0
 var _ammo := 0
 var _reload_remaining := 0.0
 var _reload_duration := 1.0
+var _crosshair: GameCrosshair
 
 
 func _ready() -> void:
@@ -59,6 +60,7 @@ func activate(context: Dictionary) -> void:
 		if not _reload_button.action_pressed.is_connected(_begin_reload):
 			_reload_button.action_pressed.connect(_begin_reload)
 	_ensure_weapon_label(hud)
+	_ensure_crosshair(hud)
 	if _player != null:
 		_previous_first_person = _player.is_first_person()
 		_player.set_first_person(true)
@@ -83,6 +85,8 @@ func deactivate() -> void:
 		_weapon_root.visible = false
 	if _weapon_label != null:
 		_weapon_label.visible = false
+	if _crosshair != null:
+		_crosshair.visible = false
 	super.deactivate()
 
 
@@ -129,6 +133,8 @@ func _request_shot() -> void:
 	_cooldown = WEAPONS.cooldown_seconds(_weapon_id)
 	_ammo -= 1
 	_recoil = 1.0
+	if _crosshair != null:
+		_crosshair.kick()
 	_player.play_shoot_animation()
 	_update_weapon_label()
 	var origin := _player.get_shoot_origin()
@@ -252,6 +258,19 @@ func _update_weapon_label() -> void:
 		WEAPONS.reference_name(_weapon_id),
 		" · RECARGANDO" if _reload_remaining > 0.0 else "",
 	]
+
+
+func _ensure_crosshair(hud: CanvasLayer) -> void:
+	if hud == null:
+		return
+	if _crosshair == null:
+		_crosshair = GameCrosshair.new()
+		_crosshair.name = "Crosshair"
+		_crosshair.set_anchors_preset(Control.PRESET_CENTER)
+		_crosshair.position = Vector2(-32.0, -32.0)
+		_crosshair.size = Vector2(64.0, 64.0)
+		hud.add_child(_crosshair)
+	_crosshair.visible = true
 
 
 func _begin_reload() -> void:

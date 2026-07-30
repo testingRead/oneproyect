@@ -23,12 +23,15 @@ var _shots_since_reload := 0
 var _held_weapon: Node3D
 var _held_weapon_id := -1
 var _detail_quality := 0
+var _push_animation := 0.0
+var _bat_root: Node3D
 
 
 func _process(delta: float) -> void:
 	_combat_pose_time = maxf(0.0, _combat_pose_time - delta)
 	_shoot_animation = maxf(0.0, _shoot_animation - delta)
 	_reload_animation = maxf(0.0, _reload_animation - delta)
+	_push_animation = maxf(0.0, _push_animation - delta)
 	var previous_position := global_position
 	_snapshot_elapsed = minf(_snapshot_elapsed + delta, 0.12)
 	var displayed_position := target_position + target_velocity * _snapshot_elapsed
@@ -44,7 +47,7 @@ func _process(delta: float) -> void:
 		speed,
 		_walk_phase,
 		true,
-		0.0,
+		clampf(_push_animation / 0.48, 0.0, 1.0),
 		0.0,
 		1.0 if _combat_pose_time > 0.0 else 0.0,
 		clampf(_shoot_animation / 0.14, 0.0, 1.0),
@@ -91,6 +94,7 @@ func set_limb_mask(mask: int) -> void:
 
 func set_health(value: int) -> void:
 	_health = clampi(value, 0, 100)
+	$PlayerCollision.collision_layer = 2 if _health > 0 else 0
 	_update_name_label()
 
 
@@ -137,6 +141,17 @@ func play_shoot_animation(weapon_id: int) -> void:
 	if _shots_since_reload >= WEAPONS.magazine_size(weapon_id):
 		_shots_since_reload = 0
 		_reload_animation = WEAPONS.reload_seconds(weapon_id)
+
+
+func play_push_animation(is_bat_swing := false) -> void:
+	_push_animation = 0.64 if is_bat_swing else 0.48
+
+
+func set_bat_visible(enabled: bool) -> void:
+	if enabled and _bat_root == null:
+		_build_bat()
+	if _bat_root != null:
+		_bat_root.visible = enabled
 
 
 func _ensure_held_weapon(weapon_id: int) -> void:
@@ -202,3 +217,29 @@ func _add_weapon_box(
 		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	)
 	_held_weapon.add_child(part)
+
+
+func _build_bat() -> void:
+	_bat_root = Node3D.new()
+	_bat_root.name = "RemoteBat"
+	_bat_root.position = Vector3(0.62, 0.42, 0.28)
+	_bat_root.rotation = Vector3(-0.72, 0.0, -0.2)
+	add_child(_bat_root)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.92, 0.48, 0.08)
+	material.metallic = 0.45
+	material.roughness = 0.4
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.09
+	mesh.bottom_radius = 0.13
+	mesh.height = 1.15
+	mesh.radial_segments = 10
+	var bat := MeshInstance3D.new()
+	bat.mesh = mesh
+	bat.material_override = material
+	bat.cast_shadow = (
+		GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		if _detail_quality >= 1
+		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	)
+	_bat_root.add_child(bat)

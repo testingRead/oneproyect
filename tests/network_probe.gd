@@ -91,11 +91,15 @@ func _setup() -> void:
 		_spectator: String
 	) -> void:
 		saw_round_state = (
-			mode_id in ["meteors", "shockwave", "flood", "shooter", "domain"]
+			mode_id in ["meteors", "shockwave", "flood", "shooter", "domain", "drone_hunt"]
 			and (
 				(mode_id == "shooter" and map_id == "campo_tiro")
 				or (mode_id == "domain" and map_id == "nucleo_tactico")
-				or (mode_id not in ["shooter", "domain"] and map_id == "plaza_caos")
+				or (mode_id == "drone_hunt" and map_id == "deposito_drones")
+				or (
+					mode_id not in ["shooter", "domain", "drone_hunt"]
+					and map_id in ["plaza_caos", "muelles_altos"]
+				)
 			)
 		)
 	)

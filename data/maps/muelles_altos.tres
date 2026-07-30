@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MinigameMapDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/minigames/map_definition.gd" id="1_map"]
+[ext_resource type="PackedScene" path="res://scenes/maps/high_docks.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_map")
+map_id = &"muelles_altos"
+tags = PackedStringArray("common", "survival", "open_sky", "elevation", "overhead_spectator")
+selection_weight = 1.15
+maximum_players = 5
+map_scene = ExtResource("2_scene")

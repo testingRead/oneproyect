@@ -11,7 +11,6 @@ enum Phase {
 }
 
 const MAX_RADIUS := 27.2
-const EXPANSION_SPEED := 12.0
 const SAFE_HEIGHT := 1.55
 
 @onready var ring: MeshInstance3D = $Ring
@@ -21,6 +20,7 @@ var _phase_time := 0.0
 var _radius := 0.0
 var _damage := 18
 var _blast_force := 8.5
+var _expansion_speed := 12.0
 var _targets: Array[Node] = []
 var _resolved_targets: Dictionary = {}
 
@@ -38,19 +38,25 @@ func _physics_process(delta: float) -> void:
 			if _phase_time <= 0.0:
 				_begin_expansion()
 		Phase.EXPANDING:
-			_radius += EXPANSION_SPEED * delta
+			_radius += _expansion_speed * delta
 			ring.scale = Vector3(_radius, 1.0, _radius)
 			_resolve_crossed_players()
 			if _radius >= MAX_RADIUS:
 				reset_ring()
 
 
-func launch(warning_time := 0.48, damage := 18, blast_force := 8.5) -> bool:
+func launch(
+	warning_time := 0.48,
+	damage := 18,
+	blast_force := 8.5,
+	expansion_speed := 12.0
+) -> bool:
 	if phase != Phase.IDLE:
 		return false
 	_phase_time = warning_time
 	_damage = damage
 	_blast_force = blast_force
+	_expansion_speed = expansion_speed
 	_radius = 0.0
 	_targets.clear()
 	_resolved_targets.clear()

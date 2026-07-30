@@ -192,11 +192,14 @@ func _run() -> void:
 	first.ready = true
 	second.ready = true
 	first.excluded_mode_id = NET.ModeId.SHOOTER
-	second.excluded_mode_id = NET.ModeId.SHOOTER
+	second.excluded_mode_id = NET.ModeId.DOMAIN
 	for sample in 16:
 		_require(
-			room.call("_pick_next_mode", -1) != NET.ModeId.SHOOTER,
-			"The strongest room veto must leave three valid modes"
+			room.call("_pick_next_mode", -1) not in [
+				NET.ModeId.SHOOTER,
+				NET.ModeId.DOMAIN,
+			],
+			"Distinct player vetoes must both be honored while three modes remain"
 		)
 	_require(room.set_total_rounds(3), "Host must be able to select a supported match length")
 	_require(room.start_rounds(), "Host-ready room must enter countdown with two players")

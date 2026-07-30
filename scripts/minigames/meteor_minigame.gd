@@ -5,6 +5,7 @@ signal meteor_warning
 signal meteor_impact
 
 const METEOR_SCENE := preload("res://scenes/components/meteor.tscn")
+const DIFFICULTY := preload("res://shared/difficulty_rules.gd")
 
 @export var pool_size := 8
 @export var arena_half_extent := 23.2
@@ -14,6 +15,7 @@ const METEOR_SCENE := preload("res://scenes/components/meteor.tscn")
 var _pool: Array[MeteorSlot] = []
 var _spawn_cooldown := 0.0
 var _random := RandomNumberGenerator.new()
+var _difficulty := DIFFICULTY.Level.NORMAL
 
 
 func _ready() -> void:
@@ -35,6 +37,9 @@ func _ready() -> void:
 
 
 func begin_round(_round_number: int) -> void:
+	_difficulty = DIFFICULTY.from_round_seed(
+		int(experience_plan.get("round_seed", 0))
+	)
 	_spawn_cooldown = 0.25
 
 
@@ -49,20 +54,28 @@ func tick_round(
 	_spawn_cooldown -= delta
 	if _spawn_cooldown > 0.0:
 		return
-	_spawn_cooldown = lerpf(1.45, 0.72, intensity)
+	var difficulty_scale := DIFFICULTY.intensity(_difficulty)
+	_spawn_cooldown = lerpf(1.45, 0.72, intensity) / difficulty_scale
+	var active_extent := (
+		33.0
+		if StringName(experience_plan.get("map_id", &"")) == &"muelles_altos"
+		else arena_half_extent
+	)
 	var target := Vector3(
-		_random.randf_range(-arena_half_extent, arena_half_extent),
+		_random.randf_range(-active_extent, active_extent),
 		0.06,
-		_random.randf_range(-arena_half_extent, arena_half_extent)
+		_random.randf_range(-active_extent, active_extent)
 	)
 	var drift := Vector2(
 		_random.randf_range(-1.1, 1.1),
 		_random.randf_range(-1.1, 1.1)
-	)
+	) * difficulty_scale
+	var damage := roundi(22.0 * difficulty_scale)
+	var force := 10.5 * difficulty_scale
 	if network.is_online():
-		network.broadcast_meteor(target, drift, 22, 10.5)
+		network.broadcast_meteor(target, drift, damage, force)
 	else:
-		spawn_network_meteor(target, drift, 22, 10.5)
+		spawn_network_meteor(target, drift, damage, force)
 
 
 func finish_round() -> void:

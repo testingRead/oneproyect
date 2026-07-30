@@ -390,18 +390,17 @@ func _rpc_submit_push(target_player_id: int, direction: Vector3) -> void:
 		return
 	var source: RefCounted = room.session_manager.find_by_peer_id(sender)
 	var target: RefCounted = room.session_manager.find_by_player_id(target_player_id)
-	if (
-		source != null
-		and target != null
-		and target.connected
-		and _peer_can_receive(target.peer_id)
-	):
-		_rpc_receive_push.rpc_id(
-			target.peer_id,
-			source.player_id,
-			direction.normalized(),
-			5.2
-		)
+	if source == null or target == null:
+		return
+	for session: RefCounted in room.session_manager.sessions:
+		if session.connected and _peer_can_receive(session.peer_id):
+			_rpc_receive_push.rpc_id(
+				session.peer_id,
+				source.player_id,
+				target.player_id,
+				direction.normalized(),
+				room.resolved_push_force
+			)
 
 
 @rpc("any_peer", "call_remote", "reliable", 2)
@@ -574,6 +573,7 @@ func _rpc_receive_standings(
 @rpc("authority", "call_remote", "reliable", 2)
 func _rpc_receive_push(
 	_sender_player_id: int,
+	_target_player_id: int,
 	_direction: Vector3,
 	_force: float
 ) -> void:
@@ -602,7 +602,7 @@ func _broadcast_round_state_to_peer(room: Node, peer_id: int) -> void:
 		room.round_number,
 		room.seconds_left(),
 		NET.mode_name(room.mode_id),
-		NET.mode_map_name(room.mode_id),
+		NET.mode_map_name(room.mode_id, room.round_seed),
 		room.round_seed,
 		NET.mode_feature_ids(room.mode_id),
 		NET.mode_player_profile(room.mode_id),

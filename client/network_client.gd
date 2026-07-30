@@ -29,7 +29,12 @@ signal round_state_received(
 	spectator_policy_id: String
 )
 signal simulation_host_changed(peer_id: int)
-signal push_received(sender_id: int, direction: Vector3, force: float)
+signal push_received(
+	sender_id: int,
+	target_id: int,
+	direction: Vector3,
+	force: float
+)
 signal shot_received(
 	shooter_player_id: int,
 	target_player_id: int,
@@ -798,8 +803,13 @@ func _rpc_receive_standings(
 
 
 @rpc("authority", "call_remote", "reliable", 2)
-func _rpc_receive_push(sender_player_id: int, direction: Vector3, force: float) -> void:
-	push_received.emit(sender_player_id, direction, force)
+func _rpc_receive_push(
+	sender_player_id: int,
+	target_player_id: int,
+	direction: Vector3,
+	force: float
+) -> void:
+	push_received.emit(sender_player_id, target_player_id, direction, force)
 
 
 @rpc("authority", "call_remote", "reliable", 2)

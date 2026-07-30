@@ -46,7 +46,7 @@ func _run() -> void:
 	)
 	_require(
 		menu.find_child("ModeExclusion", true, false) is OptionButton
-		and menu.find_child("ModeExclusion", true, false).item_count == 6,
+		and menu.find_child("ModeExclusion", true, false).item_count == 7,
 		"Waiting room must expose one optional minigame veto"
 	)
 	menu.queue_free()
@@ -90,13 +90,19 @@ func _run() -> void:
 	)
 	_require(
 		disaster.get_registered_mode_ids()
-		== [&"meteors", &"shockwave", &"flood", &"shooter", &"domain"],
+		== [&"meteors", &"shockwave", &"flood", &"shooter", &"domain", &"drone_hunt"],
 		"Round controller must discover independent minigame modules in scene order"
 	)
 	var map_host: Node3D = game.get_node("World/ModeMapHost")
 	_require(
 		map_host.get_registered_map_ids()
-		== [&"plaza_caos", &"campo_tiro", &"nucleo_tactico"],
+		== [
+			&"plaza_caos",
+			&"campo_tiro",
+			&"nucleo_tactico",
+			&"deposito_drones",
+			&"muelles_altos",
+		],
 		"Map host must discover data-driven common maps"
 	)
 	var initial_plan := disaster.get_upcoming_plan()
@@ -113,17 +119,7 @@ func _run() -> void:
 		"Round selection must produce a complete reusable experience plan"
 	)
 	_require(
-		(
-			(initial_plan.mode_id == &"shooter" and initial_plan.map_id == &"campo_tiro")
-			or (
-				initial_plan.mode_id == &"domain"
-				and initial_plan.map_id == &"nucleo_tactico"
-			)
-			or (
-				initial_plan.mode_id not in [&"shooter", &"domain"]
-				and initial_plan.map_id == &"plaza_caos"
-			)
-		),
+		_mode_map_compatible(initial_plan.mode_id, initial_plan.map_id),
 		"Common mode must select only a tag-compatible map"
 	)
 	var feature_host: Node = game.get_node("ExperienceFeatureHost")
@@ -151,8 +147,9 @@ func _run() -> void:
 	_require(
 		game.get_node("HUD/Shoot").visible
 		and game.get_node("HUD/Reload").visible
+		and game.get_node("HUD/Crosshair").visible
 		and player.is_first_person(),
-		"Shooter feature must provide its own touch control and camera profile"
+		"Shooter feature must provide controls, crosshair, and camera profile"
 	)
 	var shooter_feature := game.get_node("ExperienceFeatureHost/ShooterControls")
 	var initial_ammo := int(shooter_feature.get("_ammo"))
@@ -177,11 +174,15 @@ func _run() -> void:
 	var domain_plan := initial_plan.duplicate(true)
 	domain_plan.mode_id = &"domain"
 	domain_plan.map_id = &"nucleo_tactico"
-	domain_plan.feature_ids = PackedStringArray(["domain_tracker"])
+	domain_plan.feature_ids = PackedStringArray(["domain_tracker", "bat_controls"])
 	feature_host.apply_experience(domain_plan)
 	_require(
 		game.get_node("HUD/DomainStatus").visible,
 		"Domain feature must expose local capture feedback without network traffic"
+	)
+	_require(
+		player.get_node("Visual/PushBat").visible,
+		"Domain must expose its reusable high-force bat"
 	)
 	feature_host.clear_experience()
 	disaster.set_physics_process(false)
@@ -199,6 +200,10 @@ func _run() -> void:
 	_require(
 		disaster.get_node("DomainMode/CaptureZone") is MeshInstance3D,
 		"Domain must reuse one lightweight capture-zone mesh"
+	)
+	_require(
+		disaster.get_node("DroneHuntMode").get_child_count() == 4,
+		"Drone hunt must preallocate four client-owned NPCs"
 	)
 
 	_require(player.get_node("Visual/Head") != null, "Player must have a recognizable low-poly head")
@@ -463,6 +468,10 @@ func _run() -> void:
 		remote.get_node("Name").text == "Prueba · 100 VIDA",
 		"Remote name and life must be visible"
 	)
+	_require(
+		remote.get_node("PlayerCollision") is StaticBody3D,
+		"Remote avatars must provide lightweight player collision"
+	)
 	remote.set_detail_quality(2)
 	remote.play_shoot_animation(WEAPONS.Id.C16)
 	await process_frame
@@ -530,7 +539,7 @@ func _run() -> void:
 	_require(
 		not game.get_node("World/Arena").visible
 		and shooter_map.find_children("PhysicsProp*", "RigidBody3D", true, false).size() == 10
-		and player.global_position.distance_to(Vector3(0.0, 1.2, 19.0)) < 0.1,
+		and player.global_position.distance_to(Vector3(0.0, 1.2, 29.0)) < 0.1,
 		"Shooter map must replace the plaza with separated spawns and physical props"
 	)
 	map_host.activate_selection(&"domain", &"nucleo_tactico")
@@ -576,17 +585,7 @@ func _run() -> void:
 			"Random selector must not repeat the same mode consecutively"
 		)
 		_require(
-			(
-				(random_plan.mode_id == &"shooter" and random_plan.map_id == &"campo_tiro")
-				or (
-					random_plan.mode_id == &"domain"
-					and random_plan.map_id == &"nucleo_tactico"
-				)
-				or (
-					random_plan.mode_id not in [&"shooter", &"domain"]
-					and random_plan.map_id == &"plaza_caos"
-				)
-			),
+			_mode_map_compatible(random_plan.mode_id, random_plan.map_id),
 			"Random selector must preserve mode/map compatibility"
 		)
 		disaster._activate_plan(random_plan)
@@ -611,3 +610,13 @@ func _require(condition: bool, message: String) -> void:
 		return
 	push_error("SMOKE_FAIL: " + message)
 	quit(1)
+
+
+func _mode_map_compatible(mode_id: StringName, map_id: StringName) -> bool:
+	if mode_id == &"shooter":
+		return map_id == &"campo_tiro"
+	if mode_id == &"domain":
+		return map_id == &"nucleo_tactico"
+	if mode_id == &"drone_hunt":
+		return map_id == &"deposito_drones"
+	return map_id in [&"plaza_caos", &"muelles_altos"]

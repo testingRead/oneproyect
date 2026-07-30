@@ -2,6 +2,7 @@ class_name DisasterController
 extends Node3D
 
 const NET := preload("res://shared/net_constants.gd")
+const DIFFICULTY := preload("res://shared/difficulty_rules.gd")
 
 signal state_changed(title: String, detail: String)
 signal clock_changed(seconds_left: int)
@@ -177,7 +178,7 @@ func apply_network_state(
 			_finish_all_modes()
 			_active_mode = null
 			_upcoming_plan = plan
-			_emit_mode_text(selected_mode, true)
+			_emit_mode_text(selected_mode, true, plan)
 		RoundState.ACTIVE:
 			if (
 				previous_state != RoundState.ACTIVE
@@ -188,7 +189,7 @@ func apply_network_state(
 				_activate_plan(plan)
 				round_started.emit(round_number)
 			else:
-				_emit_mode_text(selected_mode, false)
+				_emit_mode_text(selected_mode, false, plan)
 		RoundState.RESULT:
 			_finish_all_modes()
 			_active_mode = null
@@ -251,7 +252,7 @@ func _begin_countdown() -> void:
 	if not network.is_online() or network.is_simulation_host():
 		_upcoming_plan = _select_next_plan()
 	if not _upcoming_plan.is_empty():
-		_emit_mode_text(_find_mode_by_id(_upcoming_plan.mode_id), true)
+		_emit_mode_text(_find_mode_by_id(_upcoming_plan.mode_id), true, _upcoming_plan)
 	_sync_round_state()
 
 
@@ -291,7 +292,7 @@ func _activate_plan(plan: Dictionary) -> void:
 	mode.configure_experience(_current_plan)
 	experience_selected.emit(_current_plan.duplicate(true))
 	mode.begin_round(round_number)
-	_emit_mode_text(mode, false)
+	_emit_mode_text(mode, false, plan)
 
 
 func _select_next_plan() -> Dictionary:
@@ -373,13 +374,15 @@ func _finish_all_modes() -> void:
 	experience_ended.emit()
 
 
-func _emit_mode_text(mode: Node3D, upcoming: bool) -> void:
+func _emit_mode_text(mode: Node3D, upcoming: bool, plan := {}) -> void:
 	if mode == null:
 		return
+	var level := DIFFICULTY.from_round_seed(int(plan.get("round_seed", 0)))
+	var suffix := " · DIFICULTAD %s" % DIFFICULTY.display_name(level)
 	if upcoming:
-		state_changed.emit(mode.upcoming_title, mode.upcoming_detail)
+		state_changed.emit(mode.upcoming_title + suffix, mode.upcoming_detail)
 	else:
-		state_changed.emit(mode.active_title, mode.active_detail)
+		state_changed.emit(mode.active_title + suffix, mode.active_detail)
 
 
 func _sync_round_state() -> void:

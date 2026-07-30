@@ -11,13 +11,13 @@ func _ready() -> void:
 	mode_id = &"domain"
 	category = ModeCategory.CUSTOM
 	round_duration = 44.0
-	upcoming_title = "PRÓXIMO: DOMINIO"
-	upcoming_detail = "Ocupa el núcleo · cada segundo cuenta"
-	active_title = "DOMINIO DEL NÚCLEO"
-	active_detail = "¡Mantente dentro del círculo para sumar control!"
+	upcoming_title = "PRÓXIMO: BATALLA DEL NÚCLEO"
+	upcoming_detail = "Ocupa el centro y usa el bate para expulsar rivales"
+	active_title = "BATALLA DEL NÚCLEO"
+	active_detail = "¡El bate no daña, pero empuja con mucha fuerza!"
 	required_map_tags = PackedStringArray(["domain", "custom"])
 	pinned_map_id = &"nucleo_tactico"
-	feature_ids = PackedStringArray(["domain_tracker"])
+	feature_ids = PackedStringArray(["domain_tracker", "bat_controls"])
 	spawn_policy_id = &"separated"
 	_build_zone()
 	set_process(false)

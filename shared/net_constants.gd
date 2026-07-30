@@ -1,7 +1,7 @@
 class_name NetConstants
 extends RefCounted
 
-const PROTOCOL_VERSION := 9
+const PROTOCOL_VERSION := 10
 const DEFAULT_PORT := 9999
 const MAX_ROOMS := 5
 const MAX_PLAYERS_PER_ROOM := 5
@@ -49,6 +49,7 @@ enum ModeId {
 	FLOOD,
 	SHOOTER,
 	DOMAIN,
+	DRONE_HUNT,
 }
 
 enum PlayerFlags {
@@ -68,6 +69,8 @@ static func mode_name(mode_id: int) -> String:
 			return "shooter"
 		ModeId.DOMAIN:
 			return "domain"
+		ModeId.DRONE_HUNT:
+			return "drone_hunt"
 		_:
 			return "meteors"
 
@@ -82,15 +85,21 @@ static func mode_duration_ticks(mode_id: int) -> int:
 			return 46 * SERVER_TICK_RATE
 		ModeId.DOMAIN:
 			return 44 * SERVER_TICK_RATE
+		ModeId.DRONE_HUNT:
+			return 40 * SERVER_TICK_RATE
 		_:
 			return 42 * SERVER_TICK_RATE
 
 
-static func mode_map_name(mode_id: int) -> String:
+static func mode_map_name(mode_id: int, round_seed := 0) -> String:
 	if mode_id == ModeId.SHOOTER:
 		return "campo_tiro"
 	if mode_id == ModeId.DOMAIN:
 		return "nucleo_tactico"
+	if mode_id == ModeId.DRONE_HUNT:
+		return "deposito_drones"
+	if posmod(round_seed / 9, 2) == 1:
+		return "muelles_altos"
 	return "plaza_caos"
 
 
@@ -98,7 +107,9 @@ static func mode_feature_ids(mode_id: int) -> PackedStringArray:
 	if mode_id == ModeId.SHOOTER:
 		return PackedStringArray(["shooter_controls"])
 	if mode_id == ModeId.DOMAIN:
-		return PackedStringArray(["domain_tracker"])
+		return PackedStringArray(["domain_tracker", "bat_controls"])
+	if mode_id == ModeId.DRONE_HUNT:
+		return PackedStringArray()
 	return PackedStringArray()
 
 
@@ -109,6 +120,10 @@ static func mode_player_profile(mode_id: int) -> String:
 static func mode_spawn_policy(mode_id: int) -> String:
 	return (
 		"separated"
-		if mode_id == ModeId.SHOOTER or mode_id == ModeId.DOMAIN
+		if (
+			mode_id == ModeId.SHOOTER
+			or mode_id == ModeId.DOMAIN
+			or mode_id == ModeId.DRONE_HUNT
+		)
 		else "spread"
 	)

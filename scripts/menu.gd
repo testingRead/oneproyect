@@ -230,6 +230,7 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	_exclusion_button.add_item("VETO: INUNDACIÓN", NET.ModeId.FLOOD)
 	_exclusion_button.add_item("VETO: SHOOTER", NET.ModeId.SHOOTER)
 	_exclusion_button.add_item("VETO: DOMINIO", NET.ModeId.DOMAIN)
+	_exclusion_button.add_item("VETO: DRONES", NET.ModeId.DRONE_HUNT)
 	_exclusion_button.item_selected.connect(_on_exclusion_selected)
 	screen.add_child(_exclusion_button)
 	var veto_rule := _label(
