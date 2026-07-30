@@ -72,6 +72,7 @@ func _run() -> void:
 		and player.has_node("CameraPivot")
 		and player.has_node("AnchorPoints/Feet")
 		and player.has_node("AnchorPoints/HeldItem")
+		and player.has_node("VisualRoot/Model/RightArmPivot/ItemSocket")
 		and player.has_node("InteractionContext")
 		and player.has_node("InteractionAction"),
 		"Character must separate collision, visual, camera, anchors and interaction probe"
@@ -422,17 +423,36 @@ func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
 		and lab.push_button.label == "TOMAR",
 		"Small stone in front must expose TAKE and visible TOMAR"
 	)
+	_require(player.request_context_action(), "TAKE animation must start")
+	for frame in 8:
+		await physics_frame
 	_require(
-		player.request_context_action()
-		and player.get_held_object() == rock
-		and player.get_context_action() == LocalBaseCharacter.ACTION_THROW
-		and lab.push_button.label == "LANZAR",
-		"TAKE must equip the stone and switch action and button to LANZAR"
+		absf(player.visual_root.right_arm.rotation.x) > 0.25
+		and player.get_held_object() == null,
+		"TAKE must visibly reach before attaching the stone"
 	)
-	for frame in 22:
+	for frame in 14:
+		await physics_frame
+	_require(
+		player.get_held_object() == rock
+		and player.get_context_action() == LocalBaseCharacter.ACTION_THROW
+		and lab.push_button.label == "LANZAR"
+		and rock.get_parent() == player.held_item_anchor
+		and rock.global_position.distance_to(
+			player.visual_item_socket.global_position
+		) < 0.035,
+		"TAKE must attach the stone exactly to the animated hand socket"
+	)
+	for frame in 18:
 		await physics_frame
 	_require(player.request_context_action(), "Equipped stone must be throwable")
-	for frame in 8:
+	for frame in 10:
+		await physics_frame
+	_require(
+		player.get_held_object() == rock,
+		"THROW must keep the stone in hand until the release frame"
+	)
+	for frame in 12:
 		await physics_frame
 	_require(
 		player.get_held_object() == null and rock.linear_velocity.length() > 0.4,

@@ -20,6 +20,8 @@ var _left_ground_roll := 0.0
 var _right_ground_roll := 0.0
 var _push_remaining := 0.0
 var _kick_remaining := 0.0
+var _take_remaining := 0.0
+var _throw_remaining := 0.0
 
 
 func set_stature(stature: float) -> void:
@@ -110,6 +112,33 @@ func update_motion(
 		left_arm.rotation.x = lerpf(left_arm.rotation.x, 0.38, kick_weight)
 		right_arm.rotation.x = lerpf(right_arm.rotation.x, -0.52, kick_weight)
 		torso.rotation.x = lerpf(torso.rotation.x, 0.12, kick_weight)
+	if _take_remaining > 0.0:
+		_take_remaining = maxf(0.0, _take_remaining - delta)
+		var take_progress := 1.0 - _take_remaining / 0.62
+		var take_weight := sin(take_progress * PI)
+		right_arm.rotation.x = lerpf(right_arm.rotation.x, -0.78, take_weight)
+		left_arm.rotation.x = lerpf(left_arm.rotation.x, 0.22, take_weight)
+		torso.rotation.x = lerpf(torso.rotation.x, 0.34, take_weight)
+		torso.position.y = lerpf(torso.position.y, 1.05, take_weight)
+		pelvis.position.y = lerpf(pelvis.position.y, 0.67, take_weight)
+		head.position.y = lerpf(head.position.y, 1.48, take_weight)
+	if _throw_remaining > 0.0:
+		_throw_remaining = maxf(0.0, _throw_remaining - delta)
+		var throw_progress := 1.0 - _throw_remaining / 0.62
+		var throw_weight := sin(throw_progress * PI)
+		var throw_angle := lerpf(
+			0.72,
+			-1.3,
+			smoothstep(0.12, 0.78, throw_progress)
+		)
+		right_arm.rotation.x = lerpf(
+			right_arm.rotation.x,
+			throw_angle,
+			throw_weight
+		)
+		left_arm.rotation.x = lerpf(left_arm.rotation.x, 0.5, throw_weight)
+		torso.rotation.x = lerpf(torso.rotation.x, 0.18, throw_weight)
+		torso.rotation.z = lerpf(torso.rotation.z, -0.12, throw_weight)
 	$Model/LeftLegPivot.position.y = (
 		0.72
 		+ _left_ground_offset * grounded_weight
@@ -147,6 +176,14 @@ func trigger_push() -> void:
 
 func trigger_kick() -> void:
 	_kick_remaining = 0.5
+
+
+func trigger_take() -> void:
+	_take_remaining = 0.62
+
+
+func trigger_throw() -> void:
+	_throw_remaining = 0.62
 
 
 func get_movement_ratio() -> float:

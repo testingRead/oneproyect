@@ -150,6 +150,9 @@ scale = Vector3(0.2, 0.22, 0.22)
 mesh = SubResource("MeshSkinSphere")
 cast_shadow = 0
 
+[node name="ItemSocket" type="Marker3D" parent="VisualRoot/Model/RightArmPivot"]
+position = Vector3(0, -0.64, 0.14)
+
 [node name="LeftLegPivot" type="Node3D" parent="VisualRoot/Model"]
 position = Vector3(-0.2, 0.72, 0)
 

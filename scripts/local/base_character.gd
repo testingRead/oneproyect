@@ -24,6 +24,7 @@ const ACTION_THROW := &"THROW"
 @onready var interaction_action: ShapeCast3D = $InteractionAction
 @onready var interaction_scan: Timer = $InteractionScan
 @onready var held_item_anchor: Marker3D = $AnchorPoints/HeldItem
+@onready var visual_item_socket: Marker3D = $VisualRoot/Model/RightArmPivot/ItemSocket
 
 var _touch_move := Vector2.ZERO
 var _jump_requested := false
@@ -38,6 +39,11 @@ var _context_body: RigidBody3D
 var _kick_target: RigidBody3D
 var _kick_pending := false
 var _kick_elapsed := 0.0
+var _take_target: RigidBody3D
+var _take_pending := false
+var _take_elapsed := 0.0
+var _throw_pending := false
+var _throw_elapsed := 0.0
 var _held_object: RigidBody3D
 var _held_original_parent: Node
 var _held_collision_layer := 0
@@ -62,6 +68,8 @@ func _physics_process(delta: float) -> void:
 	_push_cooldown = maxf(0.0, _push_cooldown - delta)
 	_align_interaction_nodes()
 	_resolve_kick(delta)
+	_resolve_take(delta)
+	_resolve_throw(delta)
 	var desktop := Input.get_vector(
 		"move_left",
 		"move_right",
@@ -125,6 +133,7 @@ func _physics_process(delta: float) -> void:
 		SCALE.RUN_SPEED,
 		is_on_floor()
 	)
+	_sync_held_anchor()
 	if global_position.y < -3.0:
 		reset_to_spawn()
 	if emit_metrics:
@@ -308,7 +317,7 @@ func _update_foot_contacts() -> void:
 func _align_interaction_nodes() -> void:
 	interaction_context.rotation.y = camera_pivot.rotation.y
 	interaction_action.rotation.y = camera_pivot.rotation.y
-	held_item_anchor.rotation.y = camera_pivot.rotation.y
+	_sync_held_anchor()
 
 
 func _refresh_interaction_context() -> void:
@@ -373,11 +382,36 @@ func _take_context_object() -> bool:
 	var body := _context_body
 	if not is_instance_valid(body) or not body.is_in_group(&"pickup_stone"):
 		return false
-	interaction_action.force_shapecast_update()
-	if not _cast_contains(interaction_action, body):
-		action_resolved.emit(ACTION_TAKE, false)
-		return false
-	_push_cooldown = 0.3
+	_push_cooldown = 0.62
+	_take_target = body
+	_take_pending = true
+	_take_elapsed = 0.0
+	_face_interaction_direction()
+	visual_root.trigger_take()
+	return true
+
+
+func _resolve_take(delta: float) -> void:
+	if not _take_pending:
+		return
+	_take_elapsed += delta
+	if _take_elapsed < 0.26:
+		return
+	_take_pending = false
+	interaction_context.force_shapecast_update()
+	var hit := (
+		is_instance_valid(_take_target)
+		and _cast_contains(interaction_context, _take_target)
+		and _take_target.is_in_group(&"pickup_stone")
+	)
+	if hit:
+		_equip_object(_take_target)
+	action_resolved.emit(ACTION_TAKE, hit)
+	_take_target = null
+	_refresh_interaction_context()
+
+
+func _equip_object(body: RigidBody3D) -> void:
 	_held_object = body
 	_held_original_parent = body.get_parent()
 	_held_collision_layer = body.collision_layer
@@ -387,21 +421,40 @@ func _take_context_object() -> bool:
 	body.angular_velocity = Vector3.ZERO
 	body.collision_layer = 0
 	body.collision_mask = 0
+	_sync_held_anchor()
 	body.reparent(held_item_anchor, false)
 	body.transform = Transform3D.IDENTITY
 	var object_label := body.get_node_or_null("ObjectLabel") as Label3D
 	if object_label != null:
 		object_label.hide()
-	visual_root.trigger_push()
-	action_resolved.emit(ACTION_TAKE, true)
-	_refresh_interaction_context()
-	return true
 
 
 func _throw_held_object() -> bool:
 	if not is_instance_valid(_held_object):
 		return false
-	_push_cooldown = 0.48
+	_push_cooldown = 0.62
+	_throw_pending = true
+	_throw_elapsed = 0.0
+	_face_interaction_direction()
+	visual_root.trigger_throw()
+	return true
+
+
+func _resolve_throw(delta: float) -> void:
+	if not _throw_pending:
+		return
+	_throw_elapsed += delta
+	if _throw_elapsed < 0.28:
+		return
+	_throw_pending = false
+	var hit := _release_held_object()
+	action_resolved.emit(ACTION_THROW, hit)
+	_refresh_interaction_context()
+
+
+func _release_held_object() -> bool:
+	if not is_instance_valid(_held_object):
+		return false
 	var body := _held_object
 	var world_transform := body.global_transform
 	body.reparent(_held_original_parent, true)
@@ -419,13 +472,13 @@ func _throw_held_object() -> bool:
 	body.apply_central_impulse(direction * 2.2 + Vector3.UP * 0.62)
 	_held_object = null
 	_held_original_parent = null
-	visual_root.trigger_push()
-	action_resolved.emit(ACTION_THROW, true)
-	_refresh_interaction_context()
 	return true
 
 
 func _return_held_object_to_origin() -> void:
+	_take_pending = false
+	_take_target = null
+	_throw_pending = false
 	if not is_instance_valid(_held_object):
 		_held_object = null
 		_held_original_parent = null
@@ -472,6 +525,11 @@ func _get_interaction_direction() -> Vector3:
 func _face_interaction_direction() -> void:
 	var direction := _get_interaction_direction()
 	visual_root.rotation.y = atan2(direction.x, direction.z)
+
+
+func _sync_held_anchor() -> void:
+	if is_instance_valid(visual_item_socket):
+		held_item_anchor.global_transform = visual_item_socket.global_transform
 
 
 func _get_nearest_body(shape_cast: ShapeCast3D) -> RigidBody3D:

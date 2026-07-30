@@ -27,11 +27,18 @@ La patada no aplica el impulso al presionar el botón. Primero inicia su
 animación y vuelve a comprobar el contacto al pasar el pie; si el balón salió
 del sondeo, la patada falla. La piedra se congela y desactiva su colisión
 solamente mientras está equipada, y recupera su `RigidBody3D` al lanzarse.
+**TOMAR** también tiene una ventana de contacto: el torso y el brazo alcanzan
+primero el suelo y sólo entonces la piedra se conecta al `ItemSocket` de la
+mano derecha. El socket pertenece al pivote animado del brazo y actualiza un
+anclaje físico sin heredar la escala de la malla. **LANZAR** mantiene la piedra
+en ese socket durante la preparación y restaura su cuerpo físico únicamente
+en el fotograma de liberación.
 La piedra pequeña tiene una excepción de colisión con su propietario: caminar
 no la empuja ni bloquea al personaje. Continúa chocando normalmente con el
 suelo y el mundo cuando se lanza. Las pruebas automatizadas cubren contacto al
 caminar, patada acertada, patada fallida, cambio visible del botón, piedra
-ignorada al caminar, equipamiento, lanzamiento y restauración.
+ignorada al caminar, alcance visible, posición exacta en la mano, lanzamiento
+y restauración.
 
 `CharacterBody3D` no expone masa ni transmite por sí mismo fuerza a un
 `RigidBody3D`. El contrato le asigna al personaje una masa de referencia de
