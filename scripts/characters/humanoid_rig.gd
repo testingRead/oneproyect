@@ -2,6 +2,7 @@ class_name HumanoidRig
 extends RefCounted
 
 const CATALOG := preload("res://scripts/characters/character_catalog.gd")
+const MODULAR_AVATAR := preload("res://scripts/characters/modular_avatar.gd")
 const SUIT_TEXTURE := preload("res://assets/textures/suit_panels.res")
 const ALL_BODY_PARTS_MASK := 0b111111111111
 const ALL_LIMBS_MASK := ALL_BODY_PARTS_MASK
@@ -69,6 +70,9 @@ static func apply_variant(root: Node3D, index: int) -> Color:
 		(root.get_node(part_name) as MeshInstance3D).material_override = material
 	apply_proportions(root, safe_index)
 	apply_limb_mask(root, ALL_BODY_PARTS_MASK, safe_index)
+	var organic := _ensure_modular_avatar(root)
+	organic.configure(safe_index)
+	_hide_legacy_parts(root)
 	return color
 
 
@@ -223,6 +227,17 @@ static func animate(
 	root.get_node("RightEar").position.y = 1.43 + bob
 	root.get_node("Tail").rotation.y = sin(walk_phase * 0.5) * 0.3 * movement_weight
 	_update_detail_pose(root, bob)
+	var organic := root.get_node_or_null("OrganicAvatar") as ModularAvatar
+	if organic != null:
+		organic.update_motion(
+			horizontal_speed,
+			on_floor,
+			push_weight,
+			aim_weight,
+			shoot_weight,
+			reload_weight,
+			root.scale.y < 0.9
+		)
 	return walk_phase
 
 
@@ -274,6 +289,10 @@ static func apply_limb_mask(root: Node3D, mask: int, variant_index: int) -> void
 		root.get_node("RightForearm").visible = detail_visible and right_arm_attached
 		root.get_node("LeftFoot").visible = detail_visible and _has_limb(safe_mask, LEFT_LEG)
 		root.get_node("RightFoot").visible = detail_visible and _has_limb(safe_mask, RIGHT_LEG)
+	var organic := root.get_node_or_null("OrganicAvatar") as ModularAvatar
+	if organic != null:
+		organic.set_limb_mask(safe_mask)
+		_hide_legacy_parts(root)
 
 
 static func set_texture_detail(root: Node3D, enabled: bool) -> void:
@@ -293,6 +312,9 @@ static func set_shadow_quality(root: Node3D, enabled: bool) -> void:
 	)
 	for part_name in BODY_PART_NAMES + ["Cap", "Backpack"] + DETAIL_PART_NAMES:
 		(root.get_node(part_name) as GeometryInstance3D).cast_shadow = shadow_mode
+	var organic := root.get_node_or_null("OrganicAvatar") as ModularAvatar
+	if organic != null:
+		organic.set_shadow_quality(enabled)
 
 
 static func set_model_quality(root: Node3D, rounded: bool) -> void:
@@ -406,3 +428,24 @@ static func _update_detail_pose(root: Node3D, bob: float) -> void:
 		foot.position.y = leg.position.y - 0.45 * cos(leg.rotation.x)
 		foot.position.z = -0.12 - 0.45 * sin(leg.rotation.x)
 		foot.rotation.x = leg.rotation.x * 0.45
+
+
+static func _ensure_modular_avatar(root: Node3D) -> ModularAvatar:
+	var existing := root.get_node_or_null("OrganicAvatar") as ModularAvatar
+	if existing != null:
+		return existing
+	var organic := MODULAR_AVATAR.new() as ModularAvatar
+	organic.name = "OrganicAvatar"
+	root.add_child(organic)
+	return organic
+
+
+static func _hide_legacy_parts(root: Node3D) -> void:
+	for part_name in (
+		BODY_PART_NAMES
+		+ ["Visor", "Cap", "Backpack"]
+		+ DETAIL_PART_NAMES
+	):
+		var part := root.get_node_or_null(part_name) as GeometryInstance3D
+		if part != null:
+			part.visible = false

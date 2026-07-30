@@ -282,17 +282,16 @@ func _run() -> void:
 		"Look sensitivity setting must reach the player"
 	)
 	player.set_character_variant(1)
+	var organic_avatar := player.get_node("Visual/OrganicAvatar") as ModularAvatar
 	_require(
-		not player.get_node("Visual/Cap").visible and player.get_node("Visual/Backpack").visible,
-		"Character variants must change their cheap accessory"
+		organic_avatar.get_archetype_index() == 1
+		and organic_avatar.get_model_mesh_count() == 4,
+		"Female selection must use its fitted four-mesh organic model"
 	)
 	player.set_character_variant(2)
 	_require(
-		player.get_node("Visual/LeftEar").visible
-		and player.get_node("Visual/RightEar").visible
-		and player.get_node("Visual/Tail").visible
-		and not player.get_node("Visual/Backpack").visible,
-		"Semi-human variant must have a distinct low-poly silhouette"
+		organic_avatar.get_archetype_index() == 2,
+		"Semi-human selection must use its rigged ears-and-tail model"
 	)
 	player.set_texture_detail(true)
 	var suit_material := player.get_node("Visual/Body").material_override as StandardMaterial3D
@@ -310,17 +309,16 @@ func _run() -> void:
 	_require(suit_material.albedo_texture != null, "Quality profile must apply shared texture")
 	_require(game.get_node("World/Sun").shadow_enabled, "Medium quality must inherit former High shadows")
 	_require(
-		player.get_node("Visual/Chest").visible
-		and player.get_node("Visual/Chest").mesh is BoxMesh,
-		"Medium quality must enable articulated silhouette parts"
+		organic_avatar.visible
+		and organic_avatar.get_model_mesh_count() == 4,
+		"Medium quality must retain the batched organic avatar"
 	)
 	game._on_quality_selected(2)
 	_require(game.get_node("World/Sun").shadow_enabled, "High quality must enable the optional shadow")
 	_require(
-		player.get_node("Visual/Head").mesh is SphereMesh
-		and player.get_node("Visual/Chest").mesh is CapsuleMesh
+		organic_avatar.get_model_mesh_count() == 4
 		and game.get_node("World/Environment").environment.fog_enabled,
-		"High quality must use rounded characters and atmospheric fog"
+		"High quality must retain organic characters and atmospheric fog"
 	)
 	game._on_quality_selected(0)
 	_require(not game.get_node("World/Sun").shadow_enabled, "Low quality must disable shadows")
@@ -420,9 +418,9 @@ func _run() -> void:
 	)
 	await physics_frame
 	_require(
-		player.get_node("Visual/Head").visible
-		and not player.get_node("Visual/LeftEar").visible
-		and not player.get_node("Visual/RightEar").visible,
+		(player.get_limb_mask() & (1 << GrayboxPlayer.Limb.HEAD)) != 0
+		and (player.get_limb_mask() & (1 << GrayboxPlayer.Accessory.LEFT_EAR)) == 0
+		and (player.get_limb_mask() & (1 << GrayboxPlayer.Accessory.RIGHT_EAR)) == 0,
 		"Head accessories must detach before the underlying body part"
 	)
 	_require(
@@ -486,9 +484,7 @@ func _run() -> void:
 		"Remote elimination must be visible without synchronizing visual state"
 	)
 	_require(
-		remote.get_node("LeftEar").visible
-		and remote.get_node("RightEar").visible
-		and remote.get_node("Tail").visible,
+		(remote.get_node("OrganicAvatar") as ModularAvatar).get_archetype_index() == 2,
 		"Remote and preview avatars must reuse the semi-human silhouette"
 	)
 	remote.set_limb_mask(
@@ -497,9 +493,14 @@ func _run() -> void:
 		& ~(1 << GrayboxPlayer.Accessory.TAIL)
 	)
 	_require(
-		not remote.get_node("RightLeg").visible
-		and not remote.get_node("RightFoot").visible
-		and not remote.get_node("Tail").visible,
+		(
+			(remote.get_node("OrganicAvatar") as ModularAvatar).get_limb_mask()
+			& (1 << GrayboxPlayer.Limb.RIGHT_LEG)
+		) == 0
+		and (
+			(remote.get_node("OrganicAvatar") as ModularAvatar).get_limb_mask()
+			& (1 << GrayboxPlayer.Accessory.TAIL)
+		) == 0,
 		"Remote avatar must apply synchronized limb and accessory state"
 	)
 	remote.queue_free()

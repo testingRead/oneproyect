@@ -44,8 +44,8 @@ func _run() -> void:
 	)
 	var waiting_players := menu.find_child("WaitingPlayers", true, false) as Label
 	_require(
-		waiting_players.text.contains("Ana · LINCE · 4 victorias · 21 XP")
-		and waiting_players.text.contains("Beto · TÉCNICO · 7 victorias · 34 XP"),
+		waiting_players.text.contains("Ana · LINCE MASCULINO · 4 victorias · 21 XP")
+		and waiting_players.text.contains("Beto · LINCE FEMENINA · 7 victorias · 34 XP"),
 		"Waiting room must show names, characters, ready state, wins and XP"
 	)
 	_require(

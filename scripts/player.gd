@@ -494,6 +494,7 @@ func _detach_single_limb(limb: int, origin: Vector3) -> void:
 	if limb == Limb.HEAD:
 		$Visual/Visor.visible = false
 	limb_detached.emit(piece_transform, mesh.scale, _get_mesh_color(mesh), impulse)
+	HUMANOID_RIG.apply_limb_mask(visual, _limb_mask, _character_variant_index)
 
 
 func _damage_accessory_group(
@@ -504,8 +505,13 @@ func _damage_accessory_group(
 ) -> void:
 	var has_visible_accessory := false
 	for accessory: int in accessories:
-		var mesh := get_node(ACCESSORY_VISUAL_PATHS[accessory]) as MeshInstance3D
-		has_visible_accessory = has_visible_accessory or mesh.visible
+		has_visible_accessory = (
+			has_visible_accessory
+			or (
+				_is_accessory_present(accessory)
+				and _is_limb_attached(accessory)
+			)
+		)
 	if not has_visible_accessory:
 		return
 	if head_group:
@@ -524,7 +530,7 @@ func _detach_accessory(accessory: int, origin: Vector3) -> void:
 	if not _is_limb_attached(accessory):
 		return
 	var mesh := get_node(ACCESSORY_VISUAL_PATHS[accessory]) as MeshInstance3D
-	if not mesh.visible:
+	if not _is_accessory_present(accessory):
 		return
 	_limb_mask &= ~(1 << accessory)
 	var piece_transform := Transform3D(mesh.global_basis.orthonormalized(), mesh.global_position)
@@ -534,6 +540,7 @@ func _detach_accessory(accessory: int, origin: Vector3) -> void:
 	impulse = impulse.normalized() * 1.8 + Vector3.UP * 1.35
 	mesh.visible = false
 	limb_detached.emit(piece_transform, mesh.scale, _get_mesh_color(mesh), impulse)
+	HUMANOID_RIG.apply_limb_mask(visual, _limb_mask, _character_variant_index)
 
 
 func _reset_limbs() -> void:
@@ -549,6 +556,17 @@ func _reset_limbs() -> void:
 
 func _is_limb_attached(limb: int) -> bool:
 	return (_limb_mask & (1 << limb)) != 0
+
+
+func _is_accessory_present(accessory: int) -> bool:
+	match accessory:
+		Accessory.CAP:
+			return _character_variant_index in [0, CHARACTER_CATALOG.GOLDEN_INDEX]
+		Accessory.BACKPACK:
+			return _character_variant_index == 1
+		Accessory.LEFT_EAR, Accessory.RIGHT_EAR, Accessory.TAIL:
+			return CHARACTER_CATALOG.ARCHETYPES[_character_variant_index] in [2, 3]
+	return false
 
 
 func _get_mesh_color(mesh: MeshInstance3D) -> Color:
