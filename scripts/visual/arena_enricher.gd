@@ -20,6 +20,12 @@ var _primary_material: StandardMaterial3D
 var _accent_material: StandardMaterial3D
 
 
+func get_playable_bounds() -> Rect2:
+	var center := Vector2(global_position.x, global_position.z)
+	var extent := Vector2(half_extent, half_extent)
+	return Rect2(center - extent, extent * 2.0)
+
+
 func _ready() -> void:
 	add_to_group(&"quality_receiver")
 	_create_shared_resources()

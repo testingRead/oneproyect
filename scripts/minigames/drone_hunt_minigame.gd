@@ -4,6 +4,8 @@ extends "res://scripts/minigames/minigame_mode.gd"
 const DIFFICULTY := preload("res://shared/difficulty_rules.gd")
 const DRONE_COUNT := 4
 
+@onready var map_host: Node3D = $"../../ModeMapHost"
+
 var _drones: Array[Node3D] = []
 var _velocities := PackedVector3Array()
 var _attack_cooldowns := PackedFloat32Array()
@@ -37,12 +39,15 @@ func begin_round(_round_number: int) -> void:
 		int(experience_plan.get("round_seed", 0))
 	)
 	_random.seed = int(experience_plan.get("round_seed", 1)) + 701
+	var bounds: Rect2 = map_host.get_active_playable_bounds(3.0)
+	var center := bounds.get_center()
+	var spawn_radius := minf(bounds.size.x, bounds.size.y) * 0.28
 	for index in DRONE_COUNT:
 		var angle := TAU * float(index) / float(DRONE_COUNT) + _random.randf_range(-0.3, 0.3)
 		_drones[index].global_position = Vector3(
-			cos(angle) * (15.0 + index * 1.8),
+			center.x + cos(angle) * (spawn_radius + index * 1.2),
 			2.0 + float(index % 2) * 0.55,
-			sin(angle) * (15.0 + index * 1.8)
+			center.y + sin(angle) * (spawn_radius + index * 1.2)
 		)
 		_drones[index].visible = true
 		_velocities[index] = Vector3.ZERO

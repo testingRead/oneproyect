@@ -5,6 +5,8 @@ const START_HEIGHT := -0.38
 const END_HEIGHT := 1.58
 const DIFFICULTY := preload("res://shared/difficulty_rules.gd")
 
+@onready var water: MeshInstance3D = $Water
+
 var _active := false
 var _damage_cooldown := 0.0
 var _damage := 12
@@ -15,6 +17,18 @@ var _height_scale := 1.0
 func _ready() -> void:
 	visible = false
 	position.y = START_HEIGHT
+	configure_bounds(Rect2(Vector2(-25.7, -25.7), Vector2(51.4, 51.4)))
+
+
+func configure_bounds(bounds: Rect2) -> void:
+	var center := bounds.get_center()
+	position.x = center.x
+	position.z = center.y
+	water.scale = Vector3(
+		maxf(1.0, bounds.size.x),
+		1.0,
+		maxf(1.0, bounds.size.y)
+	)
 
 
 func _physics_process(delta: float) -> void:

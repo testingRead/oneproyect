@@ -105,6 +105,14 @@ El host filtra por etiquetas requeridas/bloqueadas y cantidad de jugadores. Los
 mapas no predeterminados se instancian una vez, se conservan en caché y se
 desactivan junto con sus colisiones. El mapa no modifica al jugador ni al HUD.
 
+La raíz visual de cada mapa expone `get_playable_bounds() -> Rect2`.
+`ModeMapHost.get_active_playable_bounds(margin)` es la única fuente de límites
+para peligros y apariciones: inundación, meteoritos, onda y drones calculan su
+centro, cobertura y alcance al comenzar cada ronda. Por eso un mapa puede
+cambiar de tamaño o estar desplazado sin añadir excepciones por ID. Si un mapa
+antiguo no implementa todavía el contrato, el host conserva un límite de
+respaldo de 51 x 51 unidades.
+
 ## Añadir una feature
 
 Una feature hereda `GameplayFeature`, declara un `feature_id` estable y recibe
@@ -141,5 +149,7 @@ política por seguimiento libre o reaparición explícita.
 - La red envía IDs limitadas, semilla, transformaciones y máscaras compactas.
 - Un modo no accede directamente al HUD; usa señales o features inyectadas.
 - Un mapa no modifica `GrayboxPlayer`; usa sus métodos públicos.
+- Un peligro no contiene medidas ni excepciones por nombre de mapa; consulta
+  los límites activos al iniciar la ronda.
 - Todo modo, mapa, feature o política nueva amplía el smoke test.
 - Los recursos referenciados se cargan previamente; no se descargan en ronda.

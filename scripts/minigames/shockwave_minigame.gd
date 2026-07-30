@@ -8,6 +8,7 @@ const SHOCKWAVE_SCENE := preload("res://scenes/components/shockwave_ring.tscn")
 const DIFFICULTY := preload("res://shared/difficulty_rules.gd")
 
 @onready var network: Variant = get_node("/root/Network")
+@onready var map_host: Node3D = $"../../ModeMapHost"
 
 var _shockwave: ShockwaveRing
 var _spawn_cooldown := 0.0
@@ -32,6 +33,7 @@ func begin_round(_round_number: int) -> void:
 	_difficulty = DIFFICULTY.from_round_seed(
 		int(experience_plan.get("round_seed", 0))
 	)
+	_shockwave.configure_bounds(map_host.get_active_playable_bounds())
 	_spawn_cooldown = 0.25
 
 

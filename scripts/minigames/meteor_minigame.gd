@@ -8,14 +8,15 @@ const METEOR_SCENE := preload("res://scenes/components/meteor.tscn")
 const DIFFICULTY := preload("res://shared/difficulty_rules.gd")
 
 @export var pool_size := 8
-@export var arena_half_extent := 23.2
 
 @onready var network: Variant = get_node("/root/Network")
+@onready var map_host: Node3D = $"../../ModeMapHost"
 
 var _pool: Array[MeteorSlot] = []
 var _spawn_cooldown := 0.0
 var _random := RandomNumberGenerator.new()
 var _difficulty := DIFFICULTY.Level.NORMAL
+var _playable_bounds := Rect2(Vector2(-23.2, -23.2), Vector2(46.4, 46.4))
 
 
 func _ready() -> void:
@@ -40,6 +41,7 @@ func begin_round(_round_number: int) -> void:
 	_difficulty = DIFFICULTY.from_round_seed(
 		int(experience_plan.get("round_seed", 0))
 	)
+	_playable_bounds = map_host.get_active_playable_bounds(1.4)
 	_spawn_cooldown = 0.25
 
 
@@ -56,15 +58,16 @@ func tick_round(
 		return
 	var difficulty_scale := DIFFICULTY.intensity(_difficulty)
 	_spawn_cooldown = lerpf(1.45, 0.72, intensity) / difficulty_scale
-	var active_extent := (
-		33.0
-		if StringName(experience_plan.get("map_id", &"")) == &"muelles_altos"
-		else arena_half_extent
-	)
 	var target := Vector3(
-		_random.randf_range(-active_extent, active_extent),
+		_random.randf_range(
+			_playable_bounds.position.x,
+			_playable_bounds.end.x
+		),
 		0.06,
-		_random.randf_range(-active_extent, active_extent)
+		_random.randf_range(
+			_playable_bounds.position.y,
+			_playable_bounds.end.y
+		)
 	)
 	var drift := Vector2(
 		_random.randf_range(-1.1, 1.1),

@@ -5,6 +5,7 @@ const FLOOD_SCENE := preload("res://scenes/components/flood_hazard.tscn")
 const DIFFICULTY := preload("res://shared/difficulty_rules.gd")
 
 var _flood: Node3D
+@onready var map_host: Node3D = $"../../ModeMapHost"
 
 
 func _ready() -> void:
@@ -21,6 +22,7 @@ func _ready() -> void:
 
 func begin_round(_round_number: int) -> void:
 	_flood.stop()
+	_flood.configure_bounds(map_host.get_active_playable_bounds())
 	_flood.configure_difficulty(
 		DIFFICULTY.from_round_seed(int(experience_plan.get("round_seed", 0)))
 	)

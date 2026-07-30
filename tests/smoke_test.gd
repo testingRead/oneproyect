@@ -197,6 +197,41 @@ func _run() -> void:
 	_require(shockwaves.size() == 1, "Exactly one reusable shockwave must be preallocated")
 	var floods := disaster.get_node("FloodMode").find_children("FloodHazard", "", false, false)
 	_require(floods.size() == 1, "Exactly one reusable flood surface must be preallocated")
+	map_host.activate_selection(&"flood", &"muelles_altos")
+	await process_frame
+	var expanded_bounds: Rect2 = map_host.get_active_playable_bounds()
+	_require(
+		expanded_bounds.size.distance_to(Vector2(72.0, 72.0)) < 0.01,
+		"Map host must expose the active map's real playable bounds"
+	)
+	var flood_hazard := floods[0] as FloodHazard
+	flood_hazard.configure_bounds(expanded_bounds)
+	_require(
+		Vector2(
+			flood_hazard.get_node("Water").scale.x,
+			flood_hazard.get_node("Water").scale.z
+		).distance_to(expanded_bounds.size) < 0.01,
+		"Flood surface must automatically cover an expanded map"
+	)
+	var meteor_mode := disaster.get_node("MeteorMode") as MeteorMinigame
+	meteor_mode.configure_experience({
+		"round_seed": 12,
+		"map_id": &"muelles_altos",
+	})
+	meteor_mode.begin_round(1)
+	var meteor_bounds: Rect2 = meteor_mode.get("_playable_bounds")
+	_require(
+		meteor_bounds.size.distance_to(Vector2(69.2, 69.2)) < 0.02,
+		"Meteor targeting must derive its area from map bounds and safety margin"
+	)
+	var shockwave_ring := shockwaves[0] as ShockwaveRing
+	shockwave_ring.configure_bounds(expanded_bounds)
+	_require(
+		float(shockwave_ring.get("_maximum_radius")) > 50.0,
+		"Shockwave must reach the corners of a 72x72 map"
+	)
+	map_host.activate_selection(&"flood", &"plaza_caos")
+	await process_frame
 	_require(
 		disaster.get_node("DomainMode/CaptureZone") is MeshInstance3D,
 		"Domain must reuse one lightweight capture-zone mesh"
@@ -230,7 +265,7 @@ func _run() -> void:
 	)
 	_require(quality_options.item_count == 3, "Quality menu must show Low, Medium and High")
 	_require(fps_options.item_count == 3, "FPS menu must show every available cap")
-	_require(character_options.item_count == 6, "Character menu must show every model")
+	_require(character_options.item_count == 8, "Character menu must show every model")
 	_require(
 		game.get_node("HUD/PausePanel/PreviewPanel/ViewportContainer/Viewport/Avatar") != null,
 		"Character menu must include a reusable 3D preview"
@@ -292,6 +327,30 @@ func _run() -> void:
 	_require(
 		organic_avatar.get_archetype_index() == 2,
 		"Semi-human selection must use its rigged ears-and-tail model"
+	)
+	player.set_character_variant(CHARACTER_CATALOG.BASIC_MALE_INDEX)
+	_require(
+		not organic_avatar.visible
+		and player.get_node("Visual/Body").visible
+		and player.get_node("Visual/Body").mesh is BoxMesh,
+		"Basic male must preserve the colored square prototype"
+	)
+	player.set_character_variant(CHARACTER_CATALOG.BASIC_FEMALE_INDEX)
+	player.set_model_quality(true)
+	_require(
+		not organic_avatar.visible
+		and player.get_node("Visual/Body").mesh is BoxMesh
+		and player.get_node("Visual/Body").scale.x
+		< player.get_node("Visual/Pelvis").scale.x,
+		"Basic female must remain square while keeping a distinct silhouette"
+	)
+	player.set_character_variant(2)
+	_require(
+		is_equal_approx(
+			(organic_avatar.find_child("OrganicModel2", false, false) as Node3D).position.y,
+			-1.10
+		),
+		"Organic avatar feet must align with the player capsule floor"
 	)
 	player.set_texture_detail(true)
 	var suit_material := player.get_node("Visual/Body").material_override as StandardMaterial3D
@@ -514,6 +573,7 @@ func _run() -> void:
 	var custom_map_scene := PackedScene.new()
 	_require(custom_map_scene.pack(custom_map_root) == OK, "Custom minigame map must pack")
 	custom_map_root.free()
+	var cached_maps_before_custom: int = int(map_host.get_cached_map_count())
 	map_host.register_runtime_map(
 		&"test_map",
 		custom_map_scene,
@@ -522,7 +582,8 @@ func _run() -> void:
 	map_host.activate_selection(&"test_mode", &"test_map")
 	await physics_frame
 	_require(
-		not game.get_node("World/Arena").visible and map_host.get_cached_map_count() == 1,
+		not game.get_node("World/Arena").visible
+		and map_host.get_cached_map_count() == cached_maps_before_custom + 1,
 		"Dedicated minigame map must replace the default arena and remain cached"
 	)
 	_require(
@@ -530,7 +591,10 @@ func _run() -> void:
 		"Dedicated map spawn marker must relocate the reusable player"
 	)
 	map_host.activate_selection(&"test_mode", &"test_map")
-	_require(map_host.get_cached_map_count() == 1, "Reusing a mode must not recreate its map")
+	_require(
+		map_host.get_cached_map_count() == cached_maps_before_custom + 1,
+		"Reusing a mode must not recreate its map"
+	)
 	map_host.activate_selection(&"default", &"plaza_caos")
 	await physics_frame
 	_require(game.get_node("World/Arena").visible, "Default arena must restore after a custom mode")

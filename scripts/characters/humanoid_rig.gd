@@ -59,6 +59,7 @@ static var _detail_box: BoxMesh
 
 static func apply_variant(root: Node3D, index: int) -> Color:
 	var safe_index := CATALOG.sanitize_index(index)
+	root.set_meta(&"character_variant", safe_index)
 	var color: Color = CATALOG.COLORS[safe_index]
 	var body := root.get_node("Body") as MeshInstance3D
 	var material := body.get_active_material(0).duplicate() as StandardMaterial3D
@@ -72,7 +73,10 @@ static func apply_variant(root: Node3D, index: int) -> Color:
 	apply_limb_mask(root, ALL_BODY_PARTS_MASK, safe_index)
 	var organic := _ensure_modular_avatar(root)
 	organic.configure(safe_index)
-	_hide_legacy_parts(root)
+	if CATALOG.is_basic(safe_index):
+		set_model_quality(root, false)
+	else:
+		_hide_legacy_parts(root)
 	return color
 
 
@@ -108,7 +112,7 @@ static func apply_proportions(root: Node3D, index: int) -> void:
 		4:
 			root.get_node("Body").scale = Vector3(0.82, 0.84, 0.46)
 			root.get_node("Head").scale = Vector3(0.58, 0.58, 0.54)
-		CATALOG.PIONEER_INDEX:
+		CATALOG.PIONEER_INDEX, CATALOG.BASIC_FEMALE_INDEX:
 			root.get_node("Body").scale = Vector3(0.66, 0.8, 0.42)
 			root.get_node("Chest").scale = Vector3(0.7, 0.3, 0.46)
 			root.get_node("Pelvis").scale = Vector3(0.72, 0.27, 0.46)
@@ -243,9 +247,11 @@ static func animate(
 
 static func apply_limb_mask(root: Node3D, mask: int, variant_index: int) -> void:
 	var safe_mask := mask & ALL_BODY_PARTS_MASK
+	var basic_variant := CATALOG.is_basic(variant_index)
 	var head_attached := _has_limb(safe_mask, HEAD)
 	var left_arm_attached := _has_limb(safe_mask, LEFT_ARM)
 	var right_arm_attached := _has_limb(safe_mask, RIGHT_ARM)
+	root.get_node("Body").visible = basic_variant
 	root.get_node("Head").visible = head_attached
 	root.get_node("Visor").visible = head_attached
 	root.get_node("Cap").visible = (
@@ -292,7 +298,8 @@ static func apply_limb_mask(root: Node3D, mask: int, variant_index: int) -> void
 	var organic := root.get_node_or_null("OrganicAvatar") as ModularAvatar
 	if organic != null:
 		organic.set_limb_mask(safe_mask)
-		_hide_legacy_parts(root)
+		if not basic_variant:
+			_hide_legacy_parts(root)
 
 
 static func set_texture_detail(root: Node3D, enabled: bool) -> void:
@@ -318,6 +325,8 @@ static func set_shadow_quality(root: Node3D, enabled: bool) -> void:
 
 
 static func set_model_quality(root: Node3D, rounded: bool) -> void:
+	if CATALOG.is_basic(int(root.get_meta(&"character_variant", 0))):
+		rounded = false
 	_ensure_rounded_meshes()
 	for part_name in ROUNDED_SPHERE_PARTS + ROUNDED_CAPSULE_PARTS:
 		var part := root.get_node(part_name) as MeshInstance3D

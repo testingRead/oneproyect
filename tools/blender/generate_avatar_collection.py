@@ -104,6 +104,28 @@ def join_objects(objects, name: str):
     return result
 
 
+def connected_components(mesh_obj):
+    adjacency = [set() for _ in mesh_obj.data.vertices]
+    for edge in mesh_obj.data.edges:
+        first, second = edge.vertices
+        adjacency[first].add(second)
+        adjacency[second].add(first)
+    remaining = set(range(len(adjacency)))
+    components = []
+    while remaining:
+        component = {remaining.pop()}
+        pending = list(component)
+        while pending:
+            current = pending.pop()
+            for neighbor in adjacency[current]:
+                if neighbor in remaining:
+                    remaining.remove(neighbor)
+                    component.add(neighbor)
+                    pending.append(neighbor)
+        components.append(component)
+    return components
+
+
 def add_meta_ellipsoid(meta, location, scale, rotation=None, stiffness=2.0):
     element = meta.elements.new(type="ELLIPSOID")
     element.co = location
@@ -139,8 +161,8 @@ def build_body(archetype: Archetype, skin_mat):
     waist = 0.26 if female else 0.31
     chest = 0.40 if female else 0.46
     meta = bpy.data.metaballs.new("BodyOrganicVolume")
-    meta.resolution = 0.055
-    meta.render_resolution = 0.045
+    meta.resolution = 0.045
+    meta.render_resolution = 0.038
     meta.threshold = 0.72
     meta_obj = bpy.data.objects.new("BodyOrganicVolume", meta)
     bpy.context.collection.objects.link(meta_obj)
@@ -152,6 +174,7 @@ def build_body(archetype: Archetype, skin_mat):
         ((0, -0.015, 2.30), (0.32, 0.30, 0.38)),
         ((0, -0.075, 2.14), (0.27, 0.25, 0.23)),
         ((0, -0.295, 2.27), (0.075, 0.11, 0.105)),
+        ((0, -0.235, 2.27), (0.09, 0.13, 0.12)),
     ]
     for location, scale in volumes:
         add_meta_ellipsoid(meta, location, scale)
@@ -162,6 +185,18 @@ def build_body(archetype: Archetype, skin_mat):
         sx = side * shoulder
         ex = side * 0.84
         wx = side * 0.93
+        add_meta_segment(
+            meta,
+            (side * 0.20, 0, 1.76),
+            (sx, 0, 1.76),
+            0.22 if female else 0.245,
+        )
+        add_meta_ellipsoid(
+            meta,
+            (side * 0.37, 0.015, 1.64),
+            (0.25, 0.235, 0.27),
+            stiffness=2.3,
+        )
         add_meta_ellipsoid(meta, (sx, 0, 1.76), (0.25, 0.25, 0.26))
         add_meta_segment(meta, (sx, 0, 1.76), (ex, 0, 1.34), 0.19 if female else 0.21)
         add_meta_ellipsoid(meta, (ex, 0, 1.34), (0.19, 0.18, 0.20))
@@ -175,6 +210,8 @@ def build_body(archetype: Archetype, skin_mat):
     if archetype.semihuman:
         add_meta_ellipsoid(meta, (0.22, 0, 2.70), (0.13, 0.11, 0.31))
         add_meta_ellipsoid(meta, (-0.22, 0, 2.70), (0.13, 0.11, 0.31))
+        add_meta_ellipsoid(meta, (0.20, 0, 2.52), (0.16, 0.14, 0.18), stiffness=2.4)
+        add_meta_ellipsoid(meta, (-0.20, 0, 2.52), (0.16, 0.14, 0.18), stiffness=2.4)
         add_meta_segment(meta, (0, 0.24, 1.02), (0, 0.50, 0.82), 0.13)
         add_meta_segment(meta, (0, 0.50, 0.82), (0.08, 0.68, 0.48), 0.115)
         add_meta_segment(meta, (0.08, 0.68, 0.48), (0.20, 0.68, 0.20), 0.09)
@@ -188,12 +225,35 @@ def build_body(archetype: Archetype, skin_mat):
     body = bpy.context.object
     body.name = "BodyContinuous"
     decimate = body.modifiers.new("MobileDecimate", "DECIMATE")
-    decimate.ratio = 0.72
+    decimate.ratio = 0.82
     bpy.ops.object.modifier_apply(modifier=decimate.name)
     for polygon in body.data.polygons:
         polygon.use_smooth = True
     body.data.materials.clear()
     body.data.materials.append(skin_mat)
+    components = connected_components(body)
+    if len(components) != 1:
+        descriptions = []
+        for component in components:
+            points = [body.data.vertices[index].co for index in component]
+            minimum = Vector((
+                min(point.x for point in points),
+                min(point.y for point in points),
+                min(point.z for point in points),
+            ))
+            maximum = Vector((
+                max(point.x for point in points),
+                max(point.y for point in points),
+                max(point.z for point in points),
+            ))
+            descriptions.append(
+                f"{len(component)} verts at {tuple(round(v, 2) for v in minimum)}"
+                f"..{tuple(round(v, 2) for v in maximum)}"
+            )
+        raise RuntimeError(
+            f"{archetype.file_id} body is not continuous: "
+            + "; ".join(descriptions)
+        )
     return body
 
 
@@ -201,7 +261,7 @@ def build_outfit(body, archetype: Archetype, outfit_mat):
     """Copy fitted regions from the body to form a clipping-free shirt/shorts."""
     selected_faces = []
     selected_vertices = set()
-    torso_limit = 0.46 if archetype.feminine else 0.52
+    torso_limit = 0.38 if archetype.feminine else 0.43
     for polygon in body.data.polygons:
         center = polygon.center
         is_shirt = 1.32 <= center.z <= 1.94 and abs(center.x) <= torso_limit
@@ -290,6 +350,8 @@ def build_armature(archetype: Archetype):
         specs[f"shin{suffix}"] = ((side * 0.23, 0, 0.50), (side * 0.23, 0, 0.10), f"thigh{suffix}", True)
         specs[f"foot{suffix}"] = ((side * 0.23, 0, 0.10), (side * 0.23, -0.32, 0.04), f"shin{suffix}", True)
     if archetype.semihuman:
+        specs["ear.L"] = ((0.22, 0, 2.52), (0.22, 0, 2.86), "head", True)
+        specs["ear.R"] = ((-0.22, 0, 2.52), (-0.22, 0, 2.86), "head", True)
         specs["tail.01"] = ((0, 0.18, 1.02), (0, 0.50, 0.82), "hips", True)
         specs["tail.02"] = ((0, 0.50, 0.82), (0.08, 0.68, 0.48), "tail.01", True)
         specs["tail.03"] = ((0.08, 0.68, 0.48), (0.20, 0.68, 0.20), "tail.02", True)
@@ -350,21 +412,109 @@ def key_pose(armature, frame: int, rotations=None, locations=None):
             bone.keyframe_insert("location", frame=frame)
 
 
-def create_actions(armature, feminine: bool):
+def create_actions(armature, archetype: Archetype):
+    feminine = archetype.feminine
     hip_sway = 0.09 if feminine else 0.025
     chest_sway = 0.045 if feminine else 0.015
+    animal_a = {
+        "ear.L": (0.03, 0.07, -0.055),
+        "ear.R": (-0.03, -0.07, 0.055),
+        "tail.01": (0.04, 0.10, 0.12),
+        "tail.02": (-0.03, -0.08, 0.10),
+        "tail.03": (0.02, 0.05, 0.08),
+    }
+    animal_b = {
+        "ear.L": (-0.04, -0.09, 0.045),
+        "ear.R": (0.04, 0.09, -0.045),
+        "tail.01": (-0.05, -0.12, -0.14),
+        "tail.02": (0.04, 0.09, -0.11),
+        "tail.03": (-0.03, -0.06, -0.09),
+    }
     clips = {
         "Idle": (30, [
-            (1, {"spine": (0.02, 0, 0), "chest": (-0.02, 0, 0)}, {}),
-            (16, {"spine": (-0.025, 0, 0), "chest": (0.025, 0, 0)}, {"hips": (0, 0, 0.015)}),
-            (30, {"spine": (0.02, 0, 0), "chest": (-0.02, 0, 0)}, {}),
+            (1, {"spine": (0.02, 0, 0), "chest": (-0.02, 0, 0), **animal_a}, {}),
+            (16, {"spine": (-0.025, 0, 0), "chest": (0.025, 0, 0), **animal_b}, {"hips": (0, 0, 0.015)}),
+            (30, {"spine": (0.02, 0, 0), "chest": (-0.02, 0, 0), **animal_a}, {}),
         ]),
         "Walk": (30, [
-            (1, {"hips": (0, 0, hip_sway), "chest": (0, 0, -chest_sway), "upper_arm.L": (0, 0.42, 0), "upper_arm.R": (0, -0.42, 0), "thigh.L": (0, -0.48, 0), "thigh.R": (0, 0.48, 0)}, {}),
-            (9, {"upper_arm.L": (0, 0, 0), "upper_arm.R": (0, 0, 0), "thigh.L": (0, 0, 0), "thigh.R": (0, 0, 0)}, {"hips": (0, 0, 0.025)}),
-            (16, {"hips": (0, 0, -hip_sway), "chest": (0, 0, chest_sway), "upper_arm.L": (0, -0.42, 0), "upper_arm.R": (0, 0.42, 0), "thigh.L": (0, 0.48, 0), "thigh.R": (0, -0.48, 0)}, {}),
-            (24, {"upper_arm.L": (0, 0, 0), "upper_arm.R": (0, 0, 0), "thigh.L": (0, 0, 0), "thigh.R": (0, 0, 0)}, {"hips": (0, 0, 0.025)}),
-            (30, {"hips": (0, 0, hip_sway), "chest": (0, 0, -chest_sway), "upper_arm.L": (0, 0.42, 0), "upper_arm.R": (0, -0.42, 0), "thigh.L": (0, -0.48, 0), "thigh.R": (0, 0.48, 0)}, {}),
+            (1, {
+                "hips": (0.015, 0, hip_sway),
+                "chest": (-0.025, 0, -chest_sway),
+                "head": (0.01, 0, chest_sway * 0.35),
+                "upper_arm.L": (0, 0.42, 0),
+                "upper_arm.R": (0, -0.42, 0),
+                "forearm.L": (0, 0.16, 0),
+                "forearm.R": (0, -0.28, 0),
+                "thigh.L": (0, -0.48, 0),
+                "thigh.R": (0, 0.48, 0),
+                "shin.L": (0, 0.16, 0),
+                "shin.R": (0, 0.48, 0),
+                "foot.L": (0, 0.12, 0),
+                "foot.R": (0, -0.22, 0),
+                **animal_a,
+            }, {}),
+            (9, {
+                "hips": (-0.025, 0, 0),
+                "chest": (0.02, 0, 0),
+                "head": (-0.01, 0, 0),
+                "upper_arm.L": (0, 0, 0),
+                "upper_arm.R": (0, 0, 0),
+                "forearm.L": (0, 0.24, 0),
+                "forearm.R": (0, -0.24, 0),
+                "thigh.L": (0, 0, 0),
+                "thigh.R": (0, 0, 0),
+                "shin.L": (0, 0.08, 0),
+                "shin.R": (0, 0.34, 0),
+                "foot.L": (0, -0.06, 0),
+                "foot.R": (0, 0.18, 0),
+            }, {"hips": (0, 0, 0.045)}),
+            (16, {
+                "hips": (0.015, 0, -hip_sway),
+                "chest": (-0.025, 0, chest_sway),
+                "head": (0.01, 0, -chest_sway * 0.35),
+                "upper_arm.L": (0, -0.42, 0),
+                "upper_arm.R": (0, 0.42, 0),
+                "forearm.L": (0, 0.28, 0),
+                "forearm.R": (0, -0.16, 0),
+                "thigh.L": (0, 0.48, 0),
+                "thigh.R": (0, -0.48, 0),
+                "shin.L": (0, 0.48, 0),
+                "shin.R": (0, 0.16, 0),
+                "foot.L": (0, -0.22, 0),
+                "foot.R": (0, 0.12, 0),
+                **animal_b,
+            }, {}),
+            (24, {
+                "hips": (-0.025, 0, 0),
+                "chest": (0.02, 0, 0),
+                "head": (-0.01, 0, 0),
+                "upper_arm.L": (0, 0, 0),
+                "upper_arm.R": (0, 0, 0),
+                "forearm.L": (0, 0.24, 0),
+                "forearm.R": (0, -0.24, 0),
+                "thigh.L": (0, 0, 0),
+                "thigh.R": (0, 0, 0),
+                "shin.L": (0, 0.34, 0),
+                "shin.R": (0, 0.08, 0),
+                "foot.L": (0, 0.18, 0),
+                "foot.R": (0, -0.06, 0),
+            }, {"hips": (0, 0, 0.045)}),
+            (30, {
+                "hips": (0.015, 0, hip_sway),
+                "chest": (-0.025, 0, -chest_sway),
+                "head": (0.01, 0, chest_sway * 0.35),
+                "upper_arm.L": (0, 0.42, 0),
+                "upper_arm.R": (0, -0.42, 0),
+                "forearm.L": (0, 0.16, 0),
+                "forearm.R": (0, -0.28, 0),
+                "thigh.L": (0, -0.48, 0),
+                "thigh.R": (0, 0.48, 0),
+                "shin.L": (0, 0.16, 0),
+                "shin.R": (0, 0.48, 0),
+                "foot.L": (0, 0.12, 0),
+                "foot.R": (0, -0.22, 0),
+                **animal_a,
+            }, {}),
         ]),
         "Crouch": (20, [
             (1, {}, {}),
@@ -464,7 +614,7 @@ def build_archetype(archetype: Archetype, output_path: str):
     armature = build_armature(archetype)
     for mesh in (body, outfit, face, hair):
         bind_mesh(mesh, armature)
-    create_actions(armature, archetype.feminine)
+    create_actions(armature, archetype)
     for obj in (body, outfit, face, hair, armature):
         obj["oneproyect_archetype"] = archetype.file_id
         obj["oneproyect_display_name"] = archetype.display_name

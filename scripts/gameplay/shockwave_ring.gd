@@ -10,7 +10,6 @@ enum Phase {
 	EXPANDING,
 }
 
-const MAX_RADIUS := 27.2
 const SAFE_HEIGHT := 1.55
 
 @onready var ring: MeshInstance3D = $Ring
@@ -23,6 +22,8 @@ var _blast_force := 8.5
 var _expansion_speed := 12.0
 var _targets: Array[Node] = []
 var _resolved_targets: Dictionary = {}
+var _maximum_radius := 27.2
+var _origin := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -41,7 +42,7 @@ func _physics_process(delta: float) -> void:
 			_radius += _expansion_speed * delta
 			ring.scale = Vector3(_radius, 1.0, _radius)
 			_resolve_crossed_players()
-			if _radius >= MAX_RADIUS:
+			if _radius >= _maximum_radius:
 				reset_ring()
 
 
@@ -69,6 +70,14 @@ func launch(
 	return true
 
 
+func configure_bounds(bounds: Rect2) -> void:
+	var center := bounds.get_center()
+	_origin = Vector3(center.x, 0.0, center.y)
+	global_position.x = center.x
+	global_position.z = center.y
+	_maximum_radius = bounds.size.length() * 0.5 + 0.5
+
+
 func reset_ring() -> void:
 	phase = Phase.IDLE
 	_phase_time = 0.0
@@ -94,9 +103,12 @@ func _resolve_crossed_players() -> void:
 	for target in _targets:
 		if not is_instance_valid(target) or _resolved_targets.has(target):
 			continue
-		var flat_distance := Vector2(target.global_position.x, target.global_position.z).length()
+		var flat_distance := Vector2(
+			target.global_position.x - _origin.x,
+			target.global_position.z - _origin.z
+		).length()
 		if flat_distance > _radius:
 			continue
 		_resolved_targets[target] = true
 		if target.global_position.y <= SAFE_HEIGHT and target.has_method("apply_damage_and_knockback"):
-			target.apply_damage_and_knockback(Vector3.ZERO, _blast_force, _damage)
+			target.apply_damage_and_knockback(_origin, _blast_force, _damage)

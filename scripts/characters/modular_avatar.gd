@@ -27,6 +27,8 @@ const BONE_MASKS := {
 	"tail.01": 1 << 11,
 	"tail.02": 1 << 11,
 	"tail.03": 1 << 11,
+	"ear.L": 1 << 9,
+	"ear.R": 1 << 10,
 }
 
 var _model: Node3D
@@ -42,6 +44,13 @@ var _one_shot_locked := false
 func configure(variant_index: int) -> void:
 	var safe_index := CATALOG.sanitize_index(variant_index)
 	var archetype_index: int = CATALOG.ARCHETYPES[safe_index]
+	if archetype_index < 0:
+		if _model != null:
+			_model.visible = false
+		_variant_index = safe_index
+		visible = false
+		return
+	visible = true
 	if _model == null or _variant_index < 0 or CATALOG.ARCHETYPES[_variant_index] != archetype_index:
 		_replace_model(archetype_index)
 	_variant_index = safe_index
@@ -142,7 +151,7 @@ func _replace_model(archetype_index: int) -> void:
 		_model = AVATAR_SCENES[archetype_index].instantiate()
 		_model.name = "OrganicModel%d" % archetype_index
 		# Network/player origins are capsule centers; Blender models use feet.
-		_model.position.y = -1.20
+		_model.position.y = -1.10
 		add_child(_model)
 		_models_by_archetype[archetype_index] = _model
 	var animation_players := _model.find_children("*", "AnimationPlayer", true, false)

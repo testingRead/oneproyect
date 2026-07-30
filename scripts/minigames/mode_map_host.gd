@@ -107,6 +107,22 @@ func get_cached_map_count() -> int:
 	return _cached_maps.size()
 
 
+func get_active_playable_bounds(margin := 0.0) -> Rect2:
+	var fallback_extent := 25.5
+	var bounds := Rect2(
+		Vector2(-fallback_extent, -fallback_extent),
+		Vector2(fallback_extent * 2.0, fallback_extent * 2.0)
+	)
+	if _active_map != null and _active_map.has_method("get_playable_bounds"):
+		bounds = _active_map.call("get_playable_bounds")
+	var safe_margin := clampf(
+		margin,
+		0.0,
+		minf(bounds.size.x, bounds.size.y) * 0.45
+	)
+	return bounds.grow(-safe_margin)
+
+
 func _ensure_registry() -> void:
 	if not _definition_by_id.is_empty():
 		return

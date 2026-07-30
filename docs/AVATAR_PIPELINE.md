@@ -10,13 +10,16 @@ archetype keeps the same logical capsule and damage zones.
 - Swappable outfit mesh.
 - Species traits (ears and tail) remain part of the skinned archetype.
 - Hair or fur tufts use one swappable accessory surface.
+- Semihuman ears and the three tail segments have their own deformation bones
+  and secondary motion in idle and walk clips.
 - Skin, fur and outfit colors are supplied through material parameters.
 - A compact preset ID is sent only when joining a room; visual data never
   enters movement snapshots.
 
-The first archetypes are human male, human female, lynx male and lynx female.
-Additional semihuman species reuse this contract instead of adding new player
-controllers.
+The first organic archetypes are human male, human female, lynx male and lynx
+female. Two deliberately simple box characters, male and female, remain in the
+catalog as the original low-cost visual style. Additional semihuman species
+reuse this contract instead of adding new player controllers.
 
 ## Blender generation
 
@@ -27,6 +30,11 @@ clipping without duplicating the body. The script binds at most four bone
 influences per vertex, creates reusable animation clips and exports binary glTF
 files. GLB is the committed runtime format because the Android Godot editor
 cannot invoke Blender to import `.blend` files.
+
+Generation fails when the body contains more than one connected component.
+This catches detached arms, ears, nose or feet before a GLB can enter the game.
+The current bodies use roughly 3,200 to 3,700 vertices, including continuous
+shoulder, armpit, face and ear bridges.
 
 Source `.blend` files are retained outside the Android export and can be
 published separately when artistic editing begins.

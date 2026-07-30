@@ -89,6 +89,8 @@ jobs:
           set -euo pipefail
           GODOT="$HOME/.cache/oneproyect-godot/godot"
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/avatar_asset_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/network_codec_test.gd
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/server_room_test.gd

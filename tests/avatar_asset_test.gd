@@ -25,6 +25,14 @@ func _run() -> void:
 		_require(skeletons.size() == 1, "Avatar must expose one skeleton: " + path)
 		_require(players.size() == 1, "Avatar must expose one AnimationPlayer: " + path)
 		_require(meshes.size() == 4, "Avatar must keep body, clothing, face and hair batched: " + path)
+		var skeleton := skeletons[0] as Skeleton3D
+		if path.contains("lynx"):
+			_require(
+				skeleton.find_bone("ear.L") >= 0
+				and skeleton.find_bone("ear.R") >= 0
+				and skeleton.find_bone("tail.03") >= 0,
+				"Semihuman avatars must rig both ears and the complete tail: " + path
+			)
 		var animation_player := players[0] as AnimationPlayer
 		var available := PackedStringArray()
 		for animation_name: StringName in animation_player.get_animation_list():
@@ -39,11 +47,20 @@ func _run() -> void:
 				required in available,
 				"Missing %s animation in %s (got %s)" % [required, path, available]
 			)
+		if path.contains("lynx"):
+			var idle := animation_player.get_animation(&"Idle")
+			var animates_ears := false
+			for track_index in idle.get_track_count():
+				animates_ears = (
+					animates_ears
+					or str(idle.track_get_path(track_index)).contains("ear.")
+				)
+			_require(animates_ears, "Semihuman idle must animate its ears: " + path)
 		print(
 			"AVATAR_ASSET_OK file=%s bones=%d meshes=%d animations=%s"
 			% [
 				path.get_file(),
-				(skeletons[0] as Skeleton3D).get_bone_count(),
+				skeleton.get_bone_count(),
 				meshes.size(),
 				available,
 			]
