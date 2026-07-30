@@ -15,6 +15,13 @@ func _ready() -> void:
 	queue_redraw()
 
 
+func set_label(value: String) -> void:
+	if label == value:
+		return
+	label = value
+	queue_redraw()
+
+
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if event.pressed and _finger_id == -1:

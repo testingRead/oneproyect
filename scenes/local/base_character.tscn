@@ -210,6 +210,9 @@ position = Vector3(0.47, 0.79, 0)
 [node name="Back" type="Marker3D" parent="AnchorPoints"]
 position = Vector3(0, 1.15, -0.25)
 
+[node name="HeldItem" type="Marker3D" parent="AnchorPoints"]
+position = Vector3(0.48, 0.92, -0.3)
+
 [node name="CameraPivot" type="Node3D" parent="."]
 position = Vector3(0, 1.476, 0)
 rotation = Vector3(-0.18, 0, 0)
@@ -224,3 +227,13 @@ current = true
 fov = 68.0
 near = 0.08
 far = 170.0
+
+[node name="InteractionRay" type="RayCast3D" parent="."]
+position = Vector3(0, 0.2, 0)
+target_position = Vector3(0, 0, -1.65)
+collision_mask = 1
+exclude_parent = true
+
+[node name="InteractionScan" type="Timer" parent="."]
+wait_time = 0.1
+autostart = true

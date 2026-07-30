@@ -4,6 +4,7 @@ extends RefCounted
 ## Official local gameplay measurements. One Godot unit equals one metre.
 const CHARACTER_HEIGHT := 1.80
 const CHARACTER_WIDTH := 0.72
+const CHARACTER_MASS := 70.0
 const COLLISION_HEIGHT := 1.72
 const COLLISION_RADIUS := 0.34
 const VISUAL_GROUND_OFFSET := 0.0

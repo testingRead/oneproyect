@@ -157,14 +157,14 @@ horizontal_alignment = 1
 layout_mode = 2
 theme_override_colors/font_color = Color(0.94, 0.97, 1, 1)
 theme_override_font_sizes/font_size = 14
-text = "Choca o usa EMPUJAR sobre los objetos"
+text = "Acércate y mira un objeto: el botón cambia de acción"
 horizontal_alignment = 1
 
 [node name="Progress" type="Label" parent="HUD/RoundBanner/Margin/Rows"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.38, 0.95, 0.88, 1)
 theme_override_font_sizes/font_size = 14
-text = "Objetivo: evita las 3 zonas rojas de meteorito"
+text = "BALÓN: PATEAR · PIEDRA: TOMAR/LANZAR"
 horizontal_alignment = 1
 
 [node name="LookPad" type="Control" parent="HUD"]

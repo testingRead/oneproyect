@@ -9,6 +9,7 @@ es `shared/gameplay_scale.gd`; escenas y scripts no deben copiar números.
 | --- | ---: |
 | Altura visual | 1,80 m |
 | Ancho de torso | 0,72 m |
+| Masa física de referencia | 70 kg |
 | Altura de cápsula | 1,72 m |
 | Radio de cápsula | 0,34 m |
 | Origen lógico | planta de los pies, `y = 0` |
@@ -44,6 +45,8 @@ escena, controlador, cámara, animación y anclajes.
 | Objeto pequeño | 0,40 m |
 | Objeto mediano | 1,00 m |
 | Objeto grande | 2,00 m |
+| Balón | 0,44 m · 0,43 kg |
+| Piedra equipable | 0,28 m · 0,32 kg |
 
 El mundo físico no cambia entre rondas. La costa mantiene cuatro colisiones
 invisibles permanentes en el borde de la isla para impedir entrar al océano.

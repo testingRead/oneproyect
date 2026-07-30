@@ -23,9 +23,10 @@ func _run() -> void:
 	)
 	_require(
 		is_equal_approx(SCALE.CHARACTER_HEIGHT, 1.8)
+		and is_equal_approx(SCALE.CHARACTER_MASS, 70.0)
 		and is_equal_approx(SCALE.COLLISION_HEIGHT, 1.72)
 		and is_equal_approx(SCALE.COLLISION_RADIUS, 0.34),
-		"Character scale must come from the official contract"
+		"Character scale and reference mass must come from the official contract"
 	)
 	_require(
 		is_equal_approx(
@@ -69,8 +70,10 @@ func _run() -> void:
 		player.has_node("Collision")
 		and player.has_node("VisualRoot/Model")
 		and player.has_node("CameraPivot")
-		and player.has_node("AnchorPoints/Feet"),
-		"Character must separate collision, visual, camera and anchors"
+		and player.has_node("AnchorPoints/Feet")
+		and player.has_node("AnchorPoints/HeldItem")
+		and player.has_node("InteractionRay"),
+		"Character must separate collision, visual, camera, anchors and interaction probe"
 	)
 	_require(
 		player.is_on_floor(),
@@ -283,25 +286,36 @@ func _verify_moving_platform(
 func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
 	var ball := lab.get_node("World/TestCourse/Ball") as RigidBody3D
 	var rock := lab.get_node("World/TestCourse/Rock") as RigidBody3D
+	var medium_box := lab.get_node("World/TestCourse/MediumBox") as RigidBody3D
+	var large_box := lab.get_node("World/TestCourse/LargeBox") as RigidBody3D
 	var player := lab.player
-	var ball_origin := ball.global_position
-	var rock_origin := rock.global_position
 	var ball_reset: Transform3D = ball.get_meta(&"initial_transform")
 	var rock_reset: Transform3D = rock.get_meta(&"initial_transform")
-	ball.apply_central_impulse(Vector3(0.0, 0.0, 2.2))
-	rock.apply_central_impulse(Vector3(0.0, 0.0, 2.2))
+	var medium_origin := medium_box.global_position
+	var large_origin := large_box.global_position
+	var ball_shape := (ball.get_child(0) as CollisionShape3D).shape as SphereShape3D
+	var rock_shape := (rock.get_child(0) as CollisionShape3D).shape as SphereShape3D
+	_require(
+		is_equal_approx(ball_shape.radius, 0.22)
+		and is_equal_approx(ball.mass, 0.43)
+		and is_equal_approx(rock_shape.radius, 0.14)
+		and is_equal_approx(rock.mass, 0.32),
+		"Ball and throwable stone must use their approved human-scale dimensions"
+	)
+
+	medium_box.apply_central_impulse(Vector3(0.0, 0.0, 2.2))
+	large_box.apply_central_impulse(Vector3(0.0, 0.0, 2.2))
 	await physics_frame
 	_require(
-		ball.linear_velocity.length() > rock.linear_velocity.length() * 3.0,
-		"Equal impulse must produce clearly different velocity by mass (ball=%.3f rock=%.3f)"
-		% [ball.linear_velocity.length(), rock.linear_velocity.length()]
+		medium_box.linear_velocity.length() > large_box.linear_velocity.length() * 3.0,
+		"Equal impulse must preserve a clear medium/heavy mass difference"
 	)
 	for frame in 45:
 		await physics_frame
 	_require(
-		ball.global_position.distance_to(ball_origin)
-		> rock.global_position.distance_to(rock_origin),
-		"Light ball must respond more than the heavier rock to equal impulse"
+		medium_box.global_position.distance_to(medium_origin)
+		> large_box.global_position.distance_to(large_origin),
+		"Medium box must respond more than the heavy box to equal impulse"
 	)
 	lab.reset_lab()
 	await physics_frame
@@ -322,8 +336,51 @@ func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
 		await physics_frame
 	player.set_touch_move(Vector2.ZERO)
 	_require(
-		ball.global_position.z < ball_reset.origin.z - 0.15,
-		"Walking into the ball must transfer visible force locally"
+		ball.global_position.distance_to(ball_reset.origin) > 0.08,
+		"Walking into the ball must transfer visible force locally (distance=%.3f)"
+		% ball.global_position.distance_to(ball_reset.origin)
+	)
+
+	lab.reset_lab()
+	await physics_frame
+	player.global_position = Vector3(
+		ball_reset.origin.x,
+		0.02,
+		ball_reset.origin.z + 1.05
+	)
+	player.velocity = Vector3.ZERO
+	player.camera_pivot.rotation.y = 0.0
+	for frame in 10:
+		await physics_frame
+	_require(
+		player.get_context_action() == LocalBaseCharacter.ACTION_KICK,
+		"Ball in front must change the contextual action to KICK"
+	)
+	_require(player.request_context_action(), "Contextual kick must start")
+	for frame in 24:
+		await physics_frame
+	_require(
+		ball.global_position.distance_to(ball_reset.origin) > 0.35,
+		"Kick contact window must move the ball"
+	)
+
+	lab.reset_lab()
+	await physics_frame
+	player.global_position = Vector3(
+		ball_reset.origin.x,
+		0.02,
+		ball_reset.origin.z + 1.05
+	)
+	player.camera_pivot.rotation.y = 0.0
+	for frame in 10:
+		await physics_frame
+	_require(player.request_context_action(), "Miss probe must begin a kick")
+	player.camera_pivot.rotation.y = PI * 0.5
+	for frame in 24:
+		await physics_frame
+	_require(
+		ball.global_position.distance_to(ball_reset.origin) < 0.05,
+		"Kick must miss when the ball is no longer inside the foot contact probe"
 	)
 
 	lab.reset_lab()
@@ -331,16 +388,32 @@ func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
 	player.global_position = Vector3(
 		rock_reset.origin.x,
 		0.02,
-		rock_reset.origin.z + 1.35
+		rock_reset.origin.z + 1.0
 	)
-	player.velocity = Vector3.ZERO
-	var pushed := player.request_push()
+	player.camera_pivot.rotation.y = 0.0
+	for frame in 10:
+		await physics_frame
+	_require(
+		player.get_context_action() == LocalBaseCharacter.ACTION_TAKE,
+		"Small stone in front must expose TAKE"
+	)
+	_require(
+		player.request_context_action()
+		and player.get_held_object() == rock
+		and player.get_context_action() == LocalBaseCharacter.ACTION_THROW,
+		"TAKE must equip the stone and switch the action to THROW"
+	)
+	for frame in 22:
+		await physics_frame
+	_require(player.request_context_action(), "Equipped stone must be throwable")
 	for frame in 8:
 		await physics_frame
 	_require(
-		pushed and rock.linear_velocity.length() > 0.2,
-		"The push action must reach and move a nearby rigid object"
+		player.get_held_object() == null and rock.linear_velocity.length() > 0.4,
+		"THROW must release the stone with a physical impulse"
 	)
+	lab.reset_lab()
+	await physics_frame
 
 
 func _require(condition: bool, message: String) -> void:

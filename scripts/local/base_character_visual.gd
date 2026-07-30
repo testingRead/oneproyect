@@ -19,6 +19,7 @@ var _right_ground_offset := 0.0
 var _left_ground_roll := 0.0
 var _right_ground_roll := 0.0
 var _push_remaining := 0.0
+var _kick_remaining := 0.0
 
 
 func set_stature(stature: float) -> void:
@@ -96,6 +97,19 @@ func update_motion(
 		torso.rotation.x = lerpf(torso.rotation.x, 0.16, push_weight)
 	else:
 		torso.rotation.x = lerpf(torso.rotation.x, 0.0, delta * 12.0)
+	if _kick_remaining > 0.0:
+		_kick_remaining = maxf(0.0, _kick_remaining - delta)
+		var kick_progress := 1.0 - _kick_remaining / 0.5
+		var kick_weight := sin(kick_progress * PI)
+		right_leg.rotation.x = lerpf(right_leg.rotation.x, -1.05, kick_weight)
+		right_foot.rotation.x = lerpf(
+			right_foot.rotation.x,
+			0.2,
+			kick_weight
+		)
+		left_arm.rotation.x = lerpf(left_arm.rotation.x, 0.38, kick_weight)
+		right_arm.rotation.x = lerpf(right_arm.rotation.x, -0.52, kick_weight)
+		torso.rotation.x = lerpf(torso.rotation.x, 0.12, kick_weight)
 	$Model/LeftLegPivot.position.y = (
 		0.72
 		+ _left_ground_offset * grounded_weight
@@ -129,6 +143,10 @@ func clear_foot_contacts() -> void:
 
 func trigger_push() -> void:
 	_push_remaining = 0.42
+
+
+func trigger_kick() -> void:
+	_kick_remaining = 0.5
 
 
 func get_movement_ratio() -> float:

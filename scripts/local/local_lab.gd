@@ -40,9 +40,10 @@ func _ready() -> void:
 	joystick.value_changed.connect(player.set_touch_move)
 	look_pad.look_delta.connect(player.add_touch_look)
 	jump_button.action_pressed.connect(player.request_jump)
-	push_button.action_pressed.connect(player.request_push)
+	push_button.action_pressed.connect(player.request_context_action)
 	round_button.action_pressed.connect(start_reference_round)
-	player.push_performed.connect(_on_push_performed)
+	player.interaction_changed.connect(_on_interaction_changed)
+	player.action_resolved.connect(_on_action_resolved)
 	player.metrics_changed.connect(_on_player_metrics)
 	playable_area.area_changed.connect(_on_area_changed)
 	round_controller.configure(
@@ -179,11 +180,10 @@ func _on_round_phase_changed(
 		LocalRoundController.Phase.IDLE:
 			banner_title.text = "LABORATORIO LOCAL"
 			banner_detail.text = (
-				"Choca o usa EMPUJAR sobre los objetos · "
-				+ "RONDA inicia la prueba"
+				"Acércate y mira un objeto: el botón cambia de acción"
 			)
 			banner_progress.text = (
-				"Objetivo: evita las 3 zonas rojas de meteorito"
+				"BALÓN: PATEAR · PIEDRA: TOMAR/LANZAR · RONDA: meteoritos"
 			)
 			_on_player_metrics(player.get_diagnostics())
 		LocalRoundController.Phase.PREPARE:
@@ -248,14 +248,30 @@ func _on_area_changed(size: float, bounds: Rect2) -> void:
 	)
 
 
-func _on_push_performed(hit: bool) -> void:
+func _on_interaction_changed(label: String) -> void:
+	push_button.set_label(label)
+
+
+func _on_action_resolved(action: StringName, hit: bool) -> void:
 	if round_controller.phase != LocalRoundController.Phase.IDLE:
 		return
-	banner_progress.text = (
-		"EMPUJE: objeto alcanzado"
-		if hit
-		else "EMPUJE: acércate y mira hacia un objeto"
-	)
+	match action:
+		LocalBaseCharacter.ACTION_KICK:
+			banner_progress.text = (
+				"PATADA: contacto con el balón"
+				if hit
+				else "PATADA: fallaste; el balón no estaba frente al pie"
+			)
+		LocalBaseCharacter.ACTION_TAKE:
+			banner_progress.text = "PIEDRA EQUIPADA · pulsa LANZAR"
+		LocalBaseCharacter.ACTION_THROW:
+			banner_progress.text = "PIEDRA LANZADA"
+		_:
+			banner_progress.text = (
+				"EMPUJE: objeto alcanzado"
+				if hit
+				else "EMPUJE: acércate y mira hacia un objeto"
+			)
 
 
 func _on_event_warning(_position: Vector3, _index: int) -> void:
@@ -385,23 +401,25 @@ func _build_test_course_once() -> void:
 	var ball := _add_rigid_sphere(
 		content,
 		"Ball",
-		Vector3(-3.5, 0.46, 5.0),
-		0.45,
-		0.55,
+		Vector3(-3.5, 0.23, 5.0),
+		0.22,
+		0.43,
 		_material(Color(0.92, 0.9, 0.78), 0.68),
 		Vector3.ONE
 	)
-	_add_object_label(ball, "BALÓN · 0.55 kg · EMPÚJALO", 1.05, Color(1.0, 0.96, 0.72))
+	ball.add_to_group(&"kickable_ball")
+	_add_object_label(ball, "BALÓN · 0.43 kg · PATEAR", 0.68, Color(1.0, 0.96, 0.72))
 	var rock := _add_rigid_sphere(
 		content,
 		"Rock",
-		Vector3(-5.0, 0.56, 5.0),
-		0.55,
-		3.5,
+		Vector3(-5.0, 0.15, 5.0),
+		0.14,
+		0.32,
 		_material(Color(0.36, 0.38, 0.4), 0.98),
 		Vector3.ONE
 	)
-	_add_object_label(rock, "PIEDRA · 3.5 kg · PESADA", 1.18, Color(0.86, 0.9, 0.95))
+	rock.add_to_group(&"pickup_stone")
+	_add_object_label(rock, "PIEDRA · TOMAR / LANZAR", 0.55, Color(0.86, 0.9, 0.95))
 	var medium_box := _add_rigid_box(
 		content,
 		"MediumBox",
@@ -546,8 +564,8 @@ func _add_rigid_sphere(
 	body.add_to_group(&"local_test_object")
 	body.add_to_group(&"interaction_movable")
 	var physics_material := PhysicsMaterial.new()
-	physics_material.friction = 0.72
-	physics_material.bounce = 0.18 if node_name == "Ball" else 0.04
+	physics_material.friction = 0.58 if node_name == "Ball" else 0.82
+	physics_material.bounce = 0.52 if node_name == "Ball" else 0.06
 	body.physics_material_override = physics_material
 	var collision := CollisionShape3D.new()
 	var shape := SphereShape3D.new()

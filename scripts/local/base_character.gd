@@ -5,6 +5,13 @@ const SCALE := preload("res://shared/gameplay_scale.gd")
 
 signal metrics_changed(metrics: Dictionary)
 signal push_performed(hit: bool)
+signal interaction_changed(label: String)
+signal action_resolved(action: StringName, hit: bool)
+
+const ACTION_PUSH := &"PUSH"
+const ACTION_KICK := &"KICK"
+const ACTION_TAKE := &"TAKE"
+const ACTION_THROW := &"THROW"
 
 @export_range(0.8, 1.2, 0.01) var stature := SCALE.STATURE_STANDARD
 @export var controls_enabled := true
@@ -13,6 +20,9 @@ signal push_performed(hit: bool)
 @onready var collision: CollisionShape3D = $Collision
 @onready var visual_root: BaseCharacterVisual = $VisualRoot
 @onready var camera_pivot: Node3D = $CameraPivot
+@onready var interaction_ray: RayCast3D = $InteractionRay
+@onready var interaction_scan: Timer = $InteractionScan
+@onready var held_item_anchor: Marker3D = $AnchorPoints/HeldItem
 
 var _touch_move := Vector2.ZERO
 var _jump_requested := false
@@ -22,6 +32,15 @@ var _motor_velocity := Vector3.ZERO
 var _last_metrics_second := -1
 var _spawn_transform: Transform3D
 var _push_cooldown := 0.0
+var _context_action := ACTION_PUSH
+var _context_body: RigidBody3D
+var _kick_target: RigidBody3D
+var _kick_pending := false
+var _kick_elapsed := 0.0
+var _held_object: RigidBody3D
+var _held_original_parent: Node
+var _held_collision_layer := 0
+var _held_collision_mask := 0
 
 
 func _ready() -> void:
@@ -32,12 +51,16 @@ func _ready() -> void:
 	max_slides = 6
 	configure_stature(stature)
 	add_to_group(&"local_base_character")
+	interaction_scan.timeout.connect(_refresh_interaction_context)
 	if not OS.has_feature("mobile"):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_refresh_interaction_context()
 
 
 func _physics_process(delta: float) -> void:
 	_push_cooldown = maxf(0.0, _push_cooldown - delta)
+	_align_interaction_nodes()
+	_resolve_kick(delta)
 	var desktop := Input.get_vector(
 		"move_left",
 		"move_right",
@@ -146,25 +169,45 @@ func request_push() -> bool:
 		return false
 	_push_cooldown = 0.42
 	visual_root.trigger_push()
-	var direction := -camera_pivot.global_basis.z
-	direction.y = 0.0
-	direction = direction.normalized()
-	var origin := global_position + Vector3.UP * 0.82
-	var query := PhysicsRayQueryParameters3D.create(
-		origin,
-		origin + direction * 1.65,
-		1
-	)
-	query.exclude = [get_rid()]
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	var body := hit.get("collider") as RigidBody3D
-	if body == null:
-		push_performed.emit(false)
+	var hit := _perform_generic_push()
+	push_performed.emit(hit)
+	action_resolved.emit(ACTION_PUSH, hit)
+	return hit
+
+
+func request_context_action() -> bool:
+	if not controls_enabled or _push_cooldown > 0.0:
 		return false
-	body.sleeping = false
-	body.apply_central_impulse(direction * 2.4 + Vector3.UP * 0.28)
-	push_performed.emit(true)
-	return true
+	_refresh_interaction_context()
+	match _context_action:
+		ACTION_KICK:
+			return _begin_kick()
+		ACTION_TAKE:
+			return _take_context_object()
+		ACTION_THROW:
+			return _throw_held_object()
+		_:
+			return request_push()
+
+
+func get_context_action() -> StringName:
+	return _context_action
+
+
+func get_context_label() -> String:
+	match _context_action:
+		ACTION_KICK:
+			return "PATEAR"
+		ACTION_TAKE:
+			return "TOMAR"
+		ACTION_THROW:
+			return "LANZAR"
+		_:
+			return "EMPUJAR"
+
+
+func get_held_object() -> RigidBody3D:
+	return _held_object
 
 
 func add_touch_look(delta: Vector2) -> void:
@@ -186,6 +229,7 @@ func apply_external_push(direction: Vector3, force := 5.0) -> void:
 
 
 func reset_to_spawn() -> void:
+	_return_held_object_to_origin()
 	global_transform = _spawn_transform
 	velocity = Vector3.ZERO
 	_motor_velocity = Vector3.ZERO
@@ -260,8 +304,180 @@ func _update_foot_contacts() -> void:
 	)
 
 
+func _align_interaction_nodes() -> void:
+	interaction_ray.rotation.y = camera_pivot.rotation.y
+	held_item_anchor.rotation.y = camera_pivot.rotation.y
+
+
+func _refresh_interaction_context() -> void:
+	var next_action := ACTION_PUSH
+	var next_body: RigidBody3D
+	if is_instance_valid(_held_object):
+		next_action = ACTION_THROW
+	else:
+		_align_interaction_nodes()
+		interaction_ray.force_raycast_update()
+		next_body = interaction_ray.get_collider() as RigidBody3D
+		if next_body != null:
+			if next_body.is_in_group(&"kickable_ball"):
+				next_action = ACTION_KICK
+			elif next_body.is_in_group(&"pickup_stone"):
+				next_action = ACTION_TAKE
+	_context_body = next_body
+	if next_action == _context_action:
+		return
+	_context_action = next_action
+	interaction_changed.emit(get_context_label())
+
+
+func _begin_kick() -> bool:
+	if not is_instance_valid(_context_body):
+		return false
+	_push_cooldown = 0.52
+	_kick_target = _context_body
+	_kick_pending = true
+	_kick_elapsed = 0.0
+	_face_interaction_direction()
+	visual_root.trigger_kick()
+	return true
+
+
+func _resolve_kick(delta: float) -> void:
+	if not _kick_pending:
+		return
+	_kick_elapsed += delta
+	if _kick_elapsed < 0.18:
+		return
+	_kick_pending = false
+	_align_interaction_nodes()
+	interaction_ray.force_raycast_update()
+	var collider := interaction_ray.get_collider() as RigidBody3D
+	var hit := (
+		is_instance_valid(_kick_target)
+		and collider == _kick_target
+		and collider.is_in_group(&"kickable_ball")
+	)
+	if hit:
+		var direction := _get_interaction_direction()
+		collider.sleeping = false
+		collider.apply_central_impulse(
+			direction * 4.4 + Vector3.UP * 0.72
+		)
+	action_resolved.emit(ACTION_KICK, hit)
+	_kick_target = null
+	_refresh_interaction_context()
+
+
+func _take_context_object() -> bool:
+	var body := _context_body
+	if not is_instance_valid(body) or not body.is_in_group(&"pickup_stone"):
+		return false
+	_push_cooldown = 0.3
+	_held_object = body
+	_held_original_parent = body.get_parent()
+	_held_collision_layer = body.collision_layer
+	_held_collision_mask = body.collision_mask
+	body.freeze = true
+	body.linear_velocity = Vector3.ZERO
+	body.angular_velocity = Vector3.ZERO
+	body.collision_layer = 0
+	body.collision_mask = 0
+	body.reparent(held_item_anchor, false)
+	body.transform = Transform3D.IDENTITY
+	var object_label := body.get_node_or_null("ObjectLabel") as Label3D
+	if object_label != null:
+		object_label.hide()
+	visual_root.trigger_push()
+	action_resolved.emit(ACTION_TAKE, true)
+	_refresh_interaction_context()
+	return true
+
+
+func _throw_held_object() -> bool:
+	if not is_instance_valid(_held_object):
+		return false
+	_push_cooldown = 0.48
+	var body := _held_object
+	var world_transform := body.global_transform
+	body.reparent(_held_original_parent, true)
+	body.global_transform = world_transform
+	body.collision_layer = _held_collision_layer
+	body.collision_mask = _held_collision_mask
+	body.freeze = false
+	body.sleeping = false
+	body.linear_velocity = Vector3.ZERO
+	body.angular_velocity = Vector3.ZERO
+	var object_label := body.get_node_or_null("ObjectLabel") as Label3D
+	if object_label != null:
+		object_label.show()
+	var direction := _get_interaction_direction()
+	body.apply_central_impulse(direction * 2.2 + Vector3.UP * 0.62)
+	_held_object = null
+	_held_original_parent = null
+	visual_root.trigger_push()
+	action_resolved.emit(ACTION_THROW, true)
+	_refresh_interaction_context()
+	return true
+
+
+func _return_held_object_to_origin() -> void:
+	if not is_instance_valid(_held_object):
+		_held_object = null
+		_held_original_parent = null
+		return
+	var body := _held_object
+	body.reparent(_held_original_parent, true)
+	body.collision_layer = _held_collision_layer
+	body.collision_mask = _held_collision_mask
+	body.freeze = true
+	if body.has_meta(&"initial_transform"):
+		body.global_transform = body.get_meta(&"initial_transform")
+	body.linear_velocity = Vector3.ZERO
+	body.angular_velocity = Vector3.ZERO
+	var object_label := body.get_node_or_null("ObjectLabel") as Label3D
+	if object_label != null:
+		object_label.show()
+	body.freeze = false
+	_held_object = null
+	_held_original_parent = null
+	_refresh_interaction_context()
+
+
+func _perform_generic_push() -> bool:
+	_align_interaction_nodes()
+	interaction_ray.force_raycast_update()
+	var body := interaction_ray.get_collider() as RigidBody3D
+	if body == null:
+		return false
+	body.sleeping = false
+	body.apply_central_impulse(
+		_get_interaction_direction() * 2.4 + Vector3.UP * 0.28
+	)
+	return true
+
+
+func _get_interaction_direction() -> Vector3:
+	var direction := -camera_pivot.global_basis.z
+	direction.y = 0.0
+	if direction.length_squared() < 0.01:
+		return Vector3.FORWARD
+	return direction.normalized()
+
+
+func _face_interaction_direction() -> void:
+	var direction := _get_interaction_direction()
+	visual_root.rotation.y = atan2(direction.x, direction.z)
+
+
 func _push_contacted_rigid_bodies() -> void:
-	var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
+	# move_and_slide() removes the velocity component blocked by the contact.
+	# Use the motor intent retained by the controller so the contacted body
+	# still receives the force that the character tried to apply.
+	var horizontal_velocity := Vector3(
+		_motor_velocity.x + _external_velocity.x,
+		0.0,
+		_motor_velocity.z + _external_velocity.z
+	)
 	if horizontal_velocity.length_squared() < 0.16:
 		return
 	for index in get_slide_collision_count():
@@ -274,8 +490,20 @@ func _push_contacted_rigid_bodies() -> void:
 		if direction.length_squared() < 0.01:
 			continue
 		direction = direction.normalized()
-		var approach_speed := maxf(0.0, horizontal_velocity.dot(direction))
+		var body_velocity := Vector3(
+			body.linear_velocity.x,
+			0.0,
+			body.linear_velocity.z
+		)
+		var relative_velocity := horizontal_velocity - body_velocity
+		var approach_speed := maxf(0.0, relative_velocity.dot(direction))
 		if approach_speed <= 0.1:
 			continue
+		var effective_mass := 1.0 / (
+			1.0 / SCALE.CHARACTER_MASS
+			+ 1.0 / maxf(0.01, body.mass)
+		)
 		body.sleeping = false
-		body.apply_central_force(direction * minf(18.0, 4.0 + approach_speed * 2.2))
+		body.apply_central_impulse(
+			direction * approach_speed * effective_mass
+		)
