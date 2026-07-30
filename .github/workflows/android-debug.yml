@@ -91,6 +91,8 @@ jobs:
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/avatar_asset_test.gd
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/local_base_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/network_codec_test.gd
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/server_room_test.gd

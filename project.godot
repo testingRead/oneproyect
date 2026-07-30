@@ -51,6 +51,10 @@ jump={
 "deadzone": 0.3,
 "events": [Object(InputEventKey,"physical_keycode":32)]
 }
+sprint={
+"deadzone": 0.3,
+"events": [Object(InputEventKey,"physical_keycode":4194325)]
+}
 push={
 "deadzone": 0.3,
 "events": [Object(InputEventKey,"physical_keycode":69)]

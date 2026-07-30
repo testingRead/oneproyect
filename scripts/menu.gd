@@ -5,6 +5,7 @@ const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.g
 const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn")
 const LOADING_SCENE := preload("res://scenes/loading_screen.tscn")
 const GAME_SCENE := "res://scenes/main.tscn"
+const LOCAL_LAB_SCENE := "res://scenes/local/local_lab.tscn"
 const PROFILE_PATH := "user://profile.cfg"
 
 @onready var network: OneProjectNetwork = get_node("/root/Network")
@@ -267,7 +268,7 @@ func _play_local() -> void:
 	_save_name()
 	network.disconnect_session()
 	_loading_game = true
-	_show_loading("PREPARANDO PARTIDA LOCAL")
+	_show_loading(LOCAL_LAB_SCENE, "PREPARANDO BASE LOCAL")
 
 
 func _open_multiplayer() -> void:
@@ -412,13 +413,13 @@ func _on_room_started(_room_id: int) -> void:
 	_ready_button.disabled = true
 	_start_button.disabled = true
 	_waiting_detail.text = "Iniciando partida…"
-	_show_loading("SINCRONIZANDO MINIJUEGO")
+	_show_loading(GAME_SCENE, "SINCRONIZANDO MINIJUEGO")
 
 
-func _show_loading(status: String) -> void:
+func _show_loading(target_path: String, status: String) -> void:
 	var loading := LOADING_SCENE.instantiate() as OneProjectLoadingScreen
 	get_tree().root.add_child(loading)
-	loading.begin(GAME_SCENE, status)
+	loading.begin(target_path, status)
 
 
 func _on_room_error(reason: String) -> void:

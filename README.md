@@ -3,6 +3,29 @@
 Juego 3D de supervivencia a desastres para Android orientado a teléfonos de
 gama baja. Usa Godot 4.7.1, GDScript y el renderer Compatibility/OpenGL.
 
+## Base local en consolidación
+
+La ruta oficial de desarrollo es ahora una isla-laboratorio independiente del
+servidor. **JUGAR LOCAL** abre esa escena; desde CLI puede iniciarse sin crear
+siquiera el singleton de red:
+
+```bash
+godot --path . -- --local-development
+```
+
+La isla conserva un mundo físico de 150 × 150 m y cambia el área jugable entre
+30, 60 y 100 m reutilizando las mismas cuatro barreras. Incluye personaje
+estándar, regla vertical, puerta, plataforma, pendiente, plataforma móvil y
+tres objetos físicos de referencia. Sus medidas, auditoría y estado de
+aprobación están en:
+
+- [contrato de escala](docs/LOCAL_BASE_SCALE.md);
+- [auditoría A/B/C/D](docs/LOCAL_BASE_AUDIT.md);
+- [pruebas y capturas](docs/LOCAL_BASE_VALIDATION.md).
+
+La escena multijugador previa se conserva como integración heredada y no se
+ampliará hasta aprobar la locomoción, objetos y ronda local.
+
 ## Controles
 
 - Escritorio: WASD o flechas para moverse, ratón para cámara, Espacio para
@@ -55,8 +78,8 @@ La guía para añadir modos, mapas y personajes sin acoplarlos al núcleo está 
 
 ## Menú y multijugador de prueba
 
-El arranque muestra dos rutas separadas. **JUGAR LOCAL** abre la arena sin
-conectarse a ningún servidor. **MULTIJUGADOR** abre un lobby ENet/UDP con hasta
+El arranque muestra dos rutas separadas. **JUGAR LOCAL** abre la isla-laboratorio
+sin conectarse a ningún servidor. **MULTIJUGADOR** abre un lobby ENet/UDP con hasta
 cinco salas simultáneas de cinco personas cada una. El creador es el anfitrión
 de la sala y puede iniciar cuando hay entre dos y cinco jugadores y todos han
 marcado **LISTO**; si se desconecta, el siguiente jugador conectado hereda ese
