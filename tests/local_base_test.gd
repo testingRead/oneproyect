@@ -1,7 +1,7 @@
 extends SceneTree
 
 const SCALE := preload("res://shared/gameplay_scale.gd")
-const RUNTIME_MODE := preload("res://scripts/local/runtime_mode.gd")
+const BOOTSTRAP := preload("res://scripts/bootstrap.gd")
 const LAB_SCENE := preload("res://scenes/local/local_lab.tscn")
 const CHARACTER_SCENE := preload("res://scenes/local/base_character.tscn")
 
@@ -12,7 +12,7 @@ func _init() -> void:
 
 func _run() -> void:
 	_require(
-		RUNTIME_MODE.is_local_development(["--local-development"]),
+		BOOTSTRAP.is_local_development(["--local-development"]),
 		"LOCAL_DEVELOPMENT must have one explicit command-line switch"
 	)
 	_require(
