@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://scripts/local/base_character.gd" id="1_character"]
 [ext_resource type="Script" path="res://scripts/local/base_character_visual.gd" id="2_visual"]
@@ -57,6 +57,12 @@ rings = 4
 [sub_resource type="CapsuleShape3D" id="ShapeCharacter"]
 radius = 0.34
 height = 1.72
+
+[sub_resource type="SphereShape3D" id="ShapeInteractionContext"]
+radius = 0.42
+
+[sub_resource type="SphereShape3D" id="ShapeInteractionAction"]
+radius = 0.18
 
 [node name="CharacterRoot" type="CharacterBody3D"]
 collision_layer = 1
@@ -228,12 +234,24 @@ fov = 68.0
 near = 0.08
 far = 170.0
 
-[node name="InteractionRay" type="RayCast3D" parent="."]
-position = Vector3(0, 0.2, 0)
-target_position = Vector3(0, 0, -1.65)
+[node name="InteractionContext" type="ShapeCast3D" parent="."]
+position = Vector3(0, 0.34, 0)
+shape = SubResource("ShapeInteractionContext")
+target_position = Vector3(0, 0, -0.95)
 collision_mask = 1
 exclude_parent = true
+max_results = 8
+enabled = true
+
+[node name="InteractionAction" type="ShapeCast3D" parent="."]
+position = Vector3(0, 0.22, 0)
+shape = SubResource("ShapeInteractionAction")
+target_position = Vector3(0, 0, -0.85)
+collision_mask = 1
+exclude_parent = true
+max_results = 4
+enabled = true
 
 [node name="InteractionScan" type="Timer" parent="."]
-wait_time = 0.1
+wait_time = 0.08
 autostart = true

@@ -20,7 +20,8 @@ const ACTION_THROW := &"THROW"
 @onready var collision: CollisionShape3D = $Collision
 @onready var visual_root: BaseCharacterVisual = $VisualRoot
 @onready var camera_pivot: Node3D = $CameraPivot
-@onready var interaction_ray: RayCast3D = $InteractionRay
+@onready var interaction_context: ShapeCast3D = $InteractionContext
+@onready var interaction_action: ShapeCast3D = $InteractionAction
 @onready var interaction_scan: Timer = $InteractionScan
 @onready var held_item_anchor: Marker3D = $AnchorPoints/HeldItem
 
@@ -305,7 +306,8 @@ func _update_foot_contacts() -> void:
 
 
 func _align_interaction_nodes() -> void:
-	interaction_ray.rotation.y = camera_pivot.rotation.y
+	interaction_context.rotation.y = camera_pivot.rotation.y
+	interaction_action.rotation.y = camera_pivot.rotation.y
 	held_item_anchor.rotation.y = camera_pivot.rotation.y
 
 
@@ -316,8 +318,8 @@ func _refresh_interaction_context() -> void:
 		next_action = ACTION_THROW
 	else:
 		_align_interaction_nodes()
-		interaction_ray.force_raycast_update()
-		next_body = interaction_ray.get_collider() as RigidBody3D
+		interaction_context.force_shapecast_update()
+		next_body = _get_nearest_body(interaction_context)
 		if next_body != null:
 			if next_body.is_in_group(&"kickable_ball"):
 				next_action = ACTION_KICK
@@ -350,17 +352,16 @@ func _resolve_kick(delta: float) -> void:
 		return
 	_kick_pending = false
 	_align_interaction_nodes()
-	interaction_ray.force_raycast_update()
-	var collider := interaction_ray.get_collider() as RigidBody3D
+	interaction_action.force_shapecast_update()
 	var hit := (
 		is_instance_valid(_kick_target)
-		and collider == _kick_target
-		and collider.is_in_group(&"kickable_ball")
+		and _cast_contains(interaction_action, _kick_target)
+		and _kick_target.is_in_group(&"kickable_ball")
 	)
 	if hit:
 		var direction := _get_interaction_direction()
-		collider.sleeping = false
-		collider.apply_central_impulse(
+		_kick_target.sleeping = false
+		_kick_target.apply_central_impulse(
 			direction * 4.4 + Vector3.UP * 0.72
 		)
 	action_resolved.emit(ACTION_KICK, hit)
@@ -371,6 +372,10 @@ func _resolve_kick(delta: float) -> void:
 func _take_context_object() -> bool:
 	var body := _context_body
 	if not is_instance_valid(body) or not body.is_in_group(&"pickup_stone"):
+		return false
+	interaction_action.force_shapecast_update()
+	if not _cast_contains(interaction_action, body):
+		action_resolved.emit(ACTION_TAKE, false)
 		return false
 	_push_cooldown = 0.3
 	_held_object = body
@@ -445,8 +450,8 @@ func _return_held_object_to_origin() -> void:
 
 func _perform_generic_push() -> bool:
 	_align_interaction_nodes()
-	interaction_ray.force_raycast_update()
-	var body := interaction_ray.get_collider() as RigidBody3D
+	interaction_action.force_shapecast_update()
+	var body := _get_nearest_body(interaction_action)
 	if body == null:
 		return false
 	body.sleeping = false
@@ -469,6 +474,27 @@ func _face_interaction_direction() -> void:
 	visual_root.rotation.y = atan2(direction.x, direction.z)
 
 
+func _get_nearest_body(shape_cast: ShapeCast3D) -> RigidBody3D:
+	var nearest: RigidBody3D
+	var nearest_distance := INF
+	for index in shape_cast.get_collision_count():
+		var body := shape_cast.get_collider(index) as RigidBody3D
+		if body == null:
+			continue
+		var distance := global_position.distance_squared_to(body.global_position)
+		if distance < nearest_distance:
+			nearest = body
+			nearest_distance = distance
+	return nearest
+
+
+func _cast_contains(shape_cast: ShapeCast3D, target: RigidBody3D) -> bool:
+	for index in shape_cast.get_collision_count():
+		if shape_cast.get_collider(index) == target:
+			return true
+	return false
+
+
 func _push_contacted_rigid_bodies() -> void:
 	# move_and_slide() removes the velocity component blocked by the contact.
 	# Use the motor intent retained by the controller so the contacted body
@@ -484,6 +510,8 @@ func _push_contacted_rigid_bodies() -> void:
 		var collision_info := get_slide_collision(index)
 		var body := collision_info.get_collider() as RigidBody3D
 		if body == null:
+			continue
+		if body.is_in_group(&"pickup_stone"):
 			continue
 		var direction := -collision_info.get_normal()
 		direction.y = 0.0

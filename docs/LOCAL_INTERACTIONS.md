@@ -14,8 +14,9 @@ cuerpo congelado y velocidades en cero. Modelo y colisión conservan origen,
 escala uniforme y planta coincidentes.
 
 El personaje transfiere una fuerza limitada al caminar contra un objeto
-movible. Un único sondeo corto, orientado con la cámara, selecciona la acción
-contextual:
+movible. Dos `ShapeCast3D` orientados con la cámara seleccionan y confirman la
+acción. El primero es ancho y tolera la imprecisión táctil al decidir el texto;
+el segundo representa el alcance corto del pie o la mano:
 
 - **EMPUJAR** para cajas y cuerpos movibles genéricos;
 - **PATEAR** para el balón de 44 cm y 0,43 kg;
@@ -26,8 +27,11 @@ La patada no aplica el impulso al presionar el botón. Primero inicia su
 animación y vuelve a comprobar el contacto al pasar el pie; si el balón salió
 del sondeo, la patada falla. La piedra se congela y desactiva su colisión
 solamente mientras está equipada, y recupera su `RigidBody3D` al lanzarse.
-Las pruebas automatizadas cubren contacto al caminar, patada acertada, patada
-fallida, equipamiento, lanzamiento y restauración.
+La piedra pequeña tiene una excepción de colisión con su propietario: caminar
+no la empuja ni bloquea al personaje. Continúa chocando normalmente con el
+suelo y el mundo cuando se lanza. Las pruebas automatizadas cubren contacto al
+caminar, patada acertada, patada fallida, cambio visible del botón, piedra
+ignorada al caminar, equipamiento, lanzamiento y restauración.
 
 `CharacterBody3D` no expone masa ni transmite por sí mismo fuerza a un
 `RigidBody3D`. El contrato le asigna al personaje una masa de referencia de

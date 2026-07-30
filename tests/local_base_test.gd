@@ -72,7 +72,8 @@ func _run() -> void:
 		and player.has_node("CameraPivot")
 		and player.has_node("AnchorPoints/Feet")
 		and player.has_node("AnchorPoints/HeldItem")
-		and player.has_node("InteractionRay"),
+		and player.has_node("InteractionContext")
+		and player.has_node("InteractionAction"),
 		"Character must separate collision, visual, camera, anchors and interaction probe"
 	)
 	_require(
@@ -344,6 +345,28 @@ func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
 	lab.reset_lab()
 	await physics_frame
 	player.global_position = Vector3(
+		rock_reset.origin.x,
+		0.02,
+		rock_reset.origin.z + 1.1
+	)
+	player.velocity = Vector3.ZERO
+	player.set_touch_move(Vector2(0.0, -1.0))
+	for frame in 35:
+		await physics_frame
+	player.set_touch_move(Vector2.ZERO)
+	_require(
+		rock.global_position.distance_to(rock_reset.origin) < 0.025
+		and player.global_position.z < rock_reset.origin.z - 0.1,
+		"Walking must pass the small stone without kicking it (stone=%.3f player_z=%.3f)"
+		% [
+			rock.global_position.distance_to(rock_reset.origin),
+			player.global_position.z,
+		]
+	)
+
+	lab.reset_lab()
+	await physics_frame
+	player.global_position = Vector3(
 		ball_reset.origin.x,
 		0.02,
 		ball_reset.origin.z + 1.05
@@ -353,8 +376,9 @@ func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
 	for frame in 10:
 		await physics_frame
 	_require(
-		player.get_context_action() == LocalBaseCharacter.ACTION_KICK,
-		"Ball in front must change the contextual action to KICK"
+		player.get_context_action() == LocalBaseCharacter.ACTION_KICK
+		and lab.push_button.label == "PATEAR",
+		"Ball in front must change both action and visible button to PATEAR"
 	)
 	_require(player.request_context_action(), "Contextual kick must start")
 	for frame in 24:
@@ -394,14 +418,16 @@ func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
 	for frame in 10:
 		await physics_frame
 	_require(
-		player.get_context_action() == LocalBaseCharacter.ACTION_TAKE,
-		"Small stone in front must expose TAKE"
+		player.get_context_action() == LocalBaseCharacter.ACTION_TAKE
+		and lab.push_button.label == "TOMAR",
+		"Small stone in front must expose TAKE and visible TOMAR"
 	)
 	_require(
 		player.request_context_action()
 		and player.get_held_object() == rock
-		and player.get_context_action() == LocalBaseCharacter.ACTION_THROW,
-		"TAKE must equip the stone and switch the action to THROW"
+		and player.get_context_action() == LocalBaseCharacter.ACTION_THROW
+		and lab.push_button.label == "LANZAR",
+		"TAKE must equip the stone and switch action and button to LANZAR"
 	)
 	for frame in 22:
 		await physics_frame

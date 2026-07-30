@@ -263,7 +263,11 @@ func _on_action_resolved(action: StringName, hit: bool) -> void:
 				else "PATADA: fallaste; el balón no estaba frente al pie"
 			)
 		LocalBaseCharacter.ACTION_TAKE:
-			banner_progress.text = "PIEDRA EQUIPADA · pulsa LANZAR"
+			banner_progress.text = (
+				"PIEDRA EQUIPADA · pulsa LANZAR"
+				if hit
+				else "PIEDRA: acércate un poco más para tomarla"
+			)
 		LocalBaseCharacter.ACTION_THROW:
 			banner_progress.text = "PIEDRA LANZADA"
 		_:
@@ -419,6 +423,8 @@ func _build_test_course_once() -> void:
 		Vector3.ONE
 	)
 	rock.add_to_group(&"pickup_stone")
+	rock.add_collision_exception_with(player)
+	player.add_collision_exception_with(rock)
 	_add_object_label(rock, "PIEDRA · TOMAR / LANZAR", 0.55, Color(0.86, 0.9, 0.95))
 	var medium_box := _add_rigid_box(
 		content,
