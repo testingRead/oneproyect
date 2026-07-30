@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/local/local_lab.gd" id="1_lab"]
 [ext_resource type="PackedScene" path="res://scenes/local/base_character.tscn" id="2_character"]
@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/local/local_map_host.gd" id="7_map_host"]
 [ext_resource type="Script" path="res://scripts/local/local_event_host.gd" id="8_event_host"]
 [ext_resource type="Script" path="res://scripts/local/local_round_controller.gd" id="9_round"]
+[ext_resource type="Script" path="res://scripts/local/local_football_host.gd" id="10_football"]
 
 [sub_resource type="Environment" id="EnvironmentLab"]
 background_mode = 1
@@ -69,7 +70,33 @@ position = Vector3(0, 0.02, 8)
 [node name="RoundController" type="Node" parent="."]
 script = ExtResource("9_round")
 
+[node name="FootballHost" type="Node" parent="."]
+script = ExtResource("10_football")
+
 [node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Crosshair" type="Label" parent="HUD"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -18.0
+offset_top = -24.0
+offset_right = 18.0
+offset_bottom = 24.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 1, 1, 0.92)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 34
+text = "+"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="DiagnosticsPanel" type="PanelContainer" parent="HUD"]
 offset_left = 18.0

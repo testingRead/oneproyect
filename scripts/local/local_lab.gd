@@ -2,7 +2,7 @@ class_name LocalDevelopmentLab
 extends Node3D
 
 const SCALE := preload("res://shared/gameplay_scale.gd")
-const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/puesto_costero_local.tres")
+const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/campo_futbol_local.tres")
 
 @onready var player: LocalBaseCharacter = $World/CharacterRoot
 @onready var playable_area: LocalPlayableArea = $World/PlayableArea
@@ -18,8 +18,10 @@ const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/puesto_costero_l
 @onready var hand_button: TouchActionButton = $HUD/HandAction
 @onready var foot_button: TouchActionButton = $HUD/FootAction
 @onready var round_button: TouchActionButton = $HUD/Round
+@onready var crosshair: Label = $HUD/Crosshair
 @onready var map_host: LocalMapHost = $World/RoundContent/MapHost
 @onready var event_host: LocalEventHost = $World/RoundContent/EventHost
+@onready var football_host = $FootballHost
 @onready var round_controller: LocalRoundController = $RoundController
 
 var _area_index := 1
@@ -52,10 +54,12 @@ func _ready() -> void:
 		LAB_MAP,
 		map_host,
 		event_host,
+		football_host,
 		player,
 		playable_area
 	)
 	round_controller.phase_changed.connect(_on_round_phase_changed)
+	football_host.score_changed.connect(_on_football_score_changed)
 	event_host.event_warning.connect(_on_event_warning)
 	event_host.event_impact.connect(_on_event_impact)
 	playable_area.set_area_index(_area_index)
@@ -143,6 +147,7 @@ func get_diagnostics() -> Dictionary:
 		"event_pool": event_host.get_pool_size(),
 		"active_event_objects": event_host.get_active_count(),
 		"event_impacts": event_host.get_impact_count(),
+		"football_score": football_host.score,
 		"interaction_counts": get_interaction_counts(),
 		"shore_boundaries": get_tree().get_nodes_in_group(
 			&"island_shore_boundary"
@@ -180,6 +185,7 @@ func _on_round_phase_changed(
 	)
 	match next_phase:
 		LocalRoundController.Phase.IDLE:
+			crosshair.hide()
 			banner_title.text = "LABORATORIO LOCAL"
 			banner_detail.text = (
 				"Acércate y mira un objeto: el botón cambia de acción"
@@ -189,31 +195,49 @@ func _on_round_phase_changed(
 			)
 			_on_player_metrics(player.get_diagnostics())
 		LocalRoundController.Phase.PREPARE:
+			crosshair.show()
 			_round_warning_count = 0
 			_round_impact_count = 0
-			banner_title.text = "MONTANDO ARENA"
-			banner_detail.text = "Trasladando al personaje al escenario de prueba"
-			banner_progress.text = "Los objetos de la ronda se limpiarán al terminar"
+			banner_title.text = "MONTANDO CANCHA"
+			banner_detail.text = "Preparando el balón y la cámara en primera persona"
+			banner_progress.text = "Objetivo: marcar 3 goles"
 		LocalRoundController.Phase.RULES:
-			banner_title.text = "METEORITOS"
-			banner_detail.text = "Muévete y sal de los círculos rojos antes del impacto"
-			banner_progress.text = "Tres impactos · sin red · física local"
+			banner_title.text = "FÚTBOL · PRÁCTICA"
+			banner_detail.text = "Apunta con la mira y pulsa PATEAR cerca del balón"
+			banner_progress.text = "Marca 3 goles · física nativa · sin red"
 		LocalRoundController.Phase.COUNTDOWN:
 			banner_title.text = "PREPÁRATE · 3"
-			banner_detail.text = "Mira hacia la arena y localiza las advertencias"
+			banner_detail.text = "El arco está frente a ti"
 			banner_progress.text = "Los controles se activan al comenzar"
 		LocalRoundController.Phase.ACTIVE:
-			banner_title.text = "¡SOBREVIVE!"
-			banner_detail.text = "Evita cada círculo rojo"
-			banner_progress.text = "Advertencias 0/3 · impactos 0/3"
+			banner_title.text = "¡A JUGAR!"
+			banner_detail.text = "Acércate, apunta y patea"
+			banner_progress.text = "GOLES 0/3"
 		LocalRoundController.Phase.RESULT:
-			banner_title.text = "PRUEBA COMPLETADA"
-			banner_detail.text = "La física y los impactos se resolvieron localmente"
-			banner_progress.text = "Impactos observados %d/3" % _round_impact_count
+			crosshair.hide()
+			banner_title.text = (
+				"¡OBJETIVO COMPLETADO!"
+				if football_host.score >= football_host.target_score
+				else "TIEMPO TERMINADO"
+			)
+			banner_detail.text = "La cámara volverá a tercera persona"
+			banner_progress.text = (
+				"GOLES %d/%d"
+				% [football_host.score, football_host.target_score]
+			)
 		LocalRoundController.Phase.CLEANUP:
 			banner_title.text = "LIMPIANDO ESCENARIO"
 			banner_detail.text = "Eliminando mapa y restaurando objetos"
 			banner_progress.text = "La siguiente ronda parte del mismo estado"
+
+
+func _on_football_score_changed(score: int, target: int) -> void:
+	banner_progress.text = "GOLES %d/%d" % [score, target]
+	if score > 0 and score < target:
+		banner_detail.text = "¡GOL! El balón vuelve al punto de salida"
+	elif score >= target:
+		banner_title.text = "¡TRES GOLES!"
+		banner_detail.text = "Práctica completada"
 
 
 func _on_player_metrics(metrics: Dictionary) -> void:

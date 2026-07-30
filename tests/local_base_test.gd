@@ -70,12 +70,27 @@ func _run() -> void:
 		player.has_node("Collision")
 		and player.has_node("VisualRoot/Model")
 		and player.has_node("CameraPivot")
+		and player.has_node("CameraPivot/SpringArm/Camera")
 		and player.has_node("AnchorPoints/Feet")
 		and player.has_node("AnchorPoints/HeldItem")
 		and player.has_node("VisualRoot/Model/RightArmPivot/ItemSocket")
 		and player.has_node("InteractionContext")
 		and player.has_node("InteractionAction"),
 		"Character must separate collision, visual, camera, anchors and interaction probe"
+	)
+	player.set_first_person(true)
+	_require(
+		player.is_first_person()
+		and not player.visual_root.visible
+		and is_zero_approx(player.spring_arm.spring_length),
+		"First-person mode must hide only the representation and keep the controller"
+	)
+	player.set_first_person(false)
+	_require(
+		not player.is_first_person()
+		and player.visual_root.visible
+		and is_equal_approx(player.spring_arm.spring_length, 4.8),
+		"Third-person camera must restore its official distance exactly"
 	)
 	_require(
 		player.is_on_floor(),

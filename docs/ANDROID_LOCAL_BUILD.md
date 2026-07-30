@@ -13,22 +13,27 @@ El POCO X7 Pro ya funciona como worker ARM64 de validación:
   directamente con `grun`, sin proot;
 - el smoke test y la prueba ENet de tres procesos funcionan con la caché
   `.godot` importada.
+- el wrapper `tools/android-native` empaqueta los recursos sobre el AAR oficial
+  de Godot y produce un APK ARM64 firmado sin ejecutar el editor Linux.
 
 El runtime nativo con `grun` es estable y más rápido que proot. El
-editor/exportador Linux ARM64, en cambio, aborta en una liberación de memoria
-tanto con proot como con `grun`; tampoco llega a producir un PCK. Por tanto, el
-POCO ya es un worker útil para tests ARM64 paralelos, pero no se considera una
-ruta de exportación reproducible. GitHub Actions sigue exportando APK y servidor.
+editor/exportador Linux ARM64 todavía aborta en una liberación de memoria, por
+lo que no se usa. El wrapper Android evita por completo esa ruta: Gradle
+reutiliza sus cachés, ejecuta seis workers y empaqueta el proyecto como assets
+del AAR oficial de Godot 4.7.1.
 
 ## Conclusión
 
-Termux y TUR no empaquetan Godot, pero el binario Linux ARM64 oficial se ejecuta
-con `glibc-runner`. La ruta Android soportada para editar y exportar visualmente
-sigue siendo el **Editor Android de Godot 4.7.1**.
+La ruta reproducible principal del laboratorio es ahora Termux:
 
-El editor Android aún no está instalado en el POCO. Termux sí está preparado:
-Git funciona, `termux-open` está disponible, el almacenamiento compartido está
-montado y quedan aproximadamente 140 GiB libres.
+```sh
+cd "$HOME/projects/oneproyect/tools/android-native"
+./build-termux.sh
+```
+
+El resultado se valida por firma y ABI y se copia a
+`Downloads/oneproyect-android-native-local.apk`. ADB no interviene. El Editor
+Android de Godot sigue siendo una alternativa para iteración visual manual.
 
 ## Worker de pruebas
 
@@ -69,7 +74,7 @@ Godot 4.7 puede exportar un APK normal desde el editor Android sin JDK, Android
 SDK ni la aplicación GABE. GABE sólo es necesaria para una exportación Gradle;
 los dos presets del proyecto usan las plantillas APK precompiladas.
 
-## Exportar
+## Exportación visual alternativa
 
 1. Abrir **Project > Export**.
 2. Elegir `Android Debug ARM64` para el POCO.

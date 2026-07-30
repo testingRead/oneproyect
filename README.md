@@ -27,10 +27,11 @@ aprobación están en:
 - [contrato de interacciones](docs/LOCAL_INTERACTIONS.md).
 
 `ENTER` o **RONDA** ejecuta localmente preparar → reglas → cuenta regresiva →
-actividad → resultado → limpieza. La ronda candidata monta `puesto_costero`:
-un edificio transitable con techo, escalera exterior, mirador, patio y objetos
-físicos. Cuatro slots modulares varían refugio, puente, entrada y caja pesada
-por semilla. El evento de referencia reutiliza un pool fijo de tres meteoritos.
+actividad → resultado → limpieza. El primer minijuego monta
+`campo_futbol_local`: una cancha cerrada, un balón físico de masa declarada y
+un arco con detector de gol. La ronda usa primera persona y mira central sólo
+durante el juego, termina al marcar tres goles y vuelve al laboratorio en
+tercera persona sin conservar nodos ni señales de la cancha.
 La escena multijugador previa permanece congelada hasta aprobar esta experiencia
 local y añadir un NPC basado en el mismo personaje.
 

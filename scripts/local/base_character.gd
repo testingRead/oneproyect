@@ -20,6 +20,7 @@ const ACTION_THROW := &"THROW"
 @onready var collision: CollisionShape3D = $Collision
 @onready var visual_root: BaseCharacterVisual = $VisualRoot
 @onready var camera_pivot: Node3D = $CameraPivot
+@onready var spring_arm: SpringArm3D = $CameraPivot/SpringArm
 @onready var interaction_context: ShapeCast3D = $InteractionContext
 @onready var interaction_action: ShapeCast3D = $InteractionAction
 @onready var interaction_scan: Timer = $InteractionScan
@@ -49,10 +50,13 @@ var _held_object: RigidBody3D
 var _held_original_parent: Node
 var _held_collision_layer := 0
 var _held_collision_mask := 0
+var _first_person := false
+var _third_person_spring_length := 4.8
 
 
 func _ready() -> void:
 	_spawn_transform = global_transform
+	_third_person_spring_length = spring_arm.spring_length
 	floor_snap_length = SCALE.FLOOR_SNAP_DISTANCE
 	floor_stop_on_slope = true
 	floor_max_angle = deg_to_rad(46.0)
@@ -235,6 +239,18 @@ func get_hand_label() -> String:
 
 func get_held_object() -> RigidBody3D:
 	return _held_object
+
+
+func set_first_person(enabled: bool) -> void:
+	if _first_person == enabled:
+		return
+	_first_person = enabled
+	spring_arm.spring_length = 0.0 if enabled else _third_person_spring_length
+	visual_root.visible = not enabled
+
+
+func is_first_person() -> bool:
+	return _first_person
 
 
 func add_touch_look(delta: Vector2) -> void:

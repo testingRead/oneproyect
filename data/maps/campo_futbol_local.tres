@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="MinigameMapDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/minigames/map_definition.gd" id="1_map"]
+[ext_resource type="PackedScene" path="res://scenes/local/maps/football_field.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_map")
+map_id = &"campo_futbol_local"
+tags = PackedStringArray("common", "football", "first_person", "local_candidate")
+selection_weight = 1.0
+maximum_players = 5
+map_scene = ExtResource("2_scene")
+footprint = Vector2(22, 34)
+playable_area_index = 1
+boundary_policy = 0
+spawn_points = PackedVector3Array(0, 0.02, -9, -3, 0.02, -8, 3, 0.02, -8, -5, 0.02, -10, 5, 0.02, -10)
+safe_zone_centres = PackedVector3Array(0, 0.02, -9)
+event_points = PackedVector3Array(0, 0.23, -13, 0, 1.25, -35.45)
+navigation_points = PackedVector3Array(0, 0, -9, -7, 0, -20, 7, 0, -20, 0, 0, -30)
+available_objects = PackedStringArray("balon_futbol", "porteria", "vallas")
+compatible_disasters = PackedStringArray()
+compatible_minigames = PackedStringArray("futbol_practica", "penales")
+modular_slots = PackedStringArray()

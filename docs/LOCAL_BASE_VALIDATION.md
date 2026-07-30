@@ -13,8 +13,8 @@ en el dispositivo. Esta tabla es el corte reproducible del 2026-07-30.
 | Locomoción | Base aprobada | Caminar, salto, cámara, pendiente, empuje y plataforma probados táctilmente |
 | Límites | Candidata | Costa física permanente; 30/60/100 m son zonas lógicas con paredes internas opcionales |
 | Objetos | Base aprobada | Mano/pie independientes; patada con fallo real y piedra equipable/lanzable |
-| Mapa modular | Primer candidato | `puesto_costero` empaqueta escena, cinco spawns, elevación y cuatro variantes |
-| Evento de referencia | Candidato | Tres avisos rojos escalonados, meteoritos visibles, impacto, impulso y limpieza probados |
+| Mapa modular | Primer minijuego | `campo_futbol_local` empaqueta cancha, cinco spawns, portería y balón físico |
+| Evento de referencia | Conservado y aislado | El pool anterior no se ejecuta ni se mezcla con la práctica de fútbol |
 | Ronda local | Aprobada técnicamente | Ocho ciclos completos y una cancelación vuelven al conteo base sin residuos |
 | NPC | Pendiente | No implementado |
 | Reintegración multijugador | Bloqueada intencionalmente | Espera aprobación de las capas locales |
@@ -30,9 +30,9 @@ godot --path . -- --local-development
 Resultado actual en Linux y ARM64:
 
 ```text
-LOCAL_BASE_OK nodes=208 objects=5 run_speed=6.00
+LOCAL_BASE_OK nodes=210 objects=5 run_speed=6.00
 jump_height=1.41 area=30
-LOCAL_ROUND_OK repeats=8 pool=3 baseline_nodes=208 phases=7
+LOCAL_FOOTBALL_OK repeats=8 score=3 baseline_nodes=210 phases=7
 ```
 
 El salto objetivo es 1,35 m; la diferencia observada hasta 1,41 m corresponde
@@ -57,6 +57,5 @@ del POCO.
 - [10 fin de ronda limpio](validation/local_base/phase_character/10_fin_de_ronda_limpio.png)
 
 La captura 10 se toma después de un ciclo real acelerado. La prueba asociada
-verifica además que no queden mapas montados, meteoritos activos, objetos de
-ronda, señales repetidas ni temporizadores capaces de reactivar una ronda
-cancelada.
+verifica además que no queden mapas montados, balones, objetos de ronda,
+señales repetidas ni temporizadores capaces de reactivar una ronda cancelada.

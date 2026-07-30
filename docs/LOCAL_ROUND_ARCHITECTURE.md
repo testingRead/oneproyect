@@ -8,8 +8,10 @@ de decidir qué resultados necesitarán autoridad remota.
 
 - `MinigameMapDefinition`: datos inmutables del contenido; no ejecuta física.
 - `LocalMapHost`: monta una construcción para la semilla y la elimina completa.
-- `LocalEventHost`: conserva tres meteoritos y tres marcas de peligro
-  preasignados, los presenta de forma escalonada y los reutiliza.
+- `LocalEventHost`: conserva el evento físico de referencia anterior, aislado
+  y disponible para futuros modos de desastre.
+- `LocalFootballHost`: cuenta goles, restablece el balón y termina la práctica;
+  no crea geometría ni reemplaza la física nativa del balón.
 - `LocalRoundController`: único dueño de fases, tiempos, bloqueo de controles y
   limpieza.
 - `LocalBaseCharacter`: movimiento e impulsos inmediatos; desconoce mapas,
@@ -23,12 +25,11 @@ El mapa declara:
 - desastres y minijuegos compatibles;
 - nombres de slots modulares.
 
-La semilla convierte cada slot en una variante binaria reproducible.
-`puesto_costero` es el primer paquete candidato que proporciona una escena
-propia: edificio transitable, techo accesible por escalera, mirador, patio y
-cajas físicas. Sus slots controlan refugio lateral, puente de techo, entrada
-bloqueada y caja pesada. `LocalMapHost` instancia `map_scene` y sólo conserva
-el constructor anterior como fallback para definiciones sin escena. No existe
+La semilla sigue formando parte del contrato aunque el primer campo sea
+determinista. `campo_futbol_local` es el primer paquete de minijuego completo:
+escena propia, cinco puntos de aparición, cancha cerrada, portería y balón
+`RigidBody3D`. `LocalMapHost` instancia `map_scene` y sólo conserva el
+constructor anterior como fallback para definiciones sin escena. No existe
 generación procedural ambiciosa.
 
 ## Ciclo y limpieza
@@ -39,26 +40,26 @@ PREPARE → RULES → COUNTDOWN → ACTIVE → RESULT → CLEANUP → IDLE
 
 `stop_and_clean()` incrementa una generación interna. Todo temporizador viejo
 comprueba esa generación al despertar, por lo que una ronda cancelada no puede
-continuar ni reactivar contenido. La prueba ejecuta ocho rondas y una
-cancelación; todas deben mostrar tres advertencias y volver exactamente al
-mismo conteo de nodos.
+continuar ni reactivar contenido. La prueba marca tres goles en ocho rondas y
+ejecuta una cancelación; todas vuelven exactamente al mismo conteo de nodos y
+restauran la cámara en tercera persona.
 
 ## Autoridad futura
 
 - mapa, semilla, fase, daño decisivo y resultado: autoridad de sesión;
 - movimiento propietario: predicción local y corrección sólo cuando haga falta;
 - animación, audio, partículas y fragmentos: cada cliente;
-- meteorito lógico importante: autoridad;
-- modelo, estela y fragmentos del meteorito: local.
+- gol y resultado compartido: autoridad futura;
+- balón visual, animaciones, audio y mira: local.
 
 Esta clasificación documenta el destino futuro, pero el laboratorio sigue
 siendo completamente local hasta su aprobación en el POCO.
 
 La zona de evento no implica una pared. En la isla de referencia, la costa es
 el límite físico y el rectángulo 30/60/100 sólo dimensiona apariciones y reglas.
-Un modo cerrado, como fútbol o arena, puede optar explícitamente por
-`PHYSICAL_AREA`.
+Fútbol usa vallas visibles propias y no superpone una segunda pared invisible.
+Otro modo cerrado todavía puede optar explícitamente por `PHYSICAL_AREA`.
 
-La antigua inundación central no será la referencia futura. Un tsunami debe
-nacer fuera de la costa, atravesar la isla y consultar la huella del mapa; se
-implementará después de aprobar el meteorito y su limpieza.
+Los desastres permanecen fuera de este primer minijuego. Un tsunami futuro
+deberá nacer fuera de la costa, atravesar la isla y consultar la huella del
+mapa sin acoplarse al controlador de fútbol.

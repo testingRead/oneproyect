@@ -21,6 +21,7 @@ var round_seed := 0
 var map_definition: MinigameMapDefinition
 var map_host: LocalMapHost
 var event_host: LocalEventHost
+var football_host
 var player: LocalBaseCharacter
 var playable_area: LocalPlayableArea
 var _generation := 0
@@ -30,12 +31,14 @@ func configure(
 	definition: MinigameMapDefinition,
 	map_host_value: LocalMapHost,
 	event_host_value: LocalEventHost,
+	football_host_value,
 	player_value: LocalBaseCharacter,
 	playable_area_value: LocalPlayableArea
 ) -> void:
 	map_definition = definition
 	map_host = map_host_value
 	event_host = event_host_value
+	football_host = football_host_value
 	player = player_value
 	playable_area = playable_area_value
 
@@ -53,10 +56,13 @@ func stop_and_clean() -> void:
 	_generation += 1
 	if event_host != null:
 		event_host.stop_and_clean()
+	if football_host != null:
+		football_host.stop_and_clean()
 	if map_host != null:
 		map_host.unmount_map()
 	if player != null:
 		player.controls_enabled = true
+		player.set_first_person(false)
 		player.reset_to_spawn()
 	_transition(Phase.IDLE, 0.0)
 
@@ -75,6 +81,7 @@ func _run_round(generation: int) -> void:
 	)
 	player.controls_enabled = false
 	player.set_spawn_transform(map_host.get_spawn_transform(0))
+	player.set_first_person(_is_football_mode())
 	if not await _wait_phase(0.4, generation):
 		return
 	_transition(Phase.RULES, 1.4)
@@ -84,22 +91,35 @@ func _run_round(generation: int) -> void:
 	if not await _wait_phase(3.0, generation):
 		return
 	player.controls_enabled = true
-	_transition(Phase.ACTIVE, 9.0)
-	event_host.start_reference_event(
-		round_seed,
-		map_definition.event_points,
-		duration_multiplier
-	)
-	if not await _wait_phase(9.0, generation):
-		return
+	var active_duration := 30.0 if _is_football_mode() else 9.0
+	_transition(Phase.ACTIVE, active_duration)
+	if _is_football_mode():
+		var mounted_map := map_host.get_node_or_null("MountedMap") as Node3D
+		if not football_host.start_practice(mounted_map, duration_multiplier):
+			stop_and_clean()
+			return
+		if not await _wait_active(active_duration, generation):
+			return
+	else:
+		event_host.start_reference_event(
+			round_seed,
+			map_definition.event_points,
+			duration_multiplier
+		)
+		if not await _wait_phase(active_duration, generation):
+			return
 	player.controls_enabled = false
+	if _is_football_mode():
+		football_host.finish_practice()
 	_transition(Phase.RESULT, 1.5)
 	if not await _wait_phase(1.5, generation):
 		return
 	_transition(Phase.CLEANUP, 0.2)
 	event_host.stop_and_clean()
+	football_host.stop_and_clean()
 	map_host.unmount_map()
 	playable_area.set_physical_walls_enabled(false)
+	player.set_first_person(false)
 	player.set_spawn_transform(Transform3D(Basis.IDENTITY, Vector3(0.0, 0.02, 8.0)))
 	if not await _wait_phase(0.2, generation):
 		return
@@ -111,6 +131,25 @@ func _run_round(generation: int) -> void:
 func _wait_phase(seconds: float, generation: int) -> bool:
 	await get_tree().create_timer(seconds * duration_multiplier).timeout
 	return generation == _generation
+
+
+func _wait_active(seconds: float, generation: int) -> bool:
+	var deadline := (
+		Time.get_ticks_msec()
+		+ int(seconds * duration_multiplier * 1000.0)
+	)
+	while generation == _generation and Time.get_ticks_msec() < deadline:
+		if football_host != null and football_host.is_complete():
+			return true
+		await get_tree().physics_frame
+	return generation == _generation
+
+
+func _is_football_mode() -> bool:
+	return (
+		map_definition != null
+		and map_definition.supports_minigame(&"futbol_practica")
+	)
 
 
 func _transition(next_phase: Phase, seconds: float) -> void:
