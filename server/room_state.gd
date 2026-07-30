@@ -1,0 +1,516 @@
+class_name ServerRoomState
+extends Node
+
+signal phase_changed
+signal meteor_spawned(target: Vector3, drift: Vector2, damage: int, force: float)
+signal shockwave_started
+signal session_expired(player_id: int)
+signal standings_changed
+
+const NET := preload("res://shared/net_constants.gd")
+const CODEC := preload("res://shared/net_codec.gd")
+const SESSION_MANAGER_SCRIPT := preload("res://server/session_manager.gd")
+const WEAPONS := preload("res://shared/weapon_profiles.gd")
+const DIFFICULTY := preload("res://shared/difficulty_rules.gd")
+
+var room_id := 1
+var server_tick := 0
+var phase := NET.RoomPhase.WAITING
+var round_number := 0
+var round_seed := 1
+var phase_end_tick := 0
+var mode_id := NET.ModeId.METEORS
+var session_manager: Node
+var host_player_id := 0
+var auto_start_when_ready := false
+var total_rounds := NET.DEFAULT_MATCH_ROUNDS
+var match_finished := false
+var match_id := 0
+
+var _snapshot_buffers: Dictionary = {}
+var _random := RandomNumberGenerator.new()
+var _next_mode_event_tick := 0
+var resolved_shooter_player_id := 0
+var resolved_target_player_id := 0
+var resolved_hit_position := Vector3.ZERO
+var resolved_shot_damage := 0
+var resolved_weapon_id := 0
+var resolved_push_force := 0.0
+
+
+func _ready() -> void:
+	session_manager = SESSION_MANAGER_SCRIPT.new()
+	session_manager.name = "SessionManager"
+	session_manager.room_id = room_id
+	add_child(session_manager)
+	session_manager.session_expired.connect(session_expired.emit)
+	_random.seed = int(Time.get_unix_time_from_system()) ^ room_id
+	round_seed = int(_random.randi() & 0x7fffffff)
+	phase_end_tick = 0
+
+
+func tick() -> void:
+	server_tick += 1
+	if server_tick % NET.SERVER_TICK_RATE == 0:
+		session_manager.purge_expired(server_tick)
+	_refresh_host()
+	if (
+		phase == NET.RoomPhase.WAITING
+		and auto_start_when_ready
+		and session_manager.connected_count() >= NET.MIN_PLAYERS_TO_START
+	):
+		start_rounds(true)
+	if (
+		phase != NET.RoomPhase.WAITING
+		and phase_end_tick > 0
+		and server_tick >= phase_end_tick
+	):
+		_advance_phase()
+	if phase == NET.RoomPhase.ACTIVE:
+		_tick_mode_events()
+		if mode_id == NET.ModeId.DOMAIN:
+			_tick_domain()
+
+
+func build_snapshot() -> PackedByteArray:
+	return build_snapshot_for(0)
+
+
+func build_snapshot_for(recipient_player_id: int) -> PackedByteArray:
+	var recipient: RefCounted = session_manager.find_by_player_id(recipient_player_id)
+	var player_count: int = int(session_manager.connected_count())
+	if recipient != null and recipient.connected:
+		player_count -= 1
+	var buffer_key := recipient_player_id
+	if not _snapshot_buffers.has(buffer_key):
+		_snapshot_buffers[buffer_key] = CODEC.create_snapshot_buffer()
+	var snapshot_buffer: PackedByteArray = _snapshot_buffers[buffer_key]
+	snapshot_buffer.resize(CODEC.snapshot_size(player_count))
+	CODEC.write_snapshot_header(
+		snapshot_buffer,
+		phase,
+		player_count,
+		mode_id,
+		server_tick,
+		round_number,
+		round_seed,
+		phase_end_tick,
+		room_id,
+		recipient.last_state_sequence if recipient != null else 0
+	)
+	var slot := 0
+	for session: RefCounted in session_manager.sessions:
+		if not session.connected or session.player_id == recipient_player_id:
+			continue
+		CODEC.write_snapshot_player(
+			snapshot_buffer,
+			slot,
+			session.player_id,
+			session.player_flags(),
+			session.health,
+			session.last_state_sequence,
+			session.position,
+			session.velocity,
+			session.facing_yaw,
+			session.body_mask
+		)
+		slot += 1
+	_snapshot_buffers[buffer_key] = snapshot_buffer
+	return snapshot_buffer
+
+
+func apply_owned_state(peer_id: int, packet: PackedByteArray) -> bool:
+	var session: RefCounted = session_manager.find_by_peer_id(peer_id)
+	return (
+		session != null
+		and session.accept_owned_state(
+			packet,
+			server_tick,
+			phase == NET.RoomPhase.ACTIVE and mode_id == NET.ModeId.SHOOTER
+		)
+	)
+
+
+func release_player_cache(player_id: int) -> void:
+	_snapshot_buffers.erase(player_id)
+
+
+func apply_push(peer_id: int, target_player_id: int, direction: Vector3) -> bool:
+	var source: RefCounted = session_manager.find_by_peer_id(peer_id)
+	var target: RefCounted = session_manager.find_by_player_id(target_player_id)
+	if source == null or target == null or not target.connected or not target.active:
+		return false
+	var safe_direction := direction
+	safe_direction.y = 0.0
+	if not safe_direction.is_finite() or safe_direction.length_squared() < 0.01:
+		return false
+	safe_direction = safe_direction.normalized()
+	var offset: Vector3 = target.position - source.position
+	var horizontal_offset := Vector3(offset.x, 0.0, offset.z)
+	var is_bat_round := phase == NET.RoomPhase.ACTIVE and mode_id == NET.ModeId.DOMAIN
+	var maximum_range := 3.5 if is_bat_round else 3.0
+	var push_force := 10.5 if is_bat_round else 6.4
+	if horizontal_offset.length() > maximum_range:
+		return false
+	if horizontal_offset.normalized().dot(safe_direction) < 0.55:
+		return false
+	target.velocity.x += safe_direction.x * push_force
+	target.velocity.z += safe_direction.z * push_force
+	target.velocity.y = maxf(target.velocity.y, 3.1 if is_bat_round else 2.35)
+	resolved_push_force = push_force
+	return true
+
+
+func apply_shot(peer_id: int, origin: Vector3, direction: Vector3) -> bool:
+	if phase != NET.RoomPhase.ACTIVE or mode_id != NET.ModeId.SHOOTER:
+		return false
+	var source: RefCounted = session_manager.find_by_peer_id(peer_id)
+	if source == null or not source.connected or not source.active:
+		return false
+	var weapon_id: int = WEAPONS.from_round_seed(round_seed)
+	if server_tick < source.weapon_reload_until_tick:
+		return false
+	if server_tick - source.last_shot_tick < WEAPONS.cooldown_ticks(weapon_id):
+		return false
+	if (
+		not origin.is_finite()
+		or not direction.is_finite()
+		or direction.length_squared() < 0.5
+		or origin.distance_to(source.position) > 3.0
+	):
+		return false
+	var ray := direction.normalized()
+	var best_target: RefCounted
+	var best_distance: float = WEAPONS.maximum_range(weapon_id)
+	for candidate: RefCounted in session_manager.sessions:
+		if (
+			candidate == source
+			or not candidate.connected
+			or not candidate.active
+		):
+			continue
+		var target_center: Vector3 = candidate.position + Vector3(0.0, 0.4, 0.0)
+		var offset := target_center - origin
+		var distance_along := offset.dot(ray)
+		if distance_along <= 0.0 or distance_along >= best_distance:
+			continue
+		var closest := origin + ray * distance_along
+		if closest.distance_squared_to(target_center) > WEAPONS.hit_radius_squared(weapon_id):
+			continue
+		best_distance = distance_along
+		best_target = candidate
+	source.last_shot_tick = server_tick
+	source.weapon_shots += 1
+	if source.weapon_shots >= WEAPONS.magazine_size(weapon_id):
+		source.weapon_shots = 0
+		source.weapon_reload_until_tick = (
+			server_tick + ceili(WEAPONS.reload_seconds(weapon_id) * NET.SERVER_TICK_RATE)
+		)
+	resolved_shooter_player_id = source.player_id
+	resolved_target_player_id = 0
+	resolved_hit_position = origin + ray * 32.0
+	resolved_shot_damage = 0
+	resolved_weapon_id = weapon_id
+	if best_target == null:
+		return true
+	resolved_target_player_id = best_target.player_id
+	resolved_hit_position = origin + ray * best_distance
+	resolved_shot_damage = WEAPONS.damage(weapon_id, best_distance)
+	best_target.health = maxi(0, best_target.health - resolved_shot_damage)
+	best_target.active = best_target.health > 0
+	if not best_target.active:
+		standings_changed.emit()
+		var survivors := 0
+		for candidate: RefCounted in session_manager.sessions:
+			if candidate.connected and candidate.active:
+				survivors += 1
+		if survivors <= 1 and session_manager.connected_count() >= 2:
+			phase_end_tick = mini(phase_end_tick, server_tick + 1)
+	return true
+
+
+func seconds_left() -> float:
+	if phase == NET.RoomPhase.WAITING:
+		return 0.0
+	return maxf(
+		0.0,
+		float(phase_end_tick - server_tick) / float(NET.SERVER_TICK_RATE)
+	)
+
+
+func accepts_new_players() -> bool:
+	return (
+		phase == NET.RoomPhase.WAITING
+		and session_manager.sessions.size() < NET.MAX_PLAYERS_PER_ROOM
+	)
+
+
+func start_rounds(ignore_ready := false) -> bool:
+	if (
+		phase != NET.RoomPhase.WAITING
+		or session_manager.connected_count() < NET.MIN_PLAYERS_TO_START
+		or (not ignore_ready and not session_manager.all_connected_ready())
+	):
+		return false
+	round_number = 0
+	match_finished = false
+	match_id = int(_random.randi() & 0x7fffffff)
+	if match_id == 0:
+		match_id = 1
+	mode_id = _pick_next_mode(-1)
+	for session: RefCounted in session_manager.sessions:
+		session.score = 0
+		session.round_points = 0
+		session.prepare_next_round()
+	phase = NET.RoomPhase.COUNTDOWN
+	phase_end_tick = server_tick + 5 * NET.SERVER_TICK_RATE
+	phase_changed.emit()
+	return true
+
+
+func reopen_waiting_room() -> bool:
+	if phase != NET.RoomPhase.RESULT or not match_finished:
+		return false
+	phase = NET.RoomPhase.WAITING
+	round_number = 0
+	phase_end_tick = 0
+	match_finished = false
+	for session: RefCounted in session_manager.sessions:
+		session.ready = false
+		session.score = 0
+		session.round_points = 0
+		session.prepare_next_round()
+	phase_changed.emit()
+	return true
+
+
+func set_total_rounds(value: int) -> bool:
+	if phase != NET.RoomPhase.WAITING or value not in NET.MATCH_ROUND_OPTIONS:
+		return false
+	total_rounds = value
+	return true
+
+
+func standings() -> Array[RefCounted]:
+	var ranked: Array[RefCounted] = []
+	for session: RefCounted in session_manager.sessions:
+		ranked.append(session)
+	ranked.sort_custom(func(a: RefCounted, b: RefCounted) -> bool:
+		if a.score != b.score:
+			return a.score > b.score
+		if a.health != b.health:
+			return a.health > b.health
+		return a.player_id < b.player_id
+	)
+	return ranked
+
+
+func is_host_peer(peer_id: int) -> bool:
+	var session: RefCounted = session_manager.find_by_peer_id(peer_id)
+	return session != null and session.player_id == host_player_id
+
+
+func connected_count() -> int:
+	return session_manager.connected_count()
+
+
+func ready_count() -> int:
+	return session_manager.ready_count()
+
+
+func all_connected_ready() -> bool:
+	return session_manager.all_connected_ready()
+
+
+func host_name() -> String:
+	var host: RefCounted = session_manager.find_by_player_id(host_player_id)
+	return host.display_name if host != null else ""
+
+
+func _refresh_host() -> void:
+	var current: RefCounted = session_manager.find_by_player_id(host_player_id)
+	if current != null and current.connected:
+		return
+	host_player_id = 0
+	for session: RefCounted in session_manager.sessions:
+		if session.connected:
+			host_player_id = session.player_id
+			return
+
+
+func _advance_phase() -> void:
+	var publish_standings := false
+	match phase:
+		NET.RoomPhase.COUNTDOWN:
+			phase = NET.RoomPhase.ACTIVE
+			round_number += 1
+			phase_end_tick = server_tick + NET.mode_duration_ticks(mode_id)
+			_next_mode_event_tick = server_tick + 5
+		NET.RoomPhase.ACTIVE:
+			_score_round()
+			phase = NET.RoomPhase.RESULT
+			match_finished = round_number >= total_rounds
+			if match_finished:
+				_award_match_winner_profile()
+			publish_standings = true
+			phase_end_tick = (
+				0
+				if match_finished
+				else server_tick + 6 * NET.SERVER_TICK_RATE
+			)
+		_:
+			_prepare_next_round()
+			phase = NET.RoomPhase.COUNTDOWN
+			var previous_mode := mode_id
+			mode_id = _pick_next_mode(previous_mode)
+			round_seed = int(_random.randi() & 0x7fffffff)
+			phase_end_tick = server_tick + 5 * NET.SERVER_TICK_RATE
+	phase_changed.emit()
+	if publish_standings:
+		standings_changed.emit()
+
+
+func _pick_next_mode(previous_mode: int) -> int:
+	# Respect distinct player vetoes while preserving a useful rotation pool.
+	# When more modes are vetoed than we can honor, vote count wins and ties are
+	# shuffled by the room RNG.
+	var veto_counts := PackedInt32Array()
+	veto_counts.resize(NET.ModeId.size())
+	for session: RefCounted in session_manager.sessions:
+		if session.connected and session.excluded_mode_id >= 0:
+			veto_counts[session.excluded_mode_id] += 1
+	var voted_modes: Array[int] = []
+	for candidate in veto_counts.size():
+		if veto_counts[candidate] > 0:
+			voted_modes.append(candidate)
+	voted_modes.shuffle()
+	voted_modes.sort_custom(func(a: int, b: int) -> bool:
+		return veto_counts[a] > veto_counts[b]
+	)
+	var maximum_exclusions := maxi(0, NET.ModeId.size() - 3)
+	var excluded_modes: Dictionary = {}
+	for index in mini(maximum_exclusions, voted_modes.size()):
+		excluded_modes[voted_modes[index]] = true
+	var candidates := PackedInt32Array()
+	for candidate in NET.ModeId.size():
+		if not excluded_modes.has(candidate) and candidate != previous_mode:
+			candidates.append(candidate)
+	if candidates.is_empty():
+		for candidate in NET.ModeId.size():
+			if not excluded_modes.has(candidate):
+				candidates.append(candidate)
+	return candidates[_random.randi_range(0, candidates.size() - 1)]
+
+
+func _score_round() -> void:
+	var ranked: Array[RefCounted] = []
+	for session: RefCounted in session_manager.sessions:
+		session.round_points = 0
+		if session.connected and session.active and session.health > 0:
+			ranked.append(session)
+	ranked.sort_custom(func(a: RefCounted, b: RefCounted) -> bool:
+		if mode_id == NET.ModeId.DOMAIN and a.objective_ticks != b.objective_ticks:
+			return a.objective_ticks > b.objective_ticks
+		if a.health != b.health:
+			return a.health > b.health
+		return a.player_id < b.player_id
+	)
+	var previous_health := -1
+	var previous_objective := -1
+	var previous_points := 0
+	for index in ranked.size():
+		var session: RefCounted = ranked[index]
+		var points: int
+		if (
+			session.health == previous_health
+			and (
+				mode_id != NET.ModeId.DOMAIN
+				or session.objective_ticks == previous_objective
+			)
+		):
+			points = previous_points
+		else:
+			points = NET.ROUND_PLACE_POINTS[mini(index, NET.ROUND_PLACE_POINTS.size() - 1)]
+		previous_health = session.health
+		previous_objective = session.objective_ticks
+		previous_points = points
+		session.round_points = points
+		session.score += points
+		session.profile_experience += points
+
+
+func _award_match_winner_profile() -> void:
+	var ranked := standings()
+	if not ranked.is_empty():
+		ranked[0].profile_victories += 1
+
+
+func _prepare_next_round() -> void:
+	for session: RefCounted in session_manager.sessions:
+		session.prepare_next_round()
+
+
+func _tick_mode_events() -> void:
+	if server_tick < _next_mode_event_tick:
+		return
+	match mode_id:
+		NET.ModeId.METEORS:
+			var difficulty := DIFFICULTY.from_round_seed(round_seed)
+			var intensity := DIFFICULTY.intensity(difficulty)
+			var target_extent := (
+				33.0
+				if NET.mode_map_name(mode_id, round_seed) == "muelles_altos"
+				else 23.2
+			)
+			var target := Vector3(
+				_random.randf_range(-target_extent, target_extent),
+				0.06,
+				_random.randf_range(-target_extent, target_extent)
+			)
+			var drift := Vector2(
+				_random.randf_range(-1.1, 1.1),
+				_random.randf_range(-1.1, 1.1)
+			)
+			meteor_spawned.emit(
+				target,
+				drift * intensity,
+				roundi(22.0 * intensity),
+				10.5 * intensity
+			)
+			var meteor_min := 19 if difficulty == DIFFICULTY.Level.EASY else (
+				10 if difficulty == DIFFICULTY.Level.HARD else 15
+			)
+			var meteor_max := 34 if difficulty == DIFFICULTY.Level.EASY else (
+				21 if difficulty == DIFFICULTY.Level.HARD else 29
+			)
+			_next_mode_event_tick = server_tick + _random.randi_range(
+				meteor_min,
+				meteor_max
+			)
+		NET.ModeId.SHOCKWAVE:
+			var difficulty := DIFFICULTY.from_round_seed(round_seed)
+			shockwave_started.emit()
+			var interval_min := 65
+			var interval_max := 90
+			if difficulty == DIFFICULTY.Level.NORMAL:
+				interval_min = 50
+				interval_max = 68
+			elif difficulty == DIFFICULTY.Level.HARD:
+				interval_min = 38
+				interval_max = 50
+			_next_mode_event_tick = server_tick + _random.randi_range(
+				interval_min,
+				interval_max
+			)
+		_:
+			_next_mode_event_tick = phase_end_tick + 1
+
+
+func _tick_domain() -> void:
+	const RADIUS_SQUARED := 6.5 * 6.5
+	for session: RefCounted in session_manager.sessions:
+		if not session.connected or not session.active:
+			continue
+		var flat := Vector2(session.position.x, session.position.z)
+		if flat.length_squared() <= RADIUS_SQUARED:
+			session.objective_ticks += 1

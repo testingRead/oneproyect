@@ -1,0 +1,63 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/loading_screen.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/loading_arena.webp" id="2_background"]
+
+[node name="LoadingScreen" type="CanvasLayer"]
+layer = 100
+process_mode = 3
+script = ExtResource("1_script")
+
+[node name="Background" type="TextureRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("2_background")
+expand_mode = 1
+stretch_mode = 6
+mouse_filter = 2
+
+[node name="Overlay" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.015, 0.025, 0.045, 0.38)
+mouse_filter = 0
+
+[node name="Content" type="VBoxContainer" parent="Overlay"]
+layout_mode = 1
+anchors_preset = 12
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 120.0
+offset_top = -150.0
+offset_right = -120.0
+offset_bottom = -55.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/separation = 8
+
+[node name="Status" type="Label" parent="Overlay/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.76, 0.28, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.9)
+theme_override_font_sizes/font_size = 28
+text = "PREPARANDO PARTIDA"
+horizontal_alignment = 1
+
+[node name="Progress" type="ProgressBar" parent="Overlay/Content"]
+custom_minimum_size = Vector2(0, 18)
+layout_mode = 2
+show_percentage = false
+
+[node name="Detail" type="Label" parent="Overlay/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.88, 0.94, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.9)
+theme_override_font_sizes/font_size = 18
+text = "CARGANDO"
+horizontal_alignment = 1

@@ -1,0 +1,1093 @@
+[gd_scene load_steps=60 format=3]
+
+[ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
+[ext_resource type="Script" path="res://scripts/player.gd" id="2_player"]
+[ext_resource type="Script" path="res://scripts/virtual_joystick.gd" id="3_joystick"]
+[ext_resource type="Script" path="res://scripts/look_pad.gd" id="4_look"]
+[ext_resource type="Script" path="res://scripts/touch_action_button.gd" id="5_button"]
+[ext_resource type="Script" path="res://scripts/gameplay/disaster_controller.gd" id="6_disaster"]
+[ext_resource type="Script" path="res://scripts/gameplay/sound_bank.gd" id="7_sound"]
+[ext_resource type="Texture2D" path="res://assets/textures/plaza_concrete.webp" id="8_floor"]
+[ext_resource type="PackedScene" path="res://scenes/components/remote_avatar.tscn" id="10_avatar"]
+[ext_resource type="Script" path="res://scripts/gameplay/dismemberment_pool.gd" id="11_parts"]
+[ext_resource type="Script" path="res://scripts/minigames/meteor_minigame.gd" id="12_meteor_mode"]
+[ext_resource type="Script" path="res://scripts/minigames/shockwave_minigame.gd" id="13_shockwave_mode"]
+[ext_resource type="Script" path="res://scripts/minigames/flood_minigame.gd" id="14_flood_mode"]
+[ext_resource type="Script" path="res://scripts/minigames/mode_map_host.gd" id="15_map_host"]
+[ext_resource type="Resource" path="res://data/maps/plaza_caos.tres" id="16_plaza_map"]
+[ext_resource type="Script" path="res://scripts/features/experience_feature_host.gd" id="17_feature_host"]
+[ext_resource type="Script" path="res://scripts/visual/arena_enricher.gd" id="18_arena"]
+[ext_resource type="Script" path="res://scripts/minigames/shooter_minigame.gd" id="19_shooter_mode"]
+[ext_resource type="Resource" path="res://data/maps/campo_tiro.tres" id="20_shooter_map"]
+[ext_resource type="Script" path="res://scripts/features/shooter_controls_feature.gd" id="21_shooter_feature"]
+[ext_resource type="Script" path="res://scripts/minigames/domain_minigame.gd" id="22_domain_mode"]
+[ext_resource type="Resource" path="res://data/maps/nucleo_tactico.tres" id="23_domain_map"]
+[ext_resource type="Script" path="res://scripts/features/domain_tracker_feature.gd" id="24_domain_feature"]
+[ext_resource type="Script" path="res://scripts/minigames/drone_hunt_minigame.gd" id="25_drone_mode"]
+[ext_resource type="Resource" path="res://data/maps/deposito_drones.tres" id="26_drone_map"]
+[ext_resource type="Resource" path="res://data/maps/muelles_altos.tres" id="27_docks_map"]
+[ext_resource type="Script" path="res://scripts/features/bat_controls_feature.gd" id="28_bat_feature"]
+
+[sub_resource type="StandardMaterial3D" id="MatFloor"]
+albedo_texture = ExtResource("8_floor")
+roughness = 1.0
+uv1_scale = Vector3(1.3, 1.3, 1.3)
+
+[sub_resource type="BoxMesh" id="MeshFloor"]
+material = SubResource("MatFloor")
+size = Vector3(52, 0.5, 52)
+
+[sub_resource type="BoxShape3D" id="ShapeFloor"]
+size = Vector3(52, 0.5, 52)
+
+[sub_resource type="StandardMaterial3D" id="MatWall"]
+albedo_color = Color(0.14, 0.2, 0.27, 1)
+roughness = 0.92
+
+[sub_resource type="BoxMesh" id="MeshWall"]
+material = SubResource("MatWall")
+size = Vector3(52, 1.5, 0.55)
+
+[sub_resource type="BoxShape3D" id="ShapeWall"]
+size = Vector3(52, 1.5, 0.55)
+
+[sub_resource type="StandardMaterial3D" id="MatPlatform"]
+albedo_color = Color(0.18, 0.49, 0.57, 1)
+roughness = 0.88
+
+[sub_resource type="BoxMesh" id="MeshPlatform"]
+material = SubResource("MatPlatform")
+size = Vector3(6, 0.9, 6)
+
+[sub_resource type="BoxShape3D" id="ShapePlatform"]
+size = Vector3(6, 0.9, 6)
+
+[sub_resource type="BoxMesh" id="MeshStep"]
+material = SubResource("MatPlatform")
+size = Vector3(2.8, 0.38, 2)
+
+[sub_resource type="BoxShape3D" id="ShapeStep"]
+size = Vector3(2.8, 0.38, 2)
+
+[sub_resource type="StandardMaterial3D" id="MatShelter"]
+albedo_color = Color(0.96, 0.52, 0.13, 1)
+roughness = 0.83
+
+[sub_resource type="BoxMesh" id="MeshRoof"]
+material = SubResource("MatShelter")
+size = Vector3(4.6, 0.38, 4.6)
+
+[sub_resource type="BoxShape3D" id="ShapeRoof"]
+size = Vector3(4.6, 0.38, 4.6)
+
+[sub_resource type="CylinderMesh" id="MeshPillar"]
+material = SubResource("MatShelter")
+top_radius = 0.22
+bottom_radius = 0.3
+height = 2.8
+radial_segments = 8
+
+[sub_resource type="CylinderShape3D" id="ShapePillar"]
+radius = 0.3
+height = 2.8
+
+[sub_resource type="StandardMaterial3D" id="MatPlayer"]
+albedo_color = Color(0.15, 0.58, 0.96, 1)
+roughness = 0.84
+
+[sub_resource type="BoxMesh" id="MeshPlayerPart"]
+material = SubResource("MatPlayer")
+size = Vector3(1, 1, 1)
+
+[sub_resource type="CapsuleShape3D" id="ShapePlayer"]
+radius = 0.5
+height = 1.8
+
+[sub_resource type="BoxShape3D" id="ShapeHitTorso"]
+size = Vector3(0.82, 0.82, 0.54)
+
+[sub_resource type="BoxShape3D" id="ShapeHitHead"]
+size = Vector3(0.66, 0.62, 0.62)
+
+[sub_resource type="BoxShape3D" id="ShapeHitArm"]
+size = Vector3(0.3, 0.7, 0.4)
+
+[sub_resource type="BoxShape3D" id="ShapeHitHand"]
+size = Vector3(0.3, 0.28, 0.38)
+
+[sub_resource type="BoxShape3D" id="ShapeHitLeg"]
+size = Vector3(0.38, 0.82, 0.46)
+
+[sub_resource type="StandardMaterial3D" id="MatVisor"]
+albedo_color = Color(0.75, 0.94, 1, 1)
+roughness = 0.32
+
+[sub_resource type="BoxMesh" id="MeshVisor"]
+material = SubResource("MatVisor")
+size = Vector3(0.58, 0.26, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="MatAccessory"]
+albedo_color = Color(1, 0.78, 0.2, 1)
+roughness = 0.88
+
+[sub_resource type="CylinderMesh" id="MeshPlayerCap"]
+material = SubResource("MatAccessory")
+top_radius = 0.36
+bottom_radius = 0.48
+height = 0.18
+radial_segments = 8
+
+[sub_resource type="BoxMesh" id="MeshPlayerBackpack"]
+material = SubResource("MatAccessory")
+size = Vector3(0.55, 0.62, 0.18)
+
+[sub_resource type="Environment" id="EnvironmentMain"]
+background_mode = 1
+background_color = Color(0.075, 0.11, 0.16, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.67, 0.78, 0.92, 1)
+ambient_light_energy = 0.78
+reflected_light_source = 2
+tonemap_mode = 0
+
+[sub_resource type="Environment" id="EnvironmentPreview"]
+background_mode = 1
+background_color = Color(0.035, 0.05, 0.075, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.8, 0.88, 1, 1)
+ambient_light_energy = 1.35
+reflected_light_source = 2
+
+[node name="Main" type="Node3D"]
+script = ExtResource("1_game")
+
+[node name="World" type="Node3D" parent="."]
+process_mode = 1
+
+[node name="Environment" type="WorldEnvironment" parent="World"]
+environment = SubResource("EnvironmentMain")
+
+[node name="Sun" type="DirectionalLight3D" parent="World"]
+rotation_degrees = Vector3(-58, -32, 0)
+light_color = Color(1, 0.91, 0.78, 1)
+light_energy = 0.82
+shadow_enabled = false
+
+[node name="Arena" type="Node3D" parent="World"]
+script = ExtResource("18_arena")
+
+[node name="PlayerSpawn" type="Marker3D" parent="World/Arena" groups=["player_spawn"]]
+position = Vector3(0, 1.2, 8)
+
+[node name="Floor" type="StaticBody3D" parent="World/Arena"]
+position = Vector3(0, -0.25, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/Floor"]
+mesh = SubResource("MeshFloor")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/Floor"]
+shape = SubResource("ShapeFloor")
+
+[node name="NorthWall" type="StaticBody3D" parent="World/Arena"]
+position = Vector3(0, 0.75, -26)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/NorthWall"]
+mesh = SubResource("MeshWall")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/NorthWall"]
+shape = SubResource("ShapeWall")
+
+[node name="SouthWall" type="StaticBody3D" parent="World/Arena"]
+position = Vector3(0, 0.75, 26)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/SouthWall"]
+mesh = SubResource("MeshWall")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/SouthWall"]
+shape = SubResource("ShapeWall")
+
+[node name="EastWall" type="StaticBody3D" parent="World/Arena"]
+position = Vector3(26, 0.75, 0)
+rotation_degrees = Vector3(0, 90, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/EastWall"]
+mesh = SubResource("MeshWall")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/EastWall"]
+shape = SubResource("ShapeWall")
+
+[node name="WestWall" type="StaticBody3D" parent="World/Arena"]
+position = Vector3(-26, 0.75, 0)
+rotation_degrees = Vector3(0, 90, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/WestWall"]
+mesh = SubResource("MeshWall")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/WestWall"]
+shape = SubResource("ShapeWall")
+
+[node name="CenterPlatform" type="StaticBody3D" parent="World/Arena"]
+position = Vector3(0, 0.45, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/CenterPlatform"]
+mesh = SubResource("MeshPlatform")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/CenterPlatform"]
+shape = SubResource("ShapePlatform")
+
+[node name="NorthStep" type="StaticBody3D" parent="World/Arena"]
+position = Vector3(0, 0.19, -3.9)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/NorthStep"]
+mesh = SubResource("MeshStep")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/NorthStep"]
+shape = SubResource("ShapeStep")
+
+[node name="SouthStep" type="StaticBody3D" parent="World/Arena"]
+position = Vector3(0, 0.19, 3.9)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/SouthStep"]
+mesh = SubResource("MeshStep")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/SouthStep"]
+shape = SubResource("ShapeStep")
+
+[node name="EastStep" type="StaticBody3D" parent="World/Arena"]
+position = Vector3(3.9, 0.19, 0)
+rotation_degrees = Vector3(0, 90, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/EastStep"]
+mesh = SubResource("MeshStep")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/EastStep"]
+shape = SubResource("ShapeStep")
+
+[node name="WestStep" type="StaticBody3D" parent="World/Arena"]
+position = Vector3(-3.9, 0.19, 0)
+rotation_degrees = Vector3(0, 90, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/WestStep"]
+mesh = SubResource("MeshStep")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/WestStep"]
+shape = SubResource("ShapeStep")
+
+[node name="ShelterA" type="Node3D" parent="World/Arena"]
+position = Vector3(-8.3, 0, -7.8)
+
+[node name="Roof" type="StaticBody3D" parent="World/Arena/ShelterA"]
+position = Vector3(0, 2.75, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/ShelterA/Roof"]
+mesh = SubResource("MeshRoof")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/ShelterA/Roof"]
+shape = SubResource("ShapeRoof")
+
+[node name="PillarNW" type="StaticBody3D" parent="World/Arena/ShelterA"]
+position = Vector3(-1.8, 1.4, -1.8)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/ShelterA/PillarNW"]
+mesh = SubResource("MeshPillar")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/ShelterA/PillarNW"]
+shape = SubResource("ShapePillar")
+
+[node name="PillarSE" type="StaticBody3D" parent="World/Arena/ShelterA"]
+position = Vector3(1.8, 1.4, 1.8)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/ShelterA/PillarSE"]
+mesh = SubResource("MeshPillar")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/ShelterA/PillarSE"]
+shape = SubResource("ShapePillar")
+
+[node name="ShelterB" type="Node3D" parent="World/Arena"]
+position = Vector3(8.3, 0, 7.8)
+rotation_degrees = Vector3(0, 180, 0)
+
+[node name="Roof" type="StaticBody3D" parent="World/Arena/ShelterB"]
+position = Vector3(0, 2.75, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/ShelterB/Roof"]
+mesh = SubResource("MeshRoof")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/ShelterB/Roof"]
+shape = SubResource("ShapeRoof")
+
+[node name="PillarNW" type="StaticBody3D" parent="World/Arena/ShelterB"]
+position = Vector3(-1.8, 1.4, -1.8)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/ShelterB/PillarNW"]
+mesh = SubResource("MeshPillar")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/ShelterB/PillarNW"]
+shape = SubResource("ShapePillar")
+
+[node name="PillarSE" type="StaticBody3D" parent="World/Arena/ShelterB"]
+position = Vector3(1.8, 1.4, 1.8)
+
+[node name="Mesh" type="MeshInstance3D" parent="World/Arena/ShelterB/PillarSE"]
+mesh = SubResource("MeshPillar")
+cast_shadow = 0
+
+[node name="Collision" type="CollisionShape3D" parent="World/Arena/ShelterB/PillarSE"]
+shape = SubResource("ShapePillar")
+
+[node name="Player" type="CharacterBody3D" parent="World"]
+position = Vector3(0, 1.2, 8)
+collision_layer = 1
+collision_mask = 3
+script = ExtResource("2_player")
+
+[node name="Collision" type="CollisionShape3D" parent="World/Player"]
+shape = SubResource("ShapePlayer")
+
+[node name="Hitboxes" type="Node3D" parent="World/Player"]
+
+[node name="Torso" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(0, 0.31, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/Torso"]
+shape = SubResource("ShapeHitTorso")
+
+[node name="Head" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(0, 1.04, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/Head"]
+shape = SubResource("ShapeHitHead")
+
+[node name="LeftArm" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(-0.545, 0.295, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/LeftArm"]
+shape = SubResource("ShapeHitArm")
+
+[node name="RightArm" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(0.545, 0.295, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/RightArm"]
+shape = SubResource("ShapeHitArm")
+
+[node name="LeftHand" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(-0.545, -0.14, 0.02)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/LeftHand"]
+shape = SubResource("ShapeHitHand")
+
+[node name="RightHand" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(0.545, -0.14, 0.02)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/RightHand"]
+shape = SubResource("ShapeHitHand")
+
+[node name="LeftLeg" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(-0.19, -0.515, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/LeftLeg"]
+shape = SubResource("ShapeHitLeg")
+
+[node name="RightLeg" type="Area3D" parent="World/Player/Hitboxes"]
+position = Vector3(0.19, -0.515, 0)
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+
+[node name="Shape" type="CollisionShape3D" parent="World/Player/Hitboxes/RightLeg"]
+shape = SubResource("ShapeHitLeg")
+
+[node name="Visual" type="Node3D" parent="World/Player"]
+
+[node name="Body" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(0, 0.31, 0)
+scale = Vector3(0.76, 0.78, 0.44)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="Head" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(0, 1.04, 0)
+scale = Vector3(0.6, 0.56, 0.54)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="LeftArm" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(-0.545, 0.295, 0)
+scale = Vector3(0.23, 0.67, 0.32)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="RightArm" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(0.545, 0.295, 0)
+scale = Vector3(0.23, 0.67, 0.32)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="LeftHand" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(-0.545, -0.14, 0.02)
+scale = Vector3(0.22, 0.2, 0.3)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="RightHand" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(0.545, -0.14, 0.02)
+scale = Vector3(0.22, 0.2, 0.3)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="LeftLeg" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(-0.19, -0.515, 0)
+scale = Vector3(0.28, 0.77, 0.36)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="RightLeg" type="MeshInstance3D" parent="World/Player/Visual" groups=["quality_shadow"]]
+position = Vector3(0.19, -0.515, 0)
+scale = Vector3(0.28, 0.77, 0.36)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="Visor" type="MeshInstance3D" parent="World/Player/Visual"]
+position = Vector3(0, 1.03, 0.3)
+scale = Vector3(0.78, 0.7, 0.55)
+mesh = SubResource("MeshVisor")
+cast_shadow = 0
+
+[node name="Cap" type="MeshInstance3D" parent="World/Player/Visual"]
+position = Vector3(0, 1.43, 0)
+mesh = SubResource("MeshPlayerCap")
+cast_shadow = 0
+
+[node name="Backpack" type="MeshInstance3D" parent="World/Player/Visual"]
+visible = false
+position = Vector3(0, 0.35, -0.3)
+mesh = SubResource("MeshPlayerBackpack")
+cast_shadow = 0
+
+[node name="LeftEar" type="MeshInstance3D" parent="World/Player/Visual"]
+visible = false
+position = Vector3(-0.28, 1.43, 0)
+rotation_degrees = Vector3(0, 0, -18)
+scale = Vector3(0.14, 0.3, 0.13)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="RightEar" type="MeshInstance3D" parent="World/Player/Visual"]
+visible = false
+position = Vector3(0.28, 1.43, 0)
+rotation_degrees = Vector3(0, 0, 18)
+scale = Vector3(0.14, 0.3, 0.13)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="Tail" type="MeshInstance3D" parent="World/Player/Visual"]
+visible = false
+position = Vector3(0, 0.16, -0.58)
+rotation_degrees = Vector3(-48, 0, 0)
+scale = Vector3(0.13, 0.58, 0.13)
+mesh = SubResource("MeshPlayerPart")
+cast_shadow = 0
+
+[node name="CameraRig" type="Node3D" parent="World/Player"]
+position = Vector3(0, 0.68, 0)
+rotation = Vector3(-0.22, 0, 0)
+
+[node name="SpringArm" type="SpringArm3D" parent="World/Player/CameraRig"]
+spring_length = 5.8
+margin = 0.15
+collision_mask = 1
+
+[node name="Camera" type="Camera3D" parent="World/Player/CameraRig/SpringArm"]
+current = true
+fov = 70.0
+near = 0.1
+far = 112.0
+
+[node name="DisasterController" type="Node3D" parent="World"]
+script = ExtResource("6_disaster")
+
+[node name="MeteorMode" type="Node3D" parent="World/DisasterController"]
+script = ExtResource("12_meteor_mode")
+
+[node name="ShockwaveMode" type="Node3D" parent="World/DisasterController"]
+script = ExtResource("13_shockwave_mode")
+
+[node name="FloodMode" type="Node3D" parent="World/DisasterController"]
+script = ExtResource("14_flood_mode")
+
+[node name="ShooterMode" type="Node3D" parent="World/DisasterController"]
+script = ExtResource("19_shooter_mode")
+
+[node name="DomainMode" type="Node3D" parent="World/DisasterController"]
+script = ExtResource("22_domain_mode")
+
+[node name="DroneHuntMode" type="Node3D" parent="World/DisasterController"]
+script = ExtResource("25_drone_mode")
+
+[node name="ModeMapHost" type="Node3D" parent="World"]
+script = ExtResource("15_map_host")
+default_map_path = NodePath("../Arena")
+map_definitions = Array[Resource]([ExtResource("16_plaza_map"), ExtResource("20_shooter_map"), ExtResource("23_domain_map"), ExtResource("26_drone_map"), ExtResource("27_docks_map")])
+
+[node name="RemotePlayers" type="Node3D" parent="World"]
+
+[node name="DetachedParts" type="Node3D" parent="World"]
+script = ExtResource("11_parts")
+
+[node name="SoundBank" type="Node" parent="."]
+script = ExtResource("7_sound")
+
+[node name="ExperienceFeatureHost" type="Node" parent="."]
+script = ExtResource("17_feature_host")
+player_path = NodePath("../World/Player")
+world_path = NodePath("../World")
+hud_path = NodePath("../HUD")
+
+[node name="ShooterControls" type="Node" parent="ExperienceFeatureHost"]
+script = ExtResource("21_shooter_feature")
+
+[node name="DomainTracker" type="Node" parent="ExperienceFeatureHost"]
+script = ExtResource("24_domain_feature")
+
+[node name="BatControls" type="Node" parent="ExperienceFeatureHost"]
+script = ExtResource("28_bat_feature")
+
+[node name="Warning" type="AudioStreamPlayer" parent="SoundBank"]
+volume_db = -8.0
+max_polyphony = 3
+
+[node name="Impact" type="AudioStreamPlayer" parent="SoundBank"]
+volume_db = -5.0
+max_polyphony = 4
+
+[node name="Shockwave" type="AudioStreamPlayer" parent="SoundBank"]
+volume_db = -7.0
+
+[node name="Success" type="AudioStreamPlayer" parent="SoundBank"]
+volume_db = -6.0
+
+[node name="Shot" type="AudioStreamPlayer" parent="SoundBank"]
+volume_db = -7.0
+max_polyphony = 4
+
+[node name="HUD" type="CanvasLayer" parent="."]
+process_mode = 3
+
+[node name="LookPad" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 6
+anchor_left = 0.5
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 0
+grow_vertical = 2
+script = ExtResource("4_look")
+
+[node name="Joystick" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 3
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 32.0
+offset_top = -236.0
+offset_right = 236.0
+offset_bottom = -32.0
+grow_vertical = 0
+script = ExtResource("3_joystick")
+
+[node name="TouchDebug" type="Label" parent="HUD"]
+layout_mode = 3
+anchors_preset = 3
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 48.0
+offset_top = -276.0
+offset_right = 250.0
+offset_bottom = -244.0
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.75, 0.9, 1, 0.9)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.8)
+theme_override_font_sizes/font_size = 18
+text = "JOY  0.00  0.00"
+
+[node name="Jump" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -204.0
+offset_top = -204.0
+offset_right = -48.0
+offset_bottom = -48.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("5_button")
+
+[node name="Push" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -362.0
+offset_top = -174.0
+offset_right = -214.0
+offset_bottom = -48.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("5_button")
+label = "EMPUJAR"
+accent = Color(0.15, 0.72, 0.68, 0.88)
+
+[node name="Crouch" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -362.0
+offset_top = -310.0
+offset_right = -214.0
+offset_bottom = -184.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("5_button")
+label = "AGACHAR"
+accent = Color(0.28, 0.45, 0.78, 0.9)
+
+[node name="Shoot" type="Control" parent="HUD"]
+visible = false
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -522.0
+offset_top = -174.0
+offset_right = -374.0
+offset_bottom = -48.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("5_button")
+label = "DISPARAR"
+accent = Color(0.9, 0.2, 0.12, 0.92)
+
+[node name="Reload" type="Control" parent="HUD"]
+visible = false
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -522.0
+offset_top = -310.0
+offset_right = -374.0
+offset_bottom = -184.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("5_button")
+label = "RECARGAR"
+accent = Color(0.86, 0.56, 0.14, 0.9)
+
+[node name="TopBar" type="HBoxContainer" parent="HUD"]
+layout_mode = 3
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 18.0
+offset_top = 14.0
+offset_right = -18.0
+offset_bottom = 56.0
+grow_horizontal = 2
+theme_override_constants/separation = 12
+
+[node name="FPS" type="Label" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.76, 0.87, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "60 FPS  16.7 ms"
+
+[node name="Health" type="Label" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(145, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "VIDA  100/100"
+
+[node name="NetworkStatus" type="Label" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.76, 0.87, 1, 1)
+theme_override_font_sizes/font_size = 16
+text = "MODO LOCAL"
+
+[node name="Spacer" type="Control" parent="HUD/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Restart" type="Button" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(126, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "REINICIAR"
+
+[node name="Online" type="Button" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(124, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "CONECTAR"
+
+[node name="Pause" type="Button" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(106, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "PAUSA"
+
+[node name="RoundPanel" type="VBoxContainer" parent="HUD"]
+layout_mode = 3
+anchors_preset = 10
+anchor_left = 0.26
+anchor_right = 0.74
+offset_top = 65.0
+offset_bottom = 176.0
+grow_horizontal = 2
+theme_override_constants/separation = 0
+
+[node name="Title" type="Label" parent="HUD/RoundPanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.76, 0.24, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.9)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 30
+text = "PRÓXIMO DESASTRE"
+horizontal_alignment = 1
+
+[node name="Clock" type="Label" parent="HUD/RoundPanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.9)
+theme_override_font_sizes/font_size = 28
+text = "05"
+horizontal_alignment = 1
+
+[node name="Detail" type="Label" parent="HUD/RoundPanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.84, 0.93, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
+theme_override_font_sizes/font_size = 18
+text = "Busca altura y mira las marcas del suelo"
+horizontal_alignment = 1
+
+[node name="Score" type="Label" parent="HUD/RoundPanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.58, 0.88, 1, 0.92)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.85)
+theme_override_font_sizes/font_size = 16
+text = "RONDAS  0   ·   RÉCORD  0"
+horizontal_alignment = 1
+
+[node name="DamageFlash" type="ColorRect" parent="HUD"]
+visible = false
+z_index = 40
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 0.06, 0.02, 0)
+
+[node name="MatchResult" type="ColorRect" parent="HUD"]
+visible = false
+z_index = 45
+layout_mode = 3
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -330.0
+offset_top = -245.0
+offset_right = 330.0
+offset_bottom = 245.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.025, 0.04, 0.065, 0.96)
+
+[node name="Content" type="VBoxContainer" parent="HUD/MatchResult"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 30.0
+offset_top = 24.0
+offset_right = -30.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="HUD/MatchResult/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.78, 0.26, 1)
+theme_override_font_sizes/font_size = 32
+text = "RESULTADO FINAL"
+horizontal_alignment = 1
+
+[node name="Standings" type="Label" parent="HUD/MatchResult/Content"]
+custom_minimum_size = Vector2(0, 220)
+layout_mode = 2
+theme_override_font_sizes/font_size = 19
+text = "Clasificación"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Reward" type="Label" parent="HUD/MatchResult/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.45, 0.95, 0.78, 1)
+theme_override_font_sizes/font_size = 18
+text = "Progreso guardado"
+horizontal_alignment = 1
+
+[node name="Actions" type="HBoxContainer" parent="HUD/MatchResult/Content"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ReturnRoom" type="Button" parent="HUD/MatchResult/Content/Actions"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 19
+text = "VOLVER A LA SALA"
+
+[node name="Exit" type="Button" parent="HUD/MatchResult/Content/Actions"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 19
+text = "SALIR"
+
+[node name="PausePanel" type="ColorRect" parent="HUD"]
+visible = false
+z_index = 50
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.02, 0.025, 0.035, 0.88)
+mouse_filter = 0
+
+[node name="Center" type="VBoxContainer" parent="HUD/PausePanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -360.0
+offset_top = -300.0
+offset_right = -20.0
+offset_bottom = 300.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="HUD/PausePanel/Center"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "MENÚ Y AJUSTES"
+horizontal_alignment = 1
+
+[node name="NameLabel" type="Label" parent="HUD/PausePanel/Center"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.86, 1, 1)
+theme_override_font_sizes/font_size = 17
+text = "NOMBRE DEL JUGADOR"
+horizontal_alignment = 1
+
+[node name="NameInput" type="LineEdit" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+placeholder_text = "TU NOMBRE"
+text = "Jugador"
+max_length = 16
+alignment = 1
+
+[node name="SettingsRow" type="HBoxContainer" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 46)
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Sound" type="CheckButton" parent="HUD/PausePanel/Center/SettingsRow"]
+custom_minimum_size = Vector2(160, 46)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+button_pressed = true
+text = "SONIDO"
+
+[node name="Vibration" type="CheckButton" parent="HUD/PausePanel/Center/SettingsRow"]
+custom_minimum_size = Vector2(160, 46)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+button_pressed = true
+text = "VIBRACIÓN"
+
+[node name="Camera" type="Button" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "CÁMARA: TERCERA PERSONA"
+
+[node name="SensitivityRow" type="HBoxContainer" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="HUD/PausePanel/Center/SensitivityRow"]
+custom_minimum_size = Vector2(108, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "SENSIBILIDAD"
+vertical_alignment = 1
+
+[node name="Slider" type="HSlider" parent="HUD/PausePanel/Center/SensitivityRow"]
+custom_minimum_size = Vector2(154, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.5
+max_value = 2.0
+step = 0.1
+value = 1.0
+
+[node name="Value" type="Label" parent="HUD/PausePanel/Center/SensitivityRow"]
+custom_minimum_size = Vector2(52, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "1.0x"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="Quality" type="OptionButton" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+
+[node name="FPSLimit" type="OptionButton" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+
+[node name="Resume" type="Button" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "CONTINUAR"
+
+[node name="Restart" type="Button" parent="HUD/PausePanel/Center"]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "REINICIAR"
+
+[node name="PreviewPanel" type="VBoxContainer" parent="HUD/PausePanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = 20.0
+offset_top = -236.0
+offset_right = 370.0
+offset_bottom = 236.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="HUD/PausePanel/PreviewPanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.86, 1, 1)
+theme_override_font_sizes/font_size = 20
+text = "PERSONAJE"
+horizontal_alignment = 1
+
+[node name="ViewportContainer" type="SubViewportContainer" parent="HUD/PausePanel/PreviewPanel"]
+custom_minimum_size = Vector2(350, 310)
+layout_mode = 2
+stretch = true
+mouse_filter = 2
+
+[node name="Viewport" type="SubViewport" parent="HUD/PausePanel/PreviewPanel/ViewportContainer"]
+transparent_bg = true
+size = Vector2i(350, 310)
+render_target_update_mode = 2
+own_world_3d = true
+
+[node name="Environment" type="WorldEnvironment" parent="HUD/PausePanel/PreviewPanel/ViewportContainer/Viewport"]
+environment = SubResource("EnvironmentPreview")
+
+[node name="Avatar" parent="HUD/PausePanel/PreviewPanel/ViewportContainer/Viewport" instance=ExtResource("10_avatar")]
+position = Vector3(0, -0.15, 0)
+
+[node name="Camera" type="Camera3D" parent="HUD/PausePanel/PreviewPanel/ViewportContainer/Viewport"]
+position = Vector3(0, 0.45, 3.5)
+current = true
+fov = 35.0
+
+[node name="Character" type="OptionButton" parent="HUD/PausePanel/PreviewPanel"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+
+[node name="UnlockHint" type="Label" parent="HUD/PausePanel/PreviewPanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.78, 0.3, 1)
+theme_override_font_sizes/font_size = 16
+text = "DORADO: 5 VICTORIAS"
+horizontal_alignment = 1

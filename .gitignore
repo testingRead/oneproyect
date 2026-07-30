@@ -1,5 +1,5 @@
 .godot/
+__pycache__/
 build/
 *.apk
 *.aab
-

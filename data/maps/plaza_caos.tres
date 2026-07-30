@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="MinigameMapDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/minigames/map_definition.gd" id="1_map"]
+
+[resource]
+script = ExtResource("1_map")
+map_id = &"plaza_caos"
+tags = PackedStringArray("common", "survival", "open_sky", "elevation", "overhead_spectator")
+selection_weight = 1.0
+maximum_players = 5

@@ -1,0 +1,513 @@
+name: Android debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - agent/graybox
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-debug-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.7.1"
+  GODOT_STATUS: "stable"
+  GODOT_BINARY_SHA256: "c7ff14fd28472c8d4f193043de30278dcf7e5241a1dcf7566b02e27addaa33ba"
+  GODOT_TEMPLATES_SHA256: "86409db6200b6f8fd3230989c2d2002851f3dd18acf11d7bdbafddf5a0dd0f72"
+
+jobs:
+  build:
+    name: Export debug APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache pinned Godot tools
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/oneproyect-godot
+            ~/.local/share/godot/export_templates/4.7.1.stable
+          key: godot-linux-4.7.1-stable-v1
+
+      - name: Install pinned Godot editor and templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIST_DIR="$HOME/.cache/oneproyect-godot"
+          TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}"
+          RELEASE="${GODOT_VERSION}-${GODOT_STATUS}"
+          BINARY_ZIP="Godot_v${RELEASE}_linux.x86_64.zip"
+          TEMPLATE_TPZ="Godot_v${RELEASE}_export_templates.tpz"
+          BASE_URL="https://github.com/godotengine/godot-builds/releases/download/${RELEASE}"
+          mkdir -p "$DIST_DIR" "$TEMPLATE_DIR"
+
+          if [[ ! -x "$DIST_DIR/godot" ]]; then
+            curl --fail --location --retry 3 --output "$DIST_DIR/$BINARY_ZIP" "$BASE_URL/$BINARY_ZIP"
+            echo "${GODOT_BINARY_SHA256}  $DIST_DIR/$BINARY_ZIP" | sha256sum --check -
+            unzip -q -o "$DIST_DIR/$BINARY_ZIP" -d "$DIST_DIR/unpacked"
+            mv "$DIST_DIR/unpacked/Godot_v${RELEASE}_linux.x86_64" "$DIST_DIR/godot"
+            chmod +x "$DIST_DIR/godot"
+            rm -r "$DIST_DIR/unpacked"
+          fi
+
+          if [[ ! -f "$TEMPLATE_DIR/android_debug.apk" ]]; then
+            curl --fail --location --retry 3 --output "$DIST_DIR/$TEMPLATE_TPZ" "$BASE_URL/$TEMPLATE_TPZ"
+            echo "${GODOT_TEMPLATES_SHA256}  $DIST_DIR/$TEMPLATE_TPZ" | sha256sum --check -
+            mkdir -p "$DIST_DIR/templates-unpacked"
+            unzip -q -o "$DIST_DIR/$TEMPLATE_TPZ" -d "$DIST_DIR/templates-unpacked"
+            cp -a "$DIST_DIR/templates-unpacked/templates/." "$TEMPLATE_DIR/"
+            rm -r "$DIST_DIR/templates-unpacked"
+          fi
+
+          "$DIST_DIR/godot" --version
+
+      - name: Import and validate project
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$HOME/.cache/oneproyect-godot/godot" --headless --editor --path "$GITHUB_WORKSPACE" --quit
+
+      - name: Run gameplay smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT="$HOME/.cache/oneproyect-godot/godot"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/avatar_asset_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/local_base_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/local_round_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/network_codec_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/server_room_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/server_capacity_benchmark.gd \
+            > "$RUNNER_TEMP/oneproyect-capacity.log"
+          grep -q "SERVER_CAPACITY rooms=50 players=250" \
+            "$RUNNER_TEMP/oneproyect-capacity.log"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/server_memory_benchmark.gd \
+            > "$RUNNER_TEMP/oneproyect-memory.log"
+          grep -q "SERVER_MEMORY rooms=100 players=500" \
+            "$RUNNER_TEMP/oneproyect-memory.log"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/minigame_capacity_benchmark.gd \
+            > "$RUNNER_TEMP/oneproyect-minigames.log"
+          grep -q "MINIGAME_CAPACITY workload=shooter rooms=20 players=100" \
+            "$RUNNER_TEMP/oneproyect-minigames.log"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/menu_smoke_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/smoke_test.gd
+          set +e
+          timeout 3 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            > "$RUNNER_TEMP/oneproyect-boot.log" 2>&1
+          boot_code=$?
+          set -e
+          test "$boot_code" -eq 124
+          if grep -qE "SCRIPT ERROR|ERROR:|Parse Error" "$RUNNER_TEMP/oneproyect-boot.log"; then
+            cat "$RUNNER_TEMP/oneproyect-boot.log"
+            exit 1
+          fi
+
+      - name: Verify ENet relay and reconnection
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT="$HOME/.cache/oneproyect-godot/godot"
+          SERVER_LOG="$RUNNER_TEMP/oneproyect-server.log"
+          HOST_LOG="$RUNNER_TEMP/oneproyect-host.log"
+          OBSERVER_LOG="$RUNNER_TEMP/oneproyect-observer.log"
+
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" -- --server > "$SERVER_LOG" 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          for attempt in {1..40}; do
+            if grep -q "ONEPROYECT_SERVER_READY" "$SERVER_LOG"; then
+              break
+            fi
+            sleep 0.25
+          done
+          grep -q "ONEPROYECT_SERVER_READY" "$SERVER_LOG"
+          grep -q "SERVER_TREE_OK" "$SERVER_LOG"
+
+          timeout 20 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/network_probe.gd -- --role=observer > "$OBSERVER_LOG" 2>&1 &
+          observer_pid=$!
+          sleep 0.8
+          timeout 20 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/network_probe.gd -- --role=host > "$HOST_LOG" 2>&1 &
+          host_pid=$!
+          set +e
+          wait "$host_pid"
+          host_code=$?
+          wait "$observer_pid"
+          observer_code=$?
+          set -e
+          if [[ "$host_code" -ne 0 || "$observer_code" -ne 0 ]]; then
+            cat "$SERVER_LOG" "$HOST_LOG" "$OBSERVER_LOG"
+            exit 1
+          fi
+
+          grep -q "NETWORK_PROBE_OK role=host" "$HOST_LOG"
+          grep -q "NETWORK_PROBE_OK role=observer" "$OBSERVER_LOG"
+          grep -q "SESSION_ACCEPTED" "$SERVER_LOG"
+          grep -q "reconnect=true" "$SERVER_LOG"
+          for attempt in {1..60}; do
+            if grep -q "SERVER_METRICS" "$SERVER_LOG"; then
+              break
+            fi
+            sleep 0.1
+          done
+          grep -q "SERVER_METRICS" "$SERVER_LOG"
+          if grep -qE "SCRIPT ERROR|NETWORK_PROBE_FAIL|Invalid packet|ERROR:" \
+            "$SERVER_LOG" "$HOST_LOG" "$OBSERVER_LOG"; then
+            cat "$SERVER_LOG" "$HOST_LOG" "$OBSERVER_LOG"
+            exit 1
+          fi
+
+      - name: Verify multiplayer lobby and room start rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT="$HOME/.cache/oneproyect-godot/godot"
+          TEST_DIR="$RUNNER_TEMP/oneproyect-lobby"
+          mkdir -p "$TEST_DIR"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" -- \
+            --server --port=19996 > "$TEST_DIR/server.log" 2>&1 &
+          server_pid=$!
+          cleanup_lobby() {
+            kill "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup_lobby EXIT
+          for attempt in {1..40}; do
+            if grep -q "ONEPROYECT_SERVER_READY udp=19996" "$TEST_DIR/server.log"; then
+              break
+            fi
+            sleep 0.25
+          done
+          grep -q "ONEPROYECT_SERVER_READY udp=19996" "$TEST_DIR/server.log"
+
+          timeout 15 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/lobby_probe.gd -- \
+            --role=joiner --port=19996 > "$TEST_DIR/joiner.log" 2>&1 &
+          joiner_pid=$!
+          sleep 0.5
+          timeout 15 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/lobby_probe.gd -- \
+            --role=host --port=19996 > "$TEST_DIR/host.log" 2>&1 &
+          host_pid=$!
+          set +e
+          wait "$host_pid"
+          host_code=$?
+          wait "$joiner_pid"
+          joiner_code=$?
+          set -e
+          if [[ "$host_code" -ne 0 || "$joiner_code" -ne 0 ]]; then
+            cat "$TEST_DIR/server.log" "$TEST_DIR/host.log" "$TEST_DIR/joiner.log"
+            exit 1
+          fi
+          grep -q "LOBBY_PROBE_OK role=host" "$TEST_DIR/host.log"
+          grep -q "LOBBY_PROBE_OK role=joiner" "$TEST_DIR/joiner.log"
+          if grep -qE "SCRIPT ERROR|LOBBY_PROBE_FAIL|ERROR:" "$TEST_DIR/"*.log; then
+            cat "$TEST_DIR/"*.log
+            exit 1
+          fi
+
+      - name: Verify full five-player room budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT="$HOME/.cache/oneproyect-godot/godot"
+          TEST_DIR="$RUNNER_TEMP/oneproyect-load"
+          mkdir -p "$TEST_DIR"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" -- \
+            --server --port=19997 > "$TEST_DIR/server.log" 2>&1 &
+          server_pid=$!
+          cleanup_load() {
+            kill "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup_load EXIT
+
+          for attempt in {1..40}; do
+            if grep -q "ONEPROYECT_SERVER_READY udp=19997" "$TEST_DIR/server.log"; then
+              break
+            fi
+            sleep 0.25
+          done
+          grep -q "ONEPROYECT_SERVER_READY udp=19997" "$TEST_DIR/server.log"
+
+          client_pids=()
+          for client in 1 2 3 4 5; do
+            timeout 14 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+              --script res://tests/network_load_probe.gd -- \
+              --client="$client" --port=19997 \
+              > "$TEST_DIR/client-$client.log" 2>&1 &
+            client_pids+=("$!")
+          done
+          for index in 0 1 2 3 4; do
+            wait "${client_pids[$index]}"
+            grep -q "NETWORK_LOAD_OK" "$TEST_DIR/client-$((index + 1)).log"
+          done
+          sleep 0.5
+
+          grep -q "connected=5" "$TEST_DIR/server.log"
+          metrics_line="$(grep "SERVER_METRICS" "$TEST_DIR/server.log" | head -1)"
+          memory_mib="$(sed -E 's/.*memory_mib=([0-9.]+).*/\1/' <<< "$metrics_line")"
+          tx_bps="$(sed -E 's/.*tx_bps=([0-9.]+).*/\1/' <<< "$metrics_line")"
+          awk -v value="$memory_mib" 'BEGIN { exit !(value < 40.0) }'
+          awk -v value="$tx_bps" 'BEGIN { exit !(value < 7200.0) }'
+          if grep -qE "SCRIPT ERROR|NETWORK_LOAD_FAIL|Invalid packet|ERROR:" \
+            "$TEST_DIR"/*.log; then
+            cat "$TEST_DIR"/*.log
+            exit 1
+          fi
+          echo "$metrics_line"
+
+      - name: Verify owner physics movement and hazards
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT="$HOME/.cache/oneproyect-godot/godot"
+          TEST_DIR="$RUNNER_TEMP/oneproyect-real-movement"
+          mkdir -p "$TEST_DIR"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" -- \
+            --server --port=19995 > "$TEST_DIR/server.log" 2>&1 &
+          server_pid=$!
+          cleanup_movement() {
+            kill "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup_movement EXIT
+          for attempt in {1..40}; do
+            if grep -q "ONEPROYECT_SERVER_READY udp=19995" "$TEST_DIR/server.log"; then
+              break
+            fi
+            sleep 0.25
+          done
+          grep -q "ONEPROYECT_SERVER_READY udp=19995" "$TEST_DIR/server.log"
+
+          timeout 20 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/network_load_probe.gd -- \
+            --client=5 --port=19995 > "$TEST_DIR/observer.log" 2>&1 &
+          observer_pid=$!
+          sleep 0.5
+          set +e
+          timeout 20 "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/real_movement_probe.gd -- \
+            --port=19995 > "$TEST_DIR/movement.log" 2>&1
+          movement_code=$?
+          wait "$observer_pid"
+          observer_code=$?
+          set -e
+          if [[ "$movement_code" -ne 0 || "$observer_code" -ne 0 ]]; then
+            cat "$TEST_DIR/server.log" "$TEST_DIR/observer.log" \
+              "$TEST_DIR/movement.log"
+            exit 1
+          fi
+          grep -q "REAL_MOVEMENT_RESULT" "$TEST_DIR/movement.log"
+          grep -q "stalled=0 backwards=0" "$TEST_DIR/movement.log"
+          if grep -qE "SCRIPT ERROR|REAL_MOVEMENT_FAIL|NETWORK_LOAD_FAIL|ERROR:" \
+            "$TEST_DIR"/*.log; then
+            cat "$TEST_DIR"/*.log
+            exit 1
+          fi
+
+      - name: Export and boot stripped dedicated server
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          phase="initialize"
+          report_export_failure() {
+            code=$?
+            trap - ERR
+            detail=""
+            diagnostic_log="${SERVER_LOG:-}"
+            if [[ "$phase" == "export_pack" ]]; then
+              diagnostic_log="${SERVER_EXPORT_LOG:-}"
+            fi
+            if [[ -n "$diagnostic_log" && -s "$diagnostic_log" ]]; then
+              detail="$(tail -20 "$diagnostic_log" | tr '\n' ' ' | cut -c1-1200)"
+              detail="${detail//'%'/'%25'}"
+              detail="${detail//$'\r'/'%0D'}"
+              detail="${detail//$'\n'/'%0A'}"
+            fi
+            echo "::error title=Dedicated server validation failed::phase=$phase exit=$code log=$detail"
+            exit "$code"
+          }
+          trap report_export_failure ERR
+          GODOT="$HOME/.cache/oneproyect-godot/godot"
+          SERVER_BIN="$GITHUB_WORKSPACE/build/server/oneproyect-server"
+          SERVER_PCK="$GITHUB_WORKSPACE/build/server/oneproyect-server.pck"
+          SERVER_TEMPLATE="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}/linux_release.x86_64"
+          SERVER_EXPORT_LOG="$RUNNER_TEMP/oneproyect-server-export.log"
+          SERVER_LOG="$RUNNER_TEMP/oneproyect-exported-server.log"
+          mkdir -p "$(dirname "$SERVER_BIN")"
+          phase="export_pack"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --export-pack "Linux Dedicated Server" "$SERVER_PCK" \
+            > "$SERVER_EXPORT_LOG" 2>&1
+          phase="install_template"
+          test -s "$SERVER_TEMPLATE"
+          cp "$SERVER_TEMPLATE" "$SERVER_BIN"
+          chmod 755 "$SERVER_BIN"
+          phase="validate_files"
+          test -s "$SERVER_BIN"
+          test -x "$SERVER_BIN"
+          test -s "$SERVER_PCK"
+          phase="validate_pack_size"
+          test "$(stat -c '%s' "$SERVER_PCK")" -lt $((2 * 1024 * 1024))
+          phase="validate_resource_filter"
+          if strings "$SERVER_PCK" | grep -qE \
+            'assets/textures|scenes/components'; then
+            echo "Dedicated PCK contains a client/visual resource"
+            false
+          fi
+          phase="start_exported_server"
+          (
+            cd "$(dirname "$SERVER_BIN")"
+            exec "$GODOT" --headless --verbose --main-pack "$SERVER_PCK" \
+              -- --server --port=19998
+          ) > "$SERVER_LOG" 2>&1 &
+          server_pid=$!
+          cleanup_server_export() {
+            kill "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup_server_export EXIT
+          for attempt in {1..200}; do
+            if grep -q "ONEPROYECT_SERVER_READY" "$SERVER_LOG"; then
+              break
+            fi
+            sleep 0.1
+          done
+          server_state="$(ps -o stat= -p "$server_pid" 2>/dev/null | tr -d ' ')"
+          if [[ -z "$server_state" || "$server_state" == Z* ]]; then
+            server_exit=0
+            wait "$server_pid" || server_exit=$?
+            {
+              echo "Exported server exited before ready: code=$server_exit state=${server_state:-missing}"
+              echo "Export log:"
+              tail -20 "$SERVER_EXPORT_LOG"
+            } >> "$SERVER_LOG"
+          fi
+          phase="verify_server_pid"
+          kill -0 "$server_pid"
+          server_state="$(ps -o stat= -p "$server_pid" | tr -d ' ')"
+          test -n "$server_state"
+          [[ "$server_state" != Z* ]]
+          phase="verify_server_log"
+          grep -q "ONEPROYECT_SERVER_READY udp=19998" "$SERVER_LOG"
+          phase="verify_server_udp_socket"
+          ss -H -lun 'sport = :19998' | grep -q ':19998'
+          phase="verify_server_tree"
+          grep -q "SERVER_TREE_OK" "$SERVER_LOG"
+          phase="verify_server_errors"
+          if grep -qE "SCRIPT ERROR|ERROR:|Parse Error" "$SERVER_LOG"; then
+            cat "$SERVER_LOG"
+            false
+          fi
+          trap - ERR
+          ls -lh "$SERVER_BIN" "$GITHUB_WORKSPACE/build/server/"*.pck 2>/dev/null || \
+            ls -lh "$SERVER_BIN"
+
+      - name: Prepare stable debug signing
+        shell: bash
+        env:
+          SIGNING_STORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          test -n "$SIGNING_STORE_BASE64"
+          test -n "$SIGNING_STORE_PASSWORD"
+          test -n "$SIGNING_KEY_PASSWORD"
+          test -n "$SIGNING_KEY_ALIAS"
+          printf '%s' "$SIGNING_STORE_BASE64" | base64 --decode > "$RUNNER_TEMP/oneproyect-signing.jks"
+          chmod 600 "$RUNNER_TEMP/oneproyect-signing.jks"
+          keytool -list \
+            -keystore "$RUNNER_TEMP/oneproyect-signing.jks" \
+            -storepass "$SIGNING_STORE_PASSWORD" \
+            -alias "$SIGNING_KEY_ALIAS" > /dev/null
+
+      - name: Export Android debug APKs
+        shell: bash
+        env:
+          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ runner.temp }}/oneproyect-signing.jks
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: ${{ secrets.ANDROID_KEY_ALIAS }}
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/android
+          "$HOME/.cache/oneproyect-godot/godot" --headless --path "$GITHUB_WORKSPACE" \
+            --export-debug "Android Debug ARM64" build/android/oneproyect-debug-arm64.apk
+          "$HOME/.cache/oneproyect-godot/godot" --headless --path "$GITHUB_WORKSPACE" \
+            --export-debug "Android Debug ARM32" build/android/oneproyect-debug-arm32.apk
+          test -s build/android/oneproyect-debug-arm64.apk
+          test -s build/android/oneproyect-debug-arm32.apk
+          max_apk_bytes=$((36 * 1024 * 1024))
+          test "$(stat -c '%s' build/android/oneproyect-debug-arm64.apk)" -lt "$max_apk_bytes"
+          test "$(stat -c '%s' build/android/oneproyect-debug-arm32.apk)" -lt "$max_apk_bytes"
+          ls -lh build/android/oneproyect-debug-arm64.apk build/android/oneproyect-debug-arm32.apk
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose --print-certs \
+            build/android/oneproyect-debug-arm64.apk
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose --print-certs \
+            build/android/oneproyect-debug-arm32.apk
+          (
+            cd build/android
+            sha256sum oneproyect-debug-arm64.apk > oneproyect-debug-arm64.apk.sha256
+            sha256sum oneproyect-debug-arm32.apk > oneproyect-debug-arm32.apk.sha256
+          )
+
+      - name: Publish rolling public playtest release
+        if: github.repository == 'testingRead/oneproyect'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="playtest-latest"
+          title="OneProyect playtest #${GITHUB_RUN_NUMBER}"
+          notes="Build reproducible del commit ${GITHUB_SHA}. Usa ARM64 en teléfonos modernos."
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "$title" \
+              --notes "$notes"
+          else
+            gh release create "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "$title" \
+              --notes "$notes" \
+              --prerelease
+          fi
+          gh release upload "$tag" \
+            build/android/oneproyect-debug-arm64.apk \
+            build/android/oneproyect-debug-arm64.apk.sha256 \
+            build/android/oneproyect-debug-arm32.apk \
+            build/android/oneproyect-debug-arm32.apk.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
