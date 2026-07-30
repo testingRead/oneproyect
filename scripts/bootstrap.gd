@@ -4,6 +4,7 @@ const MENU_SCENE := "res://scenes/menu.tscn"
 const SERVER_SCENE := "res://server/scenes/dedicated_server.tscn"
 const LOCAL_SCENE := "res://scenes/local/local_lab.tscn"
 const LOCAL_DEVELOPMENT_SWITCH := "--local-development"
+const LOCAL_DEVELOPMENT_MARKER := "res://local_development.marker"
 
 
 func _ready() -> void:
@@ -28,4 +29,7 @@ func _start_menu() -> void:
 
 
 static func is_local_development(arguments := OS.get_cmdline_user_args()) -> bool:
-	return LOCAL_DEVELOPMENT_SWITCH in arguments
+	return (
+		LOCAL_DEVELOPMENT_SWITCH in arguments
+		or FileAccess.file_exists(LOCAL_DEVELOPMENT_MARKER)
+	)

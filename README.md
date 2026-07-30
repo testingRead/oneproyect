@@ -16,15 +16,28 @@ godot --path . -- --local-development
 La isla conserva un mundo físico de 150 × 150 m y cambia el área jugable entre
 30, 60 y 100 m reutilizando las mismas cuatro barreras. Incluye personaje
 estándar, regla vertical, puerta, plataforma, pendiente, plataforma móvil y
-tres objetos físicos de referencia. Sus medidas, auditoría y estado de
+cinco objetos físicos de referencia. La costa es el límite físico natural; los
+tamaños 30/60/100 m delimitan eventos y sólo crean paredes interiores cuando
+un minijuego cerrado lo solicita. Sus medidas, auditoría y estado de
 aprobación están en:
 
 - [contrato de escala](docs/LOCAL_BASE_SCALE.md);
 - [auditoría A/B/C/D](docs/LOCAL_BASE_AUDIT.md);
 - [pruebas y capturas](docs/LOCAL_BASE_VALIDATION.md).
+- [contrato de interacciones](docs/LOCAL_INTERACTIONS.md).
 
-La escena multijugador previa se conserva como integración heredada y no se
-ampliará hasta aprobar la locomoción, objetos y ronda local.
+`ENTER` o **RONDA** ejecuta localmente preparar → reglas → cuenta regresiva →
+actividad → resultado → limpieza. La definición `isla_laboratorio` declara sus
+objetos, desastres y minijuegos compatibles y usa cuatro slots modulares
+deterministas por semilla. El evento de referencia reutiliza un pool fijo de
+tres meteoritos. La escena multijugador previa se conserva como integración
+heredada y no se ampliará hasta aprobar esta experiencia en Android y añadir
+un NPC basado en el mismo personaje.
+
+La compilación local reproducible del laboratorio se realiza íntegramente en
+Termux con [`tools/android-native/build-termux.sh`](tools/android-native/README.md).
+No usa ADB ni el VPS, compila sólo ARM64, valida el APK y lo copia directamente
+a Downloads.
 
 ## Controles
 

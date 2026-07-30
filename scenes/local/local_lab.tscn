@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/local/local_lab.gd" id="1_lab"]
 [ext_resource type="PackedScene" path="res://scenes/local/base_character.tscn" id="2_character"]
@@ -6,6 +6,9 @@
 [ext_resource type="Script" path="res://scripts/virtual_joystick.gd" id="4_joystick"]
 [ext_resource type="Script" path="res://scripts/look_pad.gd" id="5_look"]
 [ext_resource type="Script" path="res://scripts/touch_action_button.gd" id="6_button"]
+[ext_resource type="Script" path="res://scripts/local/local_map_host.gd" id="7_map_host"]
+[ext_resource type="Script" path="res://scripts/local/local_event_host.gd" id="8_event_host"]
+[ext_resource type="Script" path="res://scripts/local/local_round_controller.gd" id="9_round"]
 
 [sub_resource type="Environment" id="EnvironmentLab"]
 background_mode = 1
@@ -48,6 +51,14 @@ shadow_enabled = false
 
 [node name="TestCourse" type="Node3D" parent="World"]
 
+[node name="RoundContent" type="Node3D" parent="World"]
+
+[node name="MapHost" type="Node3D" parent="World/RoundContent"]
+script = ExtResource("7_map_host")
+
+[node name="EventHost" type="Node3D" parent="World/RoundContent"]
+script = ExtResource("8_event_host")
+
 [node name="PlayableArea" type="Node3D" parent="World"]
 script = ExtResource("3_area")
 initial_area = 1
@@ -55,13 +66,16 @@ initial_area = 1
 [node name="CharacterRoot" parent="World" instance=ExtResource("2_character")]
 position = Vector3(0, 0.02, 8)
 
+[node name="RoundController" type="Node" parent="."]
+script = ExtResource("9_round")
+
 [node name="HUD" type="CanvasLayer" parent="."]
 
 [node name="DiagnosticsPanel" type="PanelContainer" parent="HUD"]
 offset_left = 18.0
 offset_top = 16.0
 offset_right = 590.0
-offset_bottom = 176.0
+offset_bottom = 198.0
 theme_override_styles/panel = SubResource("PanelDiagnostics")
 
 [node name="Margin" type="MarginContainer" parent="HUD/DiagnosticsPanel"]
@@ -87,6 +101,12 @@ theme_override_colors/font_color = Color(0.9, 0.78, 0.35, 1)
 theme_override_font_sizes/font_size = 14
 text = "ÁREA"
 
+[node name="Round" type="Label" parent="HUD/DiagnosticsPanel/Margin/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.55, 0.24, 1)
+theme_override_font_sizes/font_size = 14
+text = "RONDA IDLE"
+
 [node name="Metrics" type="Label" parent="HUD/DiagnosticsPanel/Margin/Rows"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
@@ -102,7 +122,7 @@ offset_bottom = 50.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(0.9, 0.94, 1, 0.9)
 theme_override_font_sizes/font_size = 15
-text = "WASD · SHIFT correr · ESPACIO saltar · 1/2/3 área · R reiniciar"
+text = "WASD · SHIFT correr · ESPACIO saltar · ENTER ronda · 1/2/3 área · R reiniciar"
 horizontal_alignment = 2
 
 [node name="LookPad" type="Control" parent="HUD"]
@@ -158,3 +178,20 @@ grow_vertical = 0
 script = ExtResource("6_button")
 label = "ÁREA"
 accent = Color(0.14, 0.72, 0.72, 0.88)
+
+[node name="Round" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -445.0
+offset_top = -150.0
+offset_right = -335.0
+offset_bottom = -40.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("6_button")
+label = "RONDA"
+accent = Color(0.86, 0.36, 0.12, 0.9)

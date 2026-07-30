@@ -111,8 +111,17 @@ func _run() -> void:
 		Vector3(10.0, 4.0, 10.0),
 		Vector3(4.5, 0.8, 3.0)
 	)
+	_lab.round_controller.duration_multiplier = 0.08
+	_lab.start_reference_round(4242)
+	while _lab.round_controller.phase != LocalRoundController.Phase.IDLE:
+		await physics_frame
+	await _capture_from(
+		"10_fin_de_ronda_limpio",
+		Vector3(22.0, 24.0, 22.0),
+		Vector3.ZERO
+	)
 	print(
-		"LOCAL_CAPTURE_OK directory=%s captures=9 renderer=%s"
+		"LOCAL_CAPTURE_OK directory=%s captures=10 renderer=%s"
 		% [_output_directory, RenderingServer.get_rendering_device() == null]
 	)
 	quit(0)

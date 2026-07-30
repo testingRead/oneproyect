@@ -11,6 +11,7 @@ signal area_changed(size: float, bounds: Rect2)
 
 var _size := SCALE.PLAYABLE_AREA_MEDIUM
 var _walls: Array[StaticBody3D] = []
+var _physical_walls_enabled := false
 
 
 func _ready() -> void:
@@ -42,6 +43,17 @@ func set_area_size(value: float) -> void:
 	_configure_wall(_walls[2], Vector3(-half, wall_height * 0.5, 0.0), Vector3(wall_thickness, wall_height, _size))
 	_configure_wall(_walls[3], Vector3(half, wall_height * 0.5, 0.0), Vector3(wall_thickness, wall_height, _size))
 	area_changed.emit(_size, get_playable_bounds())
+
+
+func set_physical_walls_enabled(enabled: bool) -> void:
+	_physical_walls_enabled = enabled
+	for wall in _walls:
+		(wall.get_node("Collision") as CollisionShape3D).disabled = not enabled
+		_update_guide(wall)
+
+
+func are_physical_walls_enabled() -> bool:
+	return _physical_walls_enabled
 
 
 func get_area_size() -> float:
@@ -98,6 +110,7 @@ func _build_walls_once() -> void:
 		body.add_child(mesh)
 		add_child(body)
 		_walls.append(body)
+	set_physical_walls_enabled(_physical_walls_enabled)
 
 
 func _configure_wall(body: StaticBody3D, wall_position: Vector3, size: Vector3) -> void:
@@ -106,3 +119,20 @@ func _configure_wall(body: StaticBody3D, wall_position: Vector3, size: Vector3) 
 	(shape.shape as BoxShape3D).size = size
 	var mesh := body.get_node("Guide") as MeshInstance3D
 	(mesh.mesh as BoxMesh).size = size
+	_update_guide(body)
+
+
+func _update_guide(body: StaticBody3D) -> void:
+	var collision := body.get_node("Collision") as CollisionShape3D
+	var collision_size := (collision.shape as BoxShape3D).size
+	var mesh := body.get_node("Guide") as MeshInstance3D
+	if _physical_walls_enabled:
+		mesh.position = Vector3.ZERO
+		(mesh.mesh as BoxMesh).size = collision_size
+	else:
+		mesh.position = Vector3(0.0, -body.position.y + 0.015, 0.0)
+		(mesh.mesh as BoxMesh).size = Vector3(
+			collision_size.x,
+			0.03,
+			collision_size.z
+		)

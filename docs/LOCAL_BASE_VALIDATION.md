@@ -11,9 +11,11 @@ en el dispositivo. Esta tabla es el corte reproducible del 2026-07-30.
 | Personaje estándar | Candidato | Colisión, origen, hombros y pies coherentes en capturas; falta sensación táctil del APK |
 | Variantes baja/alta | Estructura validada | Misma escena/controlador y origen; aún no habilitadas para uso |
 | Locomoción | Candidata | Caminar/correr, salto, desaceleración, pendiente, empuje y plataforma pasan pruebas; falta prueba táctil |
-| Límites | Candidata | 30/60/100 m reutilizan cuatro paredes y no crean nodos |
-| Objetos | Laboratorio | Tres masas de referencia; todavía no forman una plantilla de evento |
-| Ronda local | Pendiente | No implementada |
+| Límites | Candidata | Costa física permanente; 30/60/100 m son zonas lógicas con paredes internas opcionales |
+| Objetos | Candidata | Estático, móvil programado y cinco movibles: tres cajas, balón y piedra |
+| Mapa modular | Candidato | `MapDefinition` declara contenido y compatibilidad; cuatro slots binarios varían por semilla |
+| Evento de referencia | Candidato | Pool fijo de tres meteoritos; aparición, movimiento, impacto, impulso y limpieza probados |
+| Ronda local | Aprobada técnicamente | Ocho ciclos completos y una cancelación vuelven al conteo base sin residuos |
 | NPC | Pendiente | No implementado |
 | Reintegración multijugador | Bloqueada intencionalmente | Espera aprobación de las capas locales |
 
@@ -21,14 +23,16 @@ en el dispositivo. Esta tabla es el corte reproducible del 2026-07-30.
 
 ```bash
 godot --headless --path . --script res://tests/local_base_test.gd
+godot --headless --path . --script res://tests/local_round_test.gd
 godot --path . -- --local-development
 ```
 
 Resultado actual en Linux y ARM64:
 
 ```text
-LOCAL_BASE_OK nodes=158 objects=3 run_speed=6.00
+LOCAL_BASE_OK nodes=187 objects=5 run_speed=6.00
 jump_height=1.41 area=30
+LOCAL_ROUND_OK repeats=8 pool=3 baseline_nodes=187 phases=7
 ```
 
 El salto objetivo es 1,35 m; la diferencia observada hasta 1,41 m corresponde
@@ -50,6 +54,9 @@ del POCO.
 - [07 límite pequeño](validation/local_base/phase_character/07_limite_pequeno.png)
 - [08 límite grande](validation/local_base/phase_character/08_limite_grande.png)
 - [09 objeto impactando](validation/local_base/phase_character/09_objeto_impactando.png)
+- [10 fin de ronda limpio](validation/local_base/phase_character/10_fin_de_ronda_limpio.png)
 
-`10_fin_de_ronda_limpio` se añadirá únicamente cuando exista la plantilla local
-de ronda y su prueba demuestre que vuelve al mismo conteo de nodos y objetos.
+La captura 10 se toma después de un ciclo real acelerado. La prueba asociada
+verifica además que no queden mapas montados, meteoritos activos, objetos de
+ronda, señales repetidas ni temporizadores capaces de reactivar una ronda
+cancelada.

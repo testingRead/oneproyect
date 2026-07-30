@@ -45,6 +45,8 @@ escena, controlador, cámara, animación y anclajes.
 | Objeto mediano | 1,00 m |
 | Objeto grande | 2,00 m |
 
-El mundo físico no cambia entre rondas. `LocalPlayableArea` reutiliza cuatro
-barreras y sólo cambia sus dimensiones. La costa pertenece al mundo; el límite
-interior pertenece al minijuego.
+El mundo físico no cambia entre rondas. La costa mantiene cuatro colisiones
+invisibles permanentes en el borde de la isla para impedir entrar al océano.
+`LocalPlayableArea` conserva 30/60/100 m como zonas lógicas de eventos; sus
+cuatro barreras internas están desactivadas por defecto y sólo se habilitan si
+un minijuego declara `PHYSICAL_AREA`.

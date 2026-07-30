@@ -5,6 +5,8 @@ const BOOTSTRAP := preload("res://scripts/bootstrap.gd")
 const LAB_SCENE := preload("res://scenes/local/local_lab.tscn")
 const CHARACTER_SCENE := preload("res://scenes/local/base_character.tscn")
 
+var _failed := false
+
 
 func _init() -> void:
 	call_deferred("_run")
@@ -44,12 +46,24 @@ func _run() -> void:
 		"Lab must declare its runtime mode"
 	)
 	_require(
-		lab.playable_area.get_wall_count() == 4,
-		"Every playable-area size must reuse exactly four physical walls"
+		lab.playable_area.get_wall_count() == 4
+		and not lab.playable_area.are_physical_walls_enabled(),
+		"Event areas must reuse four optional walls but island mode keeps them disabled"
 	)
 	_require(
-		lab.get_active_dynamic_object_count() == 3,
-		"Lab must expose one small, medium and large physics object"
+		lab.get_active_dynamic_object_count() == 5,
+		"Lab must expose three boxes, one rolling ball and one rock"
+	)
+	_require(
+		lab.get_diagnostics().shore_boundaries == 4,
+		"The island shore must be the permanent physical boundary"
+	)
+	var interaction_counts: Dictionary = lab.get_interaction_counts()
+	_require(
+		interaction_counts.static >= 1
+		and interaction_counts.mobile == 1
+		and interaction_counts.movable == 5,
+		"Objects must declare static, programmed-mobile or user-movable ownership"
 	)
 	_require(
 		player.has_node("Collision")
@@ -90,6 +104,7 @@ func _run() -> void:
 		)
 
 	lab.set_playable_area_index(0)
+	lab.playable_area.set_physical_walls_enabled(true)
 	player.global_position = Vector3(13.5, 0.04, 0.0)
 	player.velocity = Vector3.ZERO
 	player.set_touch_move(Vector2(1.0, 0.0))
@@ -98,7 +113,19 @@ func _run() -> void:
 	player.set_touch_move(Vector2.ZERO)
 	_require(
 		player.global_position.x <= 14.58,
-		"Local collision must prevent crossing the small playable boundary"
+		"Minigames must be able to opt into a small physical boundary"
+	)
+	lab.playable_area.set_physical_walls_enabled(false)
+
+	player.global_position = Vector3(58.0, 0.04, 0.0)
+	player.velocity = Vector3.ZERO
+	player.set_touch_move(Vector2(1.0, 0.0))
+	for frame in 90:
+		await physics_frame
+	player.set_touch_move(Vector2.ZERO)
+	_require(
+		player.global_position.x <= 59.15,
+		"Permanent shore collision must keep the character out of the ocean"
 	)
 
 	player.reset_to_spawn()
@@ -160,6 +187,7 @@ func _run() -> void:
 	await _verify_statures()
 	await _verify_slope_contact(lab, player)
 	await _verify_moving_platform(lab, player)
+	await _verify_movable_objects(lab)
 
 	var diagnostics := lab.get_diagnostics()
 	_require(
@@ -178,7 +206,7 @@ func _run() -> void:
 			lab.playable_area.get_area_size(),
 		]
 	)
-	quit(0)
+	quit(1 if _failed else 0)
 
 
 func _verify_statures() -> void:
@@ -252,8 +280,39 @@ func _verify_moving_platform(
 	)
 
 
+func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
+	var ball := lab.get_node("World/TestCourse/Ball") as RigidBody3D
+	var rock := lab.get_node("World/TestCourse/Rock") as RigidBody3D
+	var ball_origin := ball.global_position
+	var rock_origin := rock.global_position
+	var ball_reset: Transform3D = ball.get_meta(&"initial_transform")
+	var rock_reset: Transform3D = rock.get_meta(&"initial_transform")
+	ball.apply_central_impulse(Vector3(0.0, 0.0, 2.2))
+	rock.apply_central_impulse(Vector3(0.0, 0.0, 2.2))
+	await physics_frame
+	_require(
+		ball.linear_velocity.length() > rock.linear_velocity.length() * 3.0,
+		"Equal impulse must produce clearly different velocity by mass (ball=%.3f rock=%.3f)"
+		% [ball.linear_velocity.length(), rock.linear_velocity.length()]
+	)
+	for frame in 45:
+		await physics_frame
+	_require(
+		ball.global_position.distance_to(ball_origin)
+		> rock.global_position.distance_to(rock_origin),
+		"Light ball must respond more than the heavier rock to equal impulse"
+	)
+	lab.reset_lab()
+	await physics_frame
+	_require(
+		ball.global_position.distance_to(ball_reset.origin) < 0.02
+		and rock.global_position.distance_to(rock_reset.origin) < 0.02,
+		"Movable references must return exactly on laboratory reset"
+	)
+
+
 func _require(condition: bool, message: String) -> void:
 	if condition:
 		return
+	_failed = true
 	push_error("LOCAL_BASE_FAIL: " + message)
-	quit(1)

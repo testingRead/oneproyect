@@ -1,0 +1,83 @@
+plugins {
+    id "com.android.application"
+}
+
+def gameRoot = rootProject.projectDir.parentFile.parentFile
+def generatedGodotAssets = file("$buildDir/generated/godotAssets")
+
+android {
+    namespace "com.testingread.oneproyect.local"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.testingread.oneproyect.local"
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName "0.1-local"
+
+        ndk {
+            abiFilters "arm64-v8a"
+        }
+
+        aaptOptions {
+            ignoreAssetsPattern "!.svn:!.git:!.gitignore:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"
+        }
+    }
+
+    sourceSets {
+        main {
+            assets.srcDir(generatedGodotAssets)
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging true
+        }
+        resources {
+            excludes += [
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+            ]
+        }
+    }
+}
+
+dependencies {
+    implementation "org.godotengine:godot:4.7.1.stable"
+    // Godot's published AAR marks Fragment as runtime-only even though
+    // GodotActivity extends FragmentActivity, so our launcher needs it on
+    // the Java compilation classpath as well.
+    implementation "androidx.fragment:fragment:1.8.6"
+}
+
+tasks.register("syncGodotAssets", Sync) {
+    from(gameRoot)
+    into(generatedGodotAssets)
+    include "project.godot"
+    include "assets/**"
+    include "client/**"
+    include "data/**"
+    include "scenes/**"
+    include "scripts/**"
+    include "shared/**"
+    include ".godot/imported/**"
+    include ".godot/global_script_class_cache.cfg"
+    include ".godot/uid_cache.bin"
+    exclude "**/*.blend"
+    exclude "**/*.kra"
+    exclude "**/*.xcf"
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(tasks.named("syncGodotAssets"))
+}

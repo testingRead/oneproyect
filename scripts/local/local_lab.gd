@@ -2,15 +2,21 @@ class_name LocalDevelopmentLab
 extends Node3D
 
 const SCALE := preload("res://shared/gameplay_scale.gd")
+const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/isla_laboratorio.tres")
 
 @onready var player: LocalBaseCharacter = $World/CharacterRoot
 @onready var playable_area: LocalPlayableArea = $World/PlayableArea
 @onready var metrics_label: Label = $HUD/DiagnosticsPanel/Margin/Rows/Metrics
 @onready var area_label: Label = $HUD/DiagnosticsPanel/Margin/Rows/Area
+@onready var round_label: Label = $HUD/DiagnosticsPanel/Margin/Rows/Round
 @onready var joystick: GrayboxVirtualJoystick = $HUD/Joystick
 @onready var look_pad: LookPad = $HUD/LookPad
 @onready var jump_button: TouchActionButton = $HUD/Jump
 @onready var area_button: TouchActionButton = $HUD/Area
+@onready var round_button: TouchActionButton = $HUD/Round
+@onready var map_host: LocalMapHost = $World/RoundContent/MapHost
+@onready var event_host: LocalEventHost = $World/RoundContent/EventHost
+@onready var round_controller: LocalRoundController = $RoundController
 
 var _area_index := 1
 var _initial_dynamic_count := 0
@@ -30,10 +36,21 @@ func _ready() -> void:
 	look_pad.look_delta.connect(player.add_touch_look)
 	jump_button.action_pressed.connect(player.request_jump)
 	area_button.action_pressed.connect(_cycle_area)
+	round_button.action_pressed.connect(start_reference_round)
 	player.metrics_changed.connect(_on_player_metrics)
 	playable_area.area_changed.connect(_on_area_changed)
+	round_controller.configure(
+		LAB_MAP,
+		map_host,
+		event_host,
+		player,
+		playable_area
+	)
+	round_controller.phase_changed.connect(_on_round_phase_changed)
 	playable_area.set_area_index(_area_index)
+	playable_area.set_physical_walls_enabled(false)
 	_on_player_metrics(player.get_diagnostics())
+	_on_round_phase_changed(LocalRoundController.Phase.IDLE, "IDLE", 0.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -49,6 +66,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				set_playable_area_index(2)
 			KEY_R:
 				reset_lab()
+			KEY_ENTER:
+				start_reference_round()
 			KEY_ESCAPE:
 				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -59,6 +78,7 @@ func set_playable_area_index(index: int) -> void:
 
 
 func reset_lab() -> void:
+	round_controller.stop_and_clean()
 	player.reset_to_spawn()
 	for body in get_tree().get_nodes_in_group(&"local_test_object"):
 		if body is RigidBody3D and body.has_meta(&"initial_transform"):
@@ -71,6 +91,14 @@ func reset_lab() -> void:
 	for platform in get_tree().get_nodes_in_group(&"local_moving_platform"):
 		if platform.has_method("reset_platform"):
 			platform.call("reset_platform")
+	_on_player_metrics(player.get_diagnostics())
+
+
+func start_reference_round(seed := 0) -> bool:
+	var selected_seed := seed
+	if selected_seed == 0:
+		selected_seed = int(Time.get_ticks_msec())
+	return round_controller.start_round(selected_seed)
 
 
 func get_active_dynamic_object_count() -> int:
@@ -79,6 +107,14 @@ func get_active_dynamic_object_count() -> int:
 		if is_instance_valid(object):
 			count += 1
 	return count
+
+
+func get_interaction_counts() -> Dictionary:
+	return {
+		"static": get_tree().get_nodes_in_group(&"interaction_static").size(),
+		"mobile": get_tree().get_nodes_in_group(&"interaction_mobile").size(),
+		"movable": get_tree().get_nodes_in_group(&"interaction_movable").size(),
+	}
 
 
 func get_diagnostics() -> Dictionary:
@@ -90,6 +126,16 @@ func get_diagnostics() -> Dictionary:
 		"boundary_count": playable_area.get_wall_count(),
 		"dynamic_objects": get_active_dynamic_object_count(),
 		"initial_dynamic_objects": _initial_dynamic_count,
+		"round_phase": round_controller.get_phase_name(),
+		"round_seed": round_controller.round_seed,
+		"mounted_map_nodes": map_host.get_mounted_node_count(),
+		"event_pool": event_host.get_pool_size(),
+		"active_event_objects": event_host.get_active_count(),
+		"event_impacts": event_host.get_impact_count(),
+		"interaction_counts": get_interaction_counts(),
+		"shore_boundaries": get_tree().get_nodes_in_group(
+			&"island_shore_boundary"
+		).size(),
 	}
 
 
@@ -105,6 +151,19 @@ func save_capture(capture_name: String) -> Error:
 
 func _cycle_area() -> void:
 	set_playable_area_index((_area_index + 1) % 3)
+
+
+func _on_round_phase_changed(
+	_phase: LocalRoundController.Phase,
+	label: String,
+	seconds: float
+) -> void:
+	round_label.text = (
+		"RONDA %s  ·  %.1f s  ·  semilla %d"
+		% [label, seconds, round_controller.round_seed]
+	)
+	if _phase == LocalRoundController.Phase.IDLE:
+		_on_player_metrics(player.get_diagnostics())
 
 
 func _on_player_metrics(metrics: Dictionary) -> void:
@@ -131,13 +190,12 @@ func _on_player_metrics(metrics: Dictionary) -> void:
 
 func _on_area_changed(size: float, bounds: Rect2) -> void:
 	area_label.text = (
-		"ÁREA %d × %d m  ·  MUNDO %d × %d m  ·  LÍMITES %s"
+		"EVENTOS %d × %d m  ·  ISLA %d × %d m  ·  COSTA FÍSICA"
 		% [
 			int(size),
 			int(size),
-			int(SCALE.PHYSICAL_WORLD_SIZE),
-			int(SCALE.PHYSICAL_WORLD_SIZE),
-			str(bounds),
+			int(SCALE.ISLAND_SIZE),
+			int(SCALE.ISLAND_SIZE),
 		]
 	)
 
@@ -156,6 +214,7 @@ func _build_island_once() -> void:
 		Vector3(SCALE.ISLAND_SIZE, 0.4, SCALE.ISLAND_SIZE),
 		island_material
 	)
+	_add_shore_boundaries(content)
 	var ocean := MeshInstance3D.new()
 	ocean.name = "Ocean"
 	var ocean_mesh := BoxMesh.new()
@@ -229,6 +288,7 @@ func _build_test_course_once() -> void:
 		Vector3(5.0, 2.0, 0.35),
 		structure
 	)
+	content.get_node("Wall").add_to_group(&"interaction_static")
 	var slope := _add_static_box(
 		content,
 		"Slope",
@@ -245,6 +305,24 @@ func _build_test_course_once() -> void:
 		Vector3.ONE * SCALE.SMALL_OBJECT_SIZE,
 		0.7,
 		object_material
+	)
+	_add_rigid_sphere(
+		content,
+		"Ball",
+		Vector3(-3.5, 0.46, 5.0),
+		0.45,
+		0.55,
+		_material(Color(0.92, 0.9, 0.78), 0.68),
+		Vector3.ONE
+	)
+	_add_rigid_sphere(
+		content,
+		"Rock",
+		Vector3(-5.0, 0.56, 5.0),
+		0.55,
+		3.5,
+		_material(Color(0.36, 0.38, 0.4), 0.98),
+		Vector3.ONE
 	)
 	_add_rigid_box(
 		content,
@@ -350,6 +428,7 @@ func _add_rigid_box(
 	body.collision_layer = 1
 	body.collision_mask = 3
 	body.add_to_group(&"local_test_object")
+	body.add_to_group(&"interaction_movable")
 	var collision := CollisionShape3D.new()
 	collision.name = "Collision"
 	var shape := BoxShape3D.new()
@@ -369,6 +448,48 @@ func _add_rigid_box(
 	return body
 
 
+func _add_rigid_sphere(
+	parent: Node3D,
+	node_name: String,
+	position_value: Vector3,
+	radius: float,
+	mass_value: float,
+	material: StandardMaterial3D,
+	visual_scale: Vector3
+) -> RigidBody3D:
+	var body := RigidBody3D.new()
+	body.name = node_name
+	body.position = position_value
+	body.mass = mass_value
+	body.collision_layer = 1
+	body.collision_mask = 3
+	body.add_to_group(&"local_test_object")
+	body.add_to_group(&"interaction_movable")
+	var physics_material := PhysicsMaterial.new()
+	physics_material.friction = 0.72
+	physics_material.bounce = 0.18 if node_name == "Ball" else 0.04
+	body.physics_material_override = physics_material
+	var collision := CollisionShape3D.new()
+	var shape := SphereShape3D.new()
+	shape.radius = radius
+	collision.shape = shape
+	body.add_child(collision)
+	var mesh := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = radius
+	sphere.height = radius * 2.0
+	sphere.radial_segments = 16
+	sphere.rings = 8
+	mesh.mesh = sphere
+	mesh.scale = visual_scale
+	mesh.material_override = material
+	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	body.add_child(mesh)
+	parent.add_child(body)
+	body.set_meta(&"initial_transform", body.global_transform)
+	return body
+
+
 func _add_moving_platform(
 	parent: Node3D,
 	material: StandardMaterial3D
@@ -379,6 +500,7 @@ func _add_moving_platform(
 	platform.set_script(load("res://scripts/local/moving_platform.gd"))
 	platform.set("travel", Vector3(4.0, 0.0, 0.0))
 	platform.add_to_group(&"local_moving_platform")
+	platform.add_to_group(&"interaction_mobile")
 	platform.collision_layer = 1
 	var size := Vector3(2.6, 0.3, 2.6)
 	var collision := CollisionShape3D.new()
@@ -395,6 +517,35 @@ func _add_moving_platform(
 	platform.add_child(mesh)
 	parent.add_child(platform)
 	return platform
+
+
+func _add_shore_boundaries(parent: Node3D) -> void:
+	var half := SCALE.ISLAND_SIZE * 0.5 - 0.35
+	var length := SCALE.ISLAND_SIZE
+	var positions := [
+		Vector3(0.0, 1.5, -half),
+		Vector3(0.0, 1.5, half),
+		Vector3(-half, 1.5, 0.0),
+		Vector3(half, 1.5, 0.0),
+	]
+	var sizes := [
+		Vector3(length, 3.0, 0.5),
+		Vector3(length, 3.0, 0.5),
+		Vector3(0.5, 3.0, length),
+		Vector3(0.5, 3.0, length),
+	]
+	for index in 4:
+		var body := StaticBody3D.new()
+		body.name = "ShoreBoundary%d" % (index + 1)
+		body.position = positions[index]
+		body.collision_layer = 1
+		body.add_to_group(&"island_shore_boundary")
+		var collision := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = sizes[index]
+		collision.shape = shape
+		body.add_child(collision)
+		parent.add_child(body)
 
 
 func _material(color: Color, roughness: float) -> StandardMaterial3D:

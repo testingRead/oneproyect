@@ -53,8 +53,17 @@ LOCAL_DEVELOPMENT
     ├── LocalPlayableArea (cuatro límites reutilizables)
     ├── LocalBaseCharacter
     ├── ScaleReferences
-    └── TestCourse
+    ├── TestCourse
+    ├── LocalMapHost
+    ├── LocalEventHost (pool fijo)
+    └── LocalRoundController
 ```
 
 Cuando la base sea aprobada, `main.tscn` instanciará el mismo
 `LocalBaseCharacter` y dejará de mantener el controlador heredado.
+
+`MapDefinition` es ahora el único contrato de contenido para mapas nuevos:
+declara huella, área jugable, apariciones, zonas seguras, puntos de evento y
+navegación, objetos disponibles y compatibilidad con desastres/minijuegos.
+`isla_laboratorio` es la primera definición de referencia; no sustituye ni
+reescribe todavía los mapas heredados.
