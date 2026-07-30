@@ -377,11 +377,12 @@ func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
 	for frame in 10:
 		await physics_frame
 	_require(
-		player.get_context_action() == LocalBaseCharacter.ACTION_KICK
-		and lab.push_button.label == "PATEAR",
-		"Ball in front must change both action and visible button to PATEAR"
+		player.get_hand_action() == LocalBaseCharacter.ACTION_PUSH
+		and lab.hand_button.label == "EMPUJAR"
+		and lab.foot_button.label == "PATEAR",
+		"Ball must keep independent visible hand and foot actions"
 	)
-	_require(player.request_context_action(), "Contextual kick must start")
+	_require(player.request_foot_action(), "Foot kick must start")
 	for frame in 24:
 		await physics_frame
 	_require(
@@ -399,7 +400,7 @@ func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
 	player.camera_pivot.rotation.y = 0.0
 	for frame in 10:
 		await physics_frame
-	_require(player.request_context_action(), "Miss probe must begin a kick")
+	_require(player.request_foot_action(), "Miss probe must begin a kick")
 	player.camera_pivot.rotation.y = PI * 0.5
 	for frame in 24:
 		await physics_frame
@@ -419,11 +420,11 @@ func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
 	for frame in 10:
 		await physics_frame
 	_require(
-		player.get_context_action() == LocalBaseCharacter.ACTION_TAKE
-		and lab.push_button.label == "TOMAR",
+		player.get_hand_action() == LocalBaseCharacter.ACTION_TAKE
+		and lab.hand_button.label == "TOMAR",
 		"Small stone in front must expose TAKE and visible TOMAR"
 	)
-	_require(player.request_context_action(), "TAKE animation must start")
+	_require(player.request_hand_action(), "TAKE animation must start")
 	for frame in 8:
 		await physics_frame
 	_require(
@@ -435,17 +436,37 @@ func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
 		await physics_frame
 	_require(
 		player.get_held_object() == rock
-		and player.get_context_action() == LocalBaseCharacter.ACTION_THROW
-		and lab.push_button.label == "LANZAR"
+		and player.get_hand_action() == LocalBaseCharacter.ACTION_THROW
+		and lab.hand_button.label == "LANZAR"
 		and rock.get_parent() == player.held_item_anchor
 		and rock.global_position.distance_to(
 			player.visual_item_socket.global_position
 		) < 0.035,
 		"TAKE must attach the stone exactly to the animated hand socket"
 	)
+
+	player.global_position = Vector3(
+		ball_reset.origin.x,
+		0.02,
+		ball_reset.origin.z + 1.05
+	)
+	player.camera_pivot.rotation.y = 0.0
+	for frame in 10:
+		await physics_frame
+	_require(
+		player.request_foot_action(),
+		"Holding a stone must not block the independent foot action"
+	)
+	for frame in 24:
+		await physics_frame
+	_require(
+		player.get_held_object() == rock
+		and ball.global_position.distance_to(ball_reset.origin) > 0.35,
+		"Character must kick the ball while keeping the stone equipped"
+	)
 	for frame in 18:
 		await physics_frame
-	_require(player.request_context_action(), "Equipped stone must be throwable")
+	_require(player.request_hand_action(), "Equipped stone must be throwable")
 	for frame in 10:
 		await physics_frame
 	_require(

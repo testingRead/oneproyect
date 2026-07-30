@@ -122,7 +122,7 @@ offset_bottom = 50.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(0.9, 0.94, 1, 0.9)
 theme_override_font_sizes/font_size = 15
-text = "IZQUIERDA mover · DERECHA cámara · SALTO · EMPUJAR · RONDA"
+text = "IZQUIERDA mover · DERECHA cámara · MANO · PATEAR · SALTO"
 horizontal_alignment = 2
 
 [node name="RoundBanner" type="PanelContainer" parent="HUD"]
@@ -204,7 +204,7 @@ grow_horizontal = 0
 grow_vertical = 0
 script = ExtResource("6_button")
 
-[node name="Push" type="Control" parent="HUD"]
+[node name="HandAction" type="Control" parent="HUD"]
 layout_mode = 3
 anchors_preset = 3
 anchor_left = 1.0
@@ -220,6 +220,23 @@ grow_vertical = 0
 script = ExtResource("6_button")
 label = "EMPUJAR"
 accent = Color(0.14, 0.62, 0.78, 0.9)
+
+[node name="FootAction" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -320.0
+offset_top = -275.0
+offset_right = -210.0
+offset_bottom = -165.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("6_button")
+label = "PATEAR"
+accent = Color(0.34, 0.66, 0.18, 0.9)
 
 [node name="Round" type="Control" parent="HUD"]
 layout_mode = 3

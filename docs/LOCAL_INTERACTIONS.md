@@ -23,6 +23,11 @@ el segundo representa el alcance corto del pie o la mano:
 - **TOMAR** para la piedra pequeña de 28 cm y 0,32 kg;
 - **LANZAR** mientras la piedra está equipada.
 
+Manos y pies son dos canales de entrada independientes. El botón de mano
+cambia entre **EMPUJAR**, **TOMAR** y **LANZAR**; el botón de pie conserva
+**PATEAR**. Sus ventanas y cooldowns no se bloquean entre sí, por lo que el
+personaje puede mantener una piedra en la mano y patear un balón sin soltarla.
+
 La patada no aplica el impulso al presionar el botón. Primero inicia su
 animación y vuelve a comprobar el contacto al pasar el pie; si el balón salió
 del sondeo, la patada falla. La piedra se congela y desactiva su colisión

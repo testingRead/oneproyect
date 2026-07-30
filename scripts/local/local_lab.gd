@@ -2,7 +2,7 @@ class_name LocalDevelopmentLab
 extends Node3D
 
 const SCALE := preload("res://shared/gameplay_scale.gd")
-const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/isla_laboratorio.tres")
+const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/puesto_costero_local.tres")
 
 @onready var player: LocalBaseCharacter = $World/CharacterRoot
 @onready var playable_area: LocalPlayableArea = $World/PlayableArea
@@ -15,7 +15,8 @@ const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/isla_laboratorio
 @onready var joystick: GrayboxVirtualJoystick = $HUD/Joystick
 @onready var look_pad: LookPad = $HUD/LookPad
 @onready var jump_button: TouchActionButton = $HUD/Jump
-@onready var push_button: TouchActionButton = $HUD/Push
+@onready var hand_button: TouchActionButton = $HUD/HandAction
+@onready var foot_button: TouchActionButton = $HUD/FootAction
 @onready var round_button: TouchActionButton = $HUD/Round
 @onready var map_host: LocalMapHost = $World/RoundContent/MapHost
 @onready var event_host: LocalEventHost = $World/RoundContent/EventHost
@@ -40,9 +41,10 @@ func _ready() -> void:
 	joystick.value_changed.connect(player.set_touch_move)
 	look_pad.look_delta.connect(player.add_touch_look)
 	jump_button.action_pressed.connect(player.request_jump)
-	push_button.action_pressed.connect(player.request_context_action)
+	hand_button.action_pressed.connect(player.request_hand_action)
+	foot_button.action_pressed.connect(player.request_foot_action)
 	round_button.action_pressed.connect(start_reference_round)
-	player.interaction_changed.connect(_on_interaction_changed)
+	player.hand_action_changed.connect(_on_hand_action_changed)
 	player.action_resolved.connect(_on_action_resolved)
 	player.metrics_changed.connect(_on_player_metrics)
 	playable_area.area_changed.connect(_on_area_changed)
@@ -183,7 +185,7 @@ func _on_round_phase_changed(
 				"Acércate y mira un objeto: el botón cambia de acción"
 			)
 			banner_progress.text = (
-				"BALÓN: PATEAR · PIEDRA: TOMAR/LANZAR · RONDA: meteoritos"
+				"MANO: objetos · PIE: patear · ambos funcionan por separado"
 			)
 			_on_player_metrics(player.get_diagnostics())
 		LocalRoundController.Phase.PREPARE:
@@ -248,8 +250,8 @@ func _on_area_changed(size: float, bounds: Rect2) -> void:
 	)
 
 
-func _on_interaction_changed(label: String) -> void:
-	push_button.set_label(label)
+func _on_hand_action_changed(label: String) -> void:
+	hand_button.set_label(label)
 
 
 func _on_action_resolved(action: StringName, hit: bool) -> void:

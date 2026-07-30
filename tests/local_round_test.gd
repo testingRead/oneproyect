@@ -1,7 +1,7 @@
 extends SceneTree
 
 const LAB_SCENE := preload("res://scenes/local/local_lab.tscn")
-const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/isla_laboratorio.tres")
+const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/puesto_costero_local.tres")
 
 var _failed := false
 
@@ -14,12 +14,19 @@ func _run() -> void:
 	_require(not root.has_node("Network"), "Local rounds must not create Network")
 	_require(
 		LAB_MAP.supports_disaster(&"meteorito")
+		and LAB_MAP.supports_disaster(&"tsunami")
 		and LAB_MAP.supports_minigame(&"laboratorio_local"),
 		"MapDefinition must declare compatible disasters and minigames"
 	)
 	_require(
+		LAB_MAP.map_scene != null
+		and LAB_MAP.footprint == Vector2(42.0, 36.0)
+		and LAB_MAP.spawn_points.size() == 5,
+		"Candidate minigame map must package one scene, footprint and five spawns"
+	)
+	_require(
 		LAB_MAP.available_objects == PackedStringArray(
-			["caja_ligera", "caja_pesada", "puerta"]
+			["caja_suministros", "barrera", "escalera", "mirador"]
 		),
 		"MapDefinition must declare its available objects"
 	)
@@ -68,6 +75,18 @@ func _run() -> void:
 		lab.event_host.event_warning.connect(collect_warning)
 		var seed := 1000 + round_index * 37
 		_require(lab.start_reference_round(seed), "Idle lab must accept a round")
+		await physics_frame
+		if round_index == 0:
+			var mounted := lab.map_host.get_node_or_null("MountedMap")
+			_require(
+				mounted is Node3D
+				and mounted.has_method("configure_variation")
+				and mounted.has_node("Roof")
+				and mounted.has_node("Step07")
+				and mounted.has_node("Canopy")
+				and lab.map_host.get_mounted_node_count() > 60,
+				"Round must mount the packaged coastal outpost with elevation"
+			)
 		var completed := false
 		var elapsed_frames := 0
 		while elapsed_frames < 240:

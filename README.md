@@ -27,12 +27,12 @@ aprobación están en:
 - [contrato de interacciones](docs/LOCAL_INTERACTIONS.md).
 
 `ENTER` o **RONDA** ejecuta localmente preparar → reglas → cuenta regresiva →
-actividad → resultado → limpieza. La definición `isla_laboratorio` declara sus
-objetos, desastres y minijuegos compatibles y usa cuatro slots modulares
-deterministas por semilla. El evento de referencia reutiliza un pool fijo de
-tres meteoritos. La escena multijugador previa se conserva como integración
-heredada y no se ampliará hasta aprobar esta experiencia en Android y añadir
-un NPC basado en el mismo personaje.
+actividad → resultado → limpieza. La ronda candidata monta `puesto_costero`:
+un edificio transitable con techo, escalera exterior, mirador, patio y objetos
+físicos. Cuatro slots modulares varían refugio, puente, entrada y caja pesada
+por semilla. El evento de referencia reutiliza un pool fijo de tres meteoritos.
+La escena multijugador previa permanece congelada hasta aprobar esta experiencia
+local y añadir un NPC basado en el mismo personaje.
 
 La compilación local reproducible del laboratorio se realiza íntegramente en
 Termux con [`tools/android-native/build-termux.sh`](tools/android-native/README.md).

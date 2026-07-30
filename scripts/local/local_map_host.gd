@@ -12,6 +12,13 @@ func mount_map(definition: MinigameMapDefinition, seed: int) -> void:
 	current_definition = definition
 	current_seed = seed
 	current_signature = definition.variation_signature(seed)
+	if definition.map_scene != null:
+		_mounted_root = definition.map_scene.instantiate() as Node3D
+		_mounted_root.name = "MountedMap"
+		add_child(_mounted_root)
+		if _mounted_root.has_method("configure_variation"):
+			_mounted_root.call("configure_variation", current_signature)
+		return
 	_mounted_root = Node3D.new()
 	_mounted_root.name = "MountedMap"
 	add_child(_mounted_root)

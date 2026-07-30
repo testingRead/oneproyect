@@ -23,10 +23,13 @@ El mapa declara:
 - desastres y minijuegos compatibles;
 - nombres de slots modulares.
 
-La semilla convierte cada slot en una variante binaria reproducible. Por ahora
-los slots de la isla de laboratorio controlan habitación lateral, puente,
-puerta bloqueada y distribución de cajas. No existe generación procedural
-ambiciosa.
+La semilla convierte cada slot en una variante binaria reproducible.
+`puesto_costero` es el primer paquete candidato que proporciona una escena
+propia: edificio transitable, techo accesible por escalera, mirador, patio y
+cajas físicas. Sus slots controlan refugio lateral, puente de techo, entrada
+bloqueada y caja pesada. `LocalMapHost` instancia `map_scene` y sólo conserva
+el constructor anterior como fallback para definiciones sin escena. No existe
+generación procedural ambiciosa.
 
 ## Ciclo y limpieza
 

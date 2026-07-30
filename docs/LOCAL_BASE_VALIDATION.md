@@ -8,12 +8,12 @@ en el dispositivo. Esta tabla es el corte reproducible del 2026-07-30.
 | Aislamiento | Aprobada | Arranque `--local-development` sin nodo `Network`; “JUGAR LOCAL” desconecta y abre el mismo laboratorio |
 | Inventario | Aprobado | Clasificación A/B/C/D en `LOCAL_BASE_AUDIT.md`; escena heredada congelada |
 | Escala | Aprobada técnicamente | Un contrato ejecutable; referencias permanentes; prueba Linux y ARM64 |
-| Personaje estándar | Candidato | Colisión, origen, hombros y pies coherentes en capturas; falta sensación táctil del APK |
+| Personaje estándar | Base aprobada | Colisión, origen, pies y animación aprobados en el POCO |
 | Variantes baja/alta | Estructura validada | Misma escena/controlador y origen; aún no habilitadas para uso |
-| Locomoción | Candidata | Caminar/correr, salto, desaceleración, pendiente, empuje y plataforma pasan pruebas; falta prueba táctil |
+| Locomoción | Base aprobada | Caminar, salto, cámara, pendiente, empuje y plataforma probados táctilmente |
 | Límites | Candidata | Costa física permanente; 30/60/100 m son zonas lógicas con paredes internas opcionales |
-| Objetos | Candidata | EMPUJAR, PATEAR con fallo real, y piedra equipable/lanzable verificados |
-| Mapa modular | Candidato | `MapDefinition` declara contenido y compatibilidad; cuatro slots binarios varían por semilla |
+| Objetos | Base aprobada | Mano/pie independientes; patada con fallo real y piedra equipable/lanzable |
+| Mapa modular | Primer candidato | `puesto_costero` empaqueta escena, cinco spawns, elevación y cuatro variantes |
 | Evento de referencia | Candidato | Tres avisos rojos escalonados, meteoritos visibles, impacto, impulso y limpieza probados |
 | Ronda local | Aprobada técnicamente | Ocho ciclos completos y una cancelación vuelven al conteo base sin residuos |
 | NPC | Pendiente | No implementado |
@@ -30,9 +30,9 @@ godot --path . -- --local-development
 Resultado actual en Linux y ARM64:
 
 ```text
-LOCAL_BASE_OK nodes=207 objects=5 run_speed=6.00
+LOCAL_BASE_OK nodes=208 objects=5 run_speed=6.00
 jump_height=1.41 area=30
-LOCAL_ROUND_OK repeats=8 pool=3 baseline_nodes=207 phases=7
+LOCAL_ROUND_OK repeats=8 pool=3 baseline_nodes=208 phases=7
 ```
 
 El salto objetivo es 1,35 m; la diferencia observada hasta 1,41 m corresponde

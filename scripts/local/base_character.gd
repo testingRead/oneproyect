@@ -5,7 +5,7 @@ const SCALE := preload("res://shared/gameplay_scale.gd")
 
 signal metrics_changed(metrics: Dictionary)
 signal push_performed(hit: bool)
-signal interaction_changed(label: String)
+signal hand_action_changed(label: String)
 signal action_resolved(action: StringName, hit: bool)
 
 const ACTION_PUSH := &"PUSH"
@@ -33,8 +33,9 @@ var _external_velocity := Vector3.ZERO
 var _motor_velocity := Vector3.ZERO
 var _last_metrics_second := -1
 var _spawn_transform: Transform3D
-var _push_cooldown := 0.0
-var _context_action := ACTION_PUSH
+var _hand_cooldown := 0.0
+var _foot_cooldown := 0.0
+var _hand_action := ACTION_PUSH
 var _context_body: RigidBody3D
 var _kick_target: RigidBody3D
 var _kick_pending := false
@@ -65,7 +66,8 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	_push_cooldown = maxf(0.0, _push_cooldown - delta)
+	_hand_cooldown = maxf(0.0, _hand_cooldown - delta)
+	_foot_cooldown = maxf(0.0, _foot_cooldown - delta)
 	_align_interaction_nodes()
 	_resolve_kick(delta)
 	_resolve_take(delta)
@@ -175,9 +177,9 @@ func request_jump() -> void:
 
 
 func request_push() -> bool:
-	if not controls_enabled or _push_cooldown > 0.0:
+	if not controls_enabled or _hand_cooldown > 0.0:
 		return false
-	_push_cooldown = 0.42
+	_hand_cooldown = 0.42
 	visual_root.trigger_push()
 	var hit := _perform_generic_push()
 	push_performed.emit(hit)
@@ -186,12 +188,14 @@ func request_push() -> bool:
 
 
 func request_context_action() -> bool:
-	if not controls_enabled or _push_cooldown > 0.0:
+	return request_hand_action()
+
+
+func request_hand_action() -> bool:
+	if not controls_enabled or _hand_cooldown > 0.0:
 		return false
 	_refresh_interaction_context()
-	match _context_action:
-		ACTION_KICK:
-			return _begin_kick()
+	match _hand_action:
 		ACTION_TAKE:
 			return _take_context_object()
 		ACTION_THROW:
@@ -200,14 +204,27 @@ func request_context_action() -> bool:
 			return request_push()
 
 
+func request_foot_action() -> bool:
+	if not controls_enabled or _foot_cooldown > 0.0:
+		return false
+	_refresh_interaction_context()
+	return _begin_kick()
+
+
 func get_context_action() -> StringName:
-	return _context_action
+	return _hand_action
+
+
+func get_hand_action() -> StringName:
+	return _hand_action
 
 
 func get_context_label() -> String:
-	match _context_action:
-		ACTION_KICK:
-			return "PATEAR"
+	return get_hand_label()
+
+
+func get_hand_label() -> String:
+	match _hand_action:
 		ACTION_TAKE:
 			return "TOMAR"
 		ACTION_THROW:
@@ -323,29 +340,29 @@ func _align_interaction_nodes() -> void:
 func _refresh_interaction_context() -> void:
 	var next_action := ACTION_PUSH
 	var next_body: RigidBody3D
-	if is_instance_valid(_held_object):
-		next_action = ACTION_THROW
-	else:
+	if not is_instance_valid(_held_object):
 		_align_interaction_nodes()
 		interaction_context.force_shapecast_update()
 		next_body = _get_nearest_body(interaction_context)
-		if next_body != null:
-			if next_body.is_in_group(&"kickable_ball"):
-				next_action = ACTION_KICK
-			elif next_body.is_in_group(&"pickup_stone"):
-				next_action = ACTION_TAKE
 	_context_body = next_body
-	if next_action == _context_action:
+	if is_instance_valid(_held_object):
+		next_action = ACTION_THROW
+	elif is_instance_valid(next_body) and next_body.is_in_group(&"pickup_stone"):
+		next_action = ACTION_TAKE
+	else:
+		next_action = ACTION_PUSH
+	if next_action == _hand_action:
 		return
-	_context_action = next_action
-	interaction_changed.emit(get_context_label())
+	_hand_action = next_action
+	hand_action_changed.emit(get_hand_label())
 
 
 func _begin_kick() -> bool:
-	if not is_instance_valid(_context_body):
-		return false
-	_push_cooldown = 0.52
-	_kick_target = _context_body
+	_foot_cooldown = 0.52
+	_kick_target = _get_nearest_body_in_group(
+		interaction_context,
+		&"kickable_ball"
+	)
 	_kick_pending = true
 	_kick_elapsed = 0.0
 	_face_interaction_direction()
@@ -382,7 +399,7 @@ func _take_context_object() -> bool:
 	var body := _context_body
 	if not is_instance_valid(body) or not body.is_in_group(&"pickup_stone"):
 		return false
-	_push_cooldown = 0.62
+	_hand_cooldown = 0.62
 	_take_target = body
 	_take_pending = true
 	_take_elapsed = 0.0
@@ -432,7 +449,7 @@ func _equip_object(body: RigidBody3D) -> void:
 func _throw_held_object() -> bool:
 	if not is_instance_valid(_held_object):
 		return false
-	_push_cooldown = 0.62
+	_hand_cooldown = 0.62
 	_throw_pending = true
 	_throw_elapsed = 0.0
 	_face_interaction_direction()
@@ -538,6 +555,23 @@ func _get_nearest_body(shape_cast: ShapeCast3D) -> RigidBody3D:
 	for index in shape_cast.get_collision_count():
 		var body := shape_cast.get_collider(index) as RigidBody3D
 		if body == null:
+			continue
+		var distance := global_position.distance_squared_to(body.global_position)
+		if distance < nearest_distance:
+			nearest = body
+			nearest_distance = distance
+	return nearest
+
+
+func _get_nearest_body_in_group(
+	shape_cast: ShapeCast3D,
+	group: StringName
+) -> RigidBody3D:
+	var nearest: RigidBody3D
+	var nearest_distance := INF
+	for index in shape_cast.get_collision_count():
+		var body := shape_cast.get_collider(index) as RigidBody3D
+		if body == null or not body.is_in_group(group):
 			continue
 		var distance := global_position.distance_squared_to(body.global_position)
 		if distance < nearest_distance:
