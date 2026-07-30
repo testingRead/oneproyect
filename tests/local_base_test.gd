@@ -283,6 +283,7 @@ func _verify_moving_platform(
 func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
 	var ball := lab.get_node("World/TestCourse/Ball") as RigidBody3D
 	var rock := lab.get_node("World/TestCourse/Rock") as RigidBody3D
+	var player := lab.player
 	var ball_origin := ball.global_position
 	var rock_origin := rock.global_position
 	var ball_reset: Transform3D = ball.get_meta(&"initial_transform")
@@ -308,6 +309,37 @@ func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
 		ball.global_position.distance_to(ball_reset.origin) < 0.02
 		and rock.global_position.distance_to(rock_reset.origin) < 0.02,
 		"Movable references must return exactly on laboratory reset"
+	)
+
+	player.global_position = Vector3(
+		ball_reset.origin.x,
+		0.02,
+		ball_reset.origin.z + 1.35
+	)
+	player.velocity = Vector3.ZERO
+	player.set_touch_move(Vector2(0.0, -1.0))
+	for frame in 45:
+		await physics_frame
+	player.set_touch_move(Vector2.ZERO)
+	_require(
+		ball.global_position.z < ball_reset.origin.z - 0.15,
+		"Walking into the ball must transfer visible force locally"
+	)
+
+	lab.reset_lab()
+	await physics_frame
+	player.global_position = Vector3(
+		rock_reset.origin.x,
+		0.02,
+		rock_reset.origin.z + 1.35
+	)
+	player.velocity = Vector3.ZERO
+	var pushed := player.request_push()
+	for frame in 8:
+		await physics_frame
+	_require(
+		pushed and rock.linear_velocity.length() > 0.2,
+		"The push action must reach and move a nearby rigid object"
 	)
 
 

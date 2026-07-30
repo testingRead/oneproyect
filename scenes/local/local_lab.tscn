@@ -122,8 +122,50 @@ offset_bottom = 50.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(0.9, 0.94, 1, 0.9)
 theme_override_font_sizes/font_size = 15
-text = "WASD · SHIFT correr · ESPACIO saltar · ENTER ronda · 1/2/3 área · R reiniciar"
+text = "IZQUIERDA mover · DERECHA cámara · SALTO · EMPUJAR · RONDA"
 horizontal_alignment = 2
+
+[node name="RoundBanner" type="PanelContainer" parent="HUD"]
+layout_mode = 3
+anchors_preset = 10
+anchor_left = 0.46
+anchor_right = 0.98
+offset_top = 62.0
+offset_bottom = 172.0
+grow_horizontal = 2
+theme_override_styles/panel = SubResource("PanelDiagnostics")
+
+[node name="Margin" type="MarginContainer" parent="HUD/RoundBanner"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 10
+
+[node name="Rows" type="VBoxContainer" parent="HUD/RoundBanner/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="Title" type="Label" parent="HUD/RoundBanner/Margin/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.67, 0.2, 1)
+theme_override_font_sizes/font_size = 20
+text = "LABORATORIO LOCAL"
+horizontal_alignment = 1
+
+[node name="Detail" type="Label" parent="HUD/RoundBanner/Margin/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.94, 0.97, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "Choca o usa EMPUJAR sobre los objetos"
+horizontal_alignment = 1
+
+[node name="Progress" type="Label" parent="HUD/RoundBanner/Margin/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.38, 0.95, 0.88, 1)
+theme_override_font_sizes/font_size = 14
+text = "Objetivo: evita las 3 zonas rojas de meteorito"
+horizontal_alignment = 1
 
 [node name="LookPad" type="Control" parent="HUD"]
 layout_mode = 3
@@ -162,7 +204,7 @@ grow_horizontal = 0
 grow_vertical = 0
 script = ExtResource("6_button")
 
-[node name="Area" type="Control" parent="HUD"]
+[node name="Push" type="Control" parent="HUD"]
 layout_mode = 3
 anchors_preset = 3
 anchor_left = 1.0
@@ -176,8 +218,8 @@ offset_bottom = -40.0
 grow_horizontal = 0
 grow_vertical = 0
 script = ExtResource("6_button")
-label = "ÁREA"
-accent = Color(0.14, 0.72, 0.72, 0.88)
+label = "EMPUJAR"
+accent = Color(0.14, 0.62, 0.78, 0.9)
 
 [node name="Round" type="Control" parent="HUD"]
 layout_mode = 3

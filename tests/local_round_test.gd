@@ -55,13 +55,17 @@ func _run() -> void:
 	var first_signature := PackedByteArray()
 	for round_index in 8:
 		var phases := PackedInt32Array()
+		var warnings := [0]
 		var collect_phase := func(
 			phase: LocalRoundController.Phase,
 			_label: String,
 			_seconds: float
 		) -> void:
 			phases.append(phase)
+		var collect_warning := func(_position: Vector3, _index: int) -> void:
+			warnings[0] += 1
 		lab.round_controller.phase_changed.connect(collect_phase)
+		lab.event_host.event_warning.connect(collect_warning)
 		var seed := 1000 + round_index * 37
 		_require(lab.start_reference_round(seed), "Idle lab must accept a round")
 		var completed := false
@@ -73,11 +77,16 @@ func _run() -> void:
 				completed = true
 				break
 		lab.round_controller.phase_changed.disconnect(collect_phase)
+		lab.event_host.event_warning.disconnect(collect_warning)
 		_require(completed, "Local round must complete within its bounded duration")
 		_require(phases == expected_phases, "Round phases must follow the official order")
 		_require(
 			lab.event_host.get_impact_count() > 0,
 			"Reference meteor must spawn, move and impact the island"
+		)
+		_require(
+			warnings[0] == 3,
+			"Every meteor must expose one visible warning before launch"
 		)
 		_require(
 			lab.map_host.get_mounted_node_count() == 0

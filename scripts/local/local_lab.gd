@@ -9,10 +9,13 @@ const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/isla_laboratorio
 @onready var metrics_label: Label = $HUD/DiagnosticsPanel/Margin/Rows/Metrics
 @onready var area_label: Label = $HUD/DiagnosticsPanel/Margin/Rows/Area
 @onready var round_label: Label = $HUD/DiagnosticsPanel/Margin/Rows/Round
+@onready var banner_title: Label = $HUD/RoundBanner/Margin/Rows/Title
+@onready var banner_detail: Label = $HUD/RoundBanner/Margin/Rows/Detail
+@onready var banner_progress: Label = $HUD/RoundBanner/Margin/Rows/Progress
 @onready var joystick: GrayboxVirtualJoystick = $HUD/Joystick
 @onready var look_pad: LookPad = $HUD/LookPad
 @onready var jump_button: TouchActionButton = $HUD/Jump
-@onready var area_button: TouchActionButton = $HUD/Area
+@onready var push_button: TouchActionButton = $HUD/Push
 @onready var round_button: TouchActionButton = $HUD/Round
 @onready var map_host: LocalMapHost = $World/RoundContent/MapHost
 @onready var event_host: LocalEventHost = $World/RoundContent/EventHost
@@ -21,6 +24,8 @@ const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/isla_laboratorio
 var _area_index := 1
 var _initial_dynamic_count := 0
 var _last_metrics: Dictionary = {}
+var _round_warning_count := 0
+var _round_impact_count := 0
 
 
 func _ready() -> void:
@@ -35,8 +40,9 @@ func _ready() -> void:
 	joystick.value_changed.connect(player.set_touch_move)
 	look_pad.look_delta.connect(player.add_touch_look)
 	jump_button.action_pressed.connect(player.request_jump)
-	area_button.action_pressed.connect(_cycle_area)
+	push_button.action_pressed.connect(player.request_push)
 	round_button.action_pressed.connect(start_reference_round)
+	player.push_performed.connect(_on_push_performed)
 	player.metrics_changed.connect(_on_player_metrics)
 	playable_area.area_changed.connect(_on_area_changed)
 	round_controller.configure(
@@ -47,6 +53,8 @@ func _ready() -> void:
 		playable_area
 	)
 	round_controller.phase_changed.connect(_on_round_phase_changed)
+	event_host.event_warning.connect(_on_event_warning)
+	event_host.event_impact.connect(_on_event_impact)
 	playable_area.set_area_index(_area_index)
 	playable_area.set_physical_walls_enabled(false)
 	_on_player_metrics(player.get_diagnostics())
@@ -149,21 +157,61 @@ func save_capture(capture_name: String) -> Error:
 	return image.save_png("%s/%s.png" % [directory, safe_name])
 
 
-func _cycle_area() -> void:
-	set_playable_area_index((_area_index + 1) % 3)
-
-
 func _on_round_phase_changed(
-	_phase: LocalRoundController.Phase,
-	label: String,
+	next_phase: LocalRoundController.Phase,
+	_label: String,
 	seconds: float
 ) -> void:
+	var phase_labels := [
+		"LISTA",
+		"PREPARANDO",
+		"REGLAS",
+		"CUENTA REGRESIVA",
+		"ACTIVA",
+		"RESULTADO",
+		"LIMPIANDO",
+	]
 	round_label.text = (
 		"RONDA %s  ·  %.1f s  ·  semilla %d"
-		% [label, seconds, round_controller.round_seed]
+		% [phase_labels[next_phase], seconds, round_controller.round_seed]
 	)
-	if _phase == LocalRoundController.Phase.IDLE:
-		_on_player_metrics(player.get_diagnostics())
+	match next_phase:
+		LocalRoundController.Phase.IDLE:
+			banner_title.text = "LABORATORIO LOCAL"
+			banner_detail.text = (
+				"Choca o usa EMPUJAR sobre los objetos · "
+				+ "RONDA inicia la prueba"
+			)
+			banner_progress.text = (
+				"Objetivo: evita las 3 zonas rojas de meteorito"
+			)
+			_on_player_metrics(player.get_diagnostics())
+		LocalRoundController.Phase.PREPARE:
+			_round_warning_count = 0
+			_round_impact_count = 0
+			banner_title.text = "MONTANDO ARENA"
+			banner_detail.text = "Trasladando al personaje al escenario de prueba"
+			banner_progress.text = "Los objetos de la ronda se limpiarán al terminar"
+		LocalRoundController.Phase.RULES:
+			banner_title.text = "METEORITOS"
+			banner_detail.text = "Muévete y sal de los círculos rojos antes del impacto"
+			banner_progress.text = "Tres impactos · sin red · física local"
+		LocalRoundController.Phase.COUNTDOWN:
+			banner_title.text = "PREPÁRATE · 3"
+			banner_detail.text = "Mira hacia la arena y localiza las advertencias"
+			banner_progress.text = "Los controles se activan al comenzar"
+		LocalRoundController.Phase.ACTIVE:
+			banner_title.text = "¡SOBREVIVE!"
+			banner_detail.text = "Evita cada círculo rojo"
+			banner_progress.text = "Advertencias 0/3 · impactos 0/3"
+		LocalRoundController.Phase.RESULT:
+			banner_title.text = "PRUEBA COMPLETADA"
+			banner_detail.text = "La física y los impactos se resolvieron localmente"
+			banner_progress.text = "Impactos observados %d/3" % _round_impact_count
+		LocalRoundController.Phase.CLEANUP:
+			banner_title.text = "LIMPIANDO ESCENARIO"
+			banner_detail.text = "Eliminando mapa y restaurando objetos"
+			banner_progress.text = "La siguiente ronda parte del mismo estado"
 
 
 func _on_player_metrics(metrics: Dictionary) -> void:
@@ -197,6 +245,32 @@ func _on_area_changed(size: float, bounds: Rect2) -> void:
 			int(SCALE.ISLAND_SIZE),
 			int(SCALE.ISLAND_SIZE),
 		]
+	)
+
+
+func _on_push_performed(hit: bool) -> void:
+	if round_controller.phase != LocalRoundController.Phase.IDLE:
+		return
+	banner_progress.text = (
+		"EMPUJE: objeto alcanzado"
+		if hit
+		else "EMPUJE: acércate y mira hacia un objeto"
+	)
+
+
+func _on_event_warning(_position: Vector3, _index: int) -> void:
+	_round_warning_count += 1
+	banner_progress.text = (
+		"Advertencias %d/3 · impactos %d/3"
+		% [_round_warning_count, _round_impact_count]
+	)
+
+
+func _on_event_impact(_position: Vector3) -> void:
+	_round_impact_count += 1
+	banner_progress.text = (
+		"Advertencias %d/3 · impactos %d/3"
+		% [_round_warning_count, _round_impact_count]
 	)
 
 
@@ -297,8 +371,9 @@ func _build_test_course_once() -> void:
 		structure
 	)
 	slope.rotation_degrees.z = -14.0
-	_add_moving_platform(content, structure)
-	_add_rigid_box(
+	var moving_platform := _add_moving_platform(content, structure)
+	_add_object_label(moving_platform, "PLATAFORMA MÓVIL", 0.45, Color(0.5, 0.85, 1.0))
+	var small_box := _add_rigid_box(
 		content,
 		"SmallBox",
 		Vector3(3.0, SCALE.SMALL_OBJECT_SIZE * 0.5, 3.0),
@@ -306,7 +381,8 @@ func _build_test_course_once() -> void:
 		0.7,
 		object_material
 	)
-	_add_rigid_sphere(
+	_add_object_label(small_box, "CAJA LIGERA · 0.7 kg", 0.65, Color(1.0, 0.78, 0.28))
+	var ball := _add_rigid_sphere(
 		content,
 		"Ball",
 		Vector3(-3.5, 0.46, 5.0),
@@ -315,7 +391,8 @@ func _build_test_course_once() -> void:
 		_material(Color(0.92, 0.9, 0.78), 0.68),
 		Vector3.ONE
 	)
-	_add_rigid_sphere(
+	_add_object_label(ball, "BALÓN · 0.55 kg · EMPÚJALO", 1.05, Color(1.0, 0.96, 0.72))
+	var rock := _add_rigid_sphere(
 		content,
 		"Rock",
 		Vector3(-5.0, 0.56, 5.0),
@@ -324,7 +401,8 @@ func _build_test_course_once() -> void:
 		_material(Color(0.36, 0.38, 0.4), 0.98),
 		Vector3.ONE
 	)
-	_add_rigid_box(
+	_add_object_label(rock, "PIEDRA · 3.5 kg · PESADA", 1.18, Color(0.86, 0.9, 0.95))
+	var medium_box := _add_rigid_box(
 		content,
 		"MediumBox",
 		Vector3(4.5, SCALE.MEDIUM_OBJECT_SIZE * 0.5, 3.0),
@@ -332,7 +410,8 @@ func _build_test_course_once() -> void:
 		4.0,
 		object_material
 	)
-	_add_rigid_box(
+	_add_object_label(medium_box, "CAJA MEDIA · 4 kg", 1.05, Color(1.0, 0.68, 0.22))
+	var large_box := _add_rigid_box(
 		content,
 		"LargeBox",
 		Vector3(7.0, SCALE.LARGE_OBJECT_SIZE * 0.5, 4.0),
@@ -340,6 +419,7 @@ func _build_test_course_once() -> void:
 		18.0,
 		object_material
 	)
+	_add_object_label(large_box, "CAJA PESADA · 18 kg", 1.65, Color(1.0, 0.5, 0.16))
 
 
 func _add_grid(parent: Node3D) -> void:
@@ -517,6 +597,27 @@ func _add_moving_platform(
 	platform.add_child(mesh)
 	parent.add_child(platform)
 	return platform
+
+
+func _add_object_label(
+	parent: Node3D,
+	text_value: String,
+	height: float,
+	color: Color
+) -> void:
+	var label := Label3D.new()
+	label.name = "ObjectLabel"
+	label.position.y = height
+	label.text = text_value
+	label.font_size = 28
+	label.pixel_size = 0.009
+	label.modulate = color
+	label.outline_modulate = Color(0.015, 0.025, 0.04, 0.95)
+	label.outline_size = 7
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.render_priority = 2
+	parent.add_child(label)
 
 
 func _add_shore_boundaries(parent: Node3D) -> void:

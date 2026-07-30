@@ -8,7 +8,8 @@ de decidir qué resultados necesitarán autoridad remota.
 
 - `MinigameMapDefinition`: datos inmutables del contenido; no ejecuta física.
 - `LocalMapHost`: monta una construcción para la semilla y la elimina completa.
-- `LocalEventHost`: conserva tres meteoritos preasignados y los reutiliza.
+- `LocalEventHost`: conserva tres meteoritos y tres marcas de peligro
+  preasignados, los presenta de forma escalonada y los reutiliza.
 - `LocalRoundController`: único dueño de fases, tiempos, bloqueo de controles y
   limpieza.
 - `LocalBaseCharacter`: movimiento e impulsos inmediatos; desconoce mapas,
@@ -36,7 +37,8 @@ PREPARE → RULES → COUNTDOWN → ACTIVE → RESULT → CLEANUP → IDLE
 `stop_and_clean()` incrementa una generación interna. Todo temporizador viejo
 comprueba esa generación al despertar, por lo que una ronda cancelada no puede
 continuar ni reactivar contenido. La prueba ejecuta ocho rondas y una
-cancelación; todas deben volver exactamente al mismo conteo de nodos.
+cancelación; todas deben mostrar tres advertencias y volver exactamente al
+mismo conteo de nodos.
 
 ## Autoridad futura
 

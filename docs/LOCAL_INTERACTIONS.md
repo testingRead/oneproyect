@@ -13,6 +13,12 @@ usan impulsos puntuales; los reinicios son teletransportes esporádicos con el
 cuerpo congelado y velocidades en cero. Modelo y colisión conservan origen,
 escala uniforme y planta coincidentes.
 
+El personaje transfiere una fuerza limitada al caminar contra un objeto
+movible. La acción explícita **EMPUJAR** hace un sondeo corto en la dirección
+de cámara y aplica un único impulso si encuentra un `RigidBody3D`. La prueba
+automatizada cubre ambos caminos con el balón ligero y la piedra pesada; ya no
+basta con verificar impulsos sintéticos aplicados directamente desde el test.
+
 La elección sigue las clases oficiales:
 
 - [RigidBody3D](https://docs.godotengine.org/en/stable/classes/class_rigidbody3d.html)

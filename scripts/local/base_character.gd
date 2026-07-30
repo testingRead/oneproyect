@@ -4,6 +4,7 @@ extends CharacterBody3D
 const SCALE := preload("res://shared/gameplay_scale.gd")
 
 signal metrics_changed(metrics: Dictionary)
+signal push_performed(hit: bool)
 
 @export_range(0.8, 1.2, 0.01) var stature := SCALE.STATURE_STANDARD
 @export var controls_enabled := true
@@ -20,6 +21,7 @@ var _external_velocity := Vector3.ZERO
 var _motor_velocity := Vector3.ZERO
 var _last_metrics_second := -1
 var _spawn_transform: Transform3D
+var _push_cooldown := 0.0
 
 
 func _ready() -> void:
@@ -35,6 +37,7 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_push_cooldown = maxf(0.0, _push_cooldown - delta)
 	var desktop := Input.get_vector(
 		"move_left",
 		"move_right",
@@ -89,6 +92,7 @@ func _physics_process(delta: float) -> void:
 			delta * 12.0
 		)
 	move_and_slide()
+	_push_contacted_rigid_bodies()
 	_update_foot_contacts()
 	var real_speed := Vector2(velocity.x, velocity.z).length()
 	visual_root.update_motion(
@@ -135,6 +139,32 @@ func set_touch_sprint(enabled: bool) -> void:
 func request_jump() -> void:
 	if controls_enabled:
 		_jump_requested = true
+
+
+func request_push() -> bool:
+	if not controls_enabled or _push_cooldown > 0.0:
+		return false
+	_push_cooldown = 0.42
+	visual_root.trigger_push()
+	var direction := -camera_pivot.global_basis.z
+	direction.y = 0.0
+	direction = direction.normalized()
+	var origin := global_position + Vector3.UP * 0.82
+	var query := PhysicsRayQueryParameters3D.create(
+		origin,
+		origin + direction * 1.65,
+		1
+	)
+	query.exclude = [get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var body := hit.get("collider") as RigidBody3D
+	if body == null:
+		push_performed.emit(false)
+		return false
+	body.sleeping = false
+	body.apply_central_impulse(direction * 2.4 + Vector3.UP * 0.28)
+	push_performed.emit(true)
+	return true
 
 
 func add_touch_look(delta: Vector2) -> void:
@@ -228,3 +258,24 @@ func _update_foot_contacts() -> void:
 		left_normal,
 		right_normal
 	)
+
+
+func _push_contacted_rigid_bodies() -> void:
+	var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
+	if horizontal_velocity.length_squared() < 0.16:
+		return
+	for index in get_slide_collision_count():
+		var collision_info := get_slide_collision(index)
+		var body := collision_info.get_collider() as RigidBody3D
+		if body == null:
+			continue
+		var direction := -collision_info.get_normal()
+		direction.y = 0.0
+		if direction.length_squared() < 0.01:
+			continue
+		direction = direction.normalized()
+		var approach_speed := maxf(0.0, horizontal_velocity.dot(direction))
+		if approach_speed <= 0.1:
+			continue
+		body.sleeping = false
+		body.apply_central_force(direction * minf(18.0, 4.0 + approach_speed * 2.2))

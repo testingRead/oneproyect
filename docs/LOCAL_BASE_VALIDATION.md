@@ -12,9 +12,9 @@ en el dispositivo. Esta tabla es el corte reproducible del 2026-07-30.
 | Variantes baja/alta | Estructura validada | Misma escena/controlador y origen; aún no habilitadas para uso |
 | Locomoción | Candidata | Caminar/correr, salto, desaceleración, pendiente, empuje y plataforma pasan pruebas; falta prueba táctil |
 | Límites | Candidata | Costa física permanente; 30/60/100 m son zonas lógicas con paredes internas opcionales |
-| Objetos | Candidata | Estático, móvil programado y cinco movibles: tres cajas, balón y piedra |
+| Objetos | Candidata | Cinco movibles identificados; caminar y EMPUJAR transfieren fuerza según masa |
 | Mapa modular | Candidato | `MapDefinition` declara contenido y compatibilidad; cuatro slots binarios varían por semilla |
-| Evento de referencia | Candidato | Pool fijo de tres meteoritos; aparición, movimiento, impacto, impulso y limpieza probados |
+| Evento de referencia | Candidato | Tres avisos rojos escalonados, meteoritos visibles, impacto, impulso y limpieza probados |
 | Ronda local | Aprobada técnicamente | Ocho ciclos completos y una cancelación vuelven al conteo base sin residuos |
 | NPC | Pendiente | No implementado |
 | Reintegración multijugador | Bloqueada intencionalmente | Espera aprobación de las capas locales |
@@ -30,9 +30,9 @@ godot --path . -- --local-development
 Resultado actual en Linux y ARM64:
 
 ```text
-LOCAL_BASE_OK nodes=187 objects=5 run_speed=6.00
+LOCAL_BASE_OK nodes=202 objects=5 run_speed=6.00
 jump_height=1.41 area=30
-LOCAL_ROUND_OK repeats=8 pool=3 baseline_nodes=187 phases=7
+LOCAL_ROUND_OK repeats=8 pool=3 baseline_nodes=202 phases=7
 ```
 
 El salto objetivo es 1,35 m; la diferencia observada hasta 1,41 m corresponde

@@ -84,9 +84,13 @@ func _run_round(generation: int) -> void:
 	if not await _wait_phase(3.0, generation):
 		return
 	player.controls_enabled = true
-	_transition(Phase.ACTIVE, 7.0)
-	event_host.start_reference_event(round_seed, map_definition.event_points)
-	if not await _wait_phase(7.0, generation):
+	_transition(Phase.ACTIVE, 9.0)
+	event_host.start_reference_event(
+		round_seed,
+		map_definition.event_points,
+		duration_multiplier
+	)
+	if not await _wait_phase(9.0, generation):
 		return
 	player.controls_enabled = false
 	_transition(Phase.RESULT, 1.5)
