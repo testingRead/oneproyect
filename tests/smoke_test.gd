@@ -4,6 +4,8 @@ const EXPECTED_METEOR_POOL := 8
 const NETWORK_SCRIPT := preload("res://scripts/network/network_manager.gd")
 const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn")
 const GAMEPLAY_FEATURE_SCRIPT := preload("res://scripts/features/gameplay_feature.gd")
+const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.gd")
+const WEAPONS := preload("res://shared/weapon_profiles.gd")
 
 
 func _init() -> void:
@@ -147,12 +149,29 @@ func _run() -> void:
 	shooter_plan.feature_ids = PackedStringArray(["shooter_controls"])
 	feature_host.apply_experience(shooter_plan)
 	_require(
-		game.get_node("HUD/Shoot").visible and player.is_first_person(),
+		game.get_node("HUD/Shoot").visible
+		and game.get_node("HUD/Reload").visible
+		and player.is_first_person(),
 		"Shooter feature must provide its own touch control and camera profile"
+	)
+	var shooter_feature := game.get_node("ExperienceFeatureHost/ShooterControls")
+	var initial_ammo := int(shooter_feature.get("_ammo"))
+	shooter_feature.call("_request_shot")
+	_require(
+		int(shooter_feature.get("_ammo")) == initial_ammo - 1
+		and game.get_node("HUD/WeaponStatus").text.contains("/"),
+		"Shooter feature must animate a modeled weapon and track its magazine"
+	)
+	shooter_feature.set("_ammo", 0)
+	shooter_feature.call("_begin_reload")
+	_require(
+		float(shooter_feature.get("_reload_remaining")) > 0.0,
+		"Empty magazine must start the reusable reload animation"
 	)
 	feature_host.clear_experience()
 	_require(
-		not game.get_node("HUD/Shoot").visible,
+		not game.get_node("HUD/Shoot").visible
+		and not game.get_node("HUD/Reload").visible,
 		"Shooter controls must disappear when another minigame starts"
 	)
 	var domain_plan := initial_plan.duplicate(true)
@@ -206,7 +225,7 @@ func _run() -> void:
 	)
 	_require(quality_options.item_count == 3, "Quality menu must show Low, Medium and High")
 	_require(fps_options.item_count == 3, "FPS menu must show every available cap")
-	_require(character_options.item_count == 5, "Character menu must show every model")
+	_require(character_options.item_count == 6, "Character menu must show every model")
 	_require(
 		game.get_node("HUD/PausePanel/PreviewPanel/ViewportContainer/Viewport/Avatar") != null,
 		"Character menu must include a reusable 3D preview"
@@ -274,20 +293,36 @@ func _run() -> void:
 	var suit_material := player.get_node("Visual/Body").material_override as StandardMaterial3D
 	_require(suit_material.albedo_texture != null, "Medium quality must enable shared suit atlas")
 	player.set_texture_detail(false)
+	player.set_character_variant(CHARACTER_CATALOG.PIONEER_INDEX)
+	_require(
+		player.get_node("Visual/Body").scale.x
+		< player.get_node("Visual/Pelvis").scale.x,
+		"Pionera must use an independent feminine silhouette"
+	)
 	player.set_character_variant(0)
 	game._on_quality_selected(1)
 	suit_material = player.get_node("Visual/Body").material_override as StandardMaterial3D
 	_require(suit_material.albedo_texture != null, "Quality profile must apply shared texture")
 	_require(game.get_node("World/Sun").shadow_enabled, "Medium quality must inherit former High shadows")
+	_require(
+		player.get_node("Visual/Chest").visible
+		and player.get_node("Visual/Chest").mesh is BoxMesh,
+		"Medium quality must enable articulated silhouette parts"
+	)
 	game._on_quality_selected(2)
 	_require(game.get_node("World/Sun").shadow_enabled, "High quality must enable the optional shadow")
 	_require(
 		player.get_node("Visual/Head").mesh is SphereMesh
+		and player.get_node("Visual/Chest").mesh is CapsuleMesh
 		and game.get_node("World/Environment").environment.fog_enabled,
 		"High quality must use rounded characters and atmospheric fog"
 	)
 	game._on_quality_selected(0)
 	_require(not game.get_node("World/Sun").shadow_enabled, "Low quality must disable shadows")
+	_require(
+		not player.get_node("Visual/Chest").visible,
+		"Low quality must omit secondary character geometry"
+	)
 
 	var push_request_state := [false]
 	player.push_requested.connect(func() -> void:
@@ -428,6 +463,14 @@ func _run() -> void:
 		remote.get_node("Name").text == "Prueba · 100 VIDA",
 		"Remote name and life must be visible"
 	)
+	remote.set_detail_quality(2)
+	remote.play_shoot_animation(WEAPONS.Id.C16)
+	await process_frame
+	_require(
+		remote.get_node("HeldWeapon").visible
+		and remote.get_node("Chest").mesh is CapsuleMesh,
+		"Remote shooter must deduce its weapon pose from reliable shot events"
+	)
 	remote.set_health(0)
 	_require(
 		remote.get_node("Name").text == "Prueba · ELIMINADO",
@@ -445,7 +488,9 @@ func _run() -> void:
 		& ~(1 << GrayboxPlayer.Accessory.TAIL)
 	)
 	_require(
-		not remote.get_node("RightLeg").visible and not remote.get_node("Tail").visible,
+		not remote.get_node("RightLeg").visible
+		and not remote.get_node("RightFoot").visible
+		and not remote.get_node("Tail").visible,
 		"Remote avatar must apply synchronized limb and accessory state"
 	)
 	remote.queue_free()

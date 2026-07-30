@@ -194,7 +194,7 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	for index in CHARACTER_CATALOG.NAMES.size():
 		var suffix := (
 			" · BLOQUEADO"
-			if index == CHARACTER_CATALOG.NAMES.size() - 1
+			if index == CHARACTER_CATALOG.GOLDEN_INDEX
 			else ""
 		)
 		_character_button.add_item(
@@ -516,7 +516,7 @@ func _on_character_selected(index: int) -> void:
 		return
 	var next_index := CHARACTER_CATALOG.sanitize_index(index)
 	if (
-		next_index == CHARACTER_CATALOG.NAMES.size() - 1
+		next_index == CHARACTER_CATALOG.GOLDEN_INDEX
 		and _total_victories < CHARACTER_CATALOG.GOLDEN_CHARACTER_COST
 	):
 		_character_button.select(network.color_index)
@@ -592,6 +592,8 @@ func _update_character_preview() -> void:
 	_character_preview.set_process(false)
 	_character_preview.set_shadow_quality(false)
 	_character_preview.set_texture_detail(false)
+	_character_preview.set_model_quality(true)
+	_character_preview.set_detail_quality(2)
 	_character_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 

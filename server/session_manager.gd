@@ -45,7 +45,11 @@ func register_session(
 		existing.connected = true
 		existing.reconnect_until_tick = 0
 		existing.display_name = _sanitize_name(requested_name, existing.player_id)
-		existing.color_index = clampi(requested_color, 0, 4)
+		existing.color_index = clampi(
+			requested_color,
+			0,
+			NET.CHARACTER_VARIANT_COUNT - 1
+		)
 		existing.profile_victories = maxi(
 			existing.profile_victories,
 			clampi(requested_victories, 0, 1000000)
@@ -68,7 +72,11 @@ func register_session(
 	session.reconnect_token = _create_token()
 	session.peer_id = peer_id
 	session.display_name = _sanitize_name(requested_name, session.player_id)
-	session.color_index = clampi(requested_color, 0, 4)
+	session.color_index = clampi(
+		requested_color,
+		0,
+		NET.CHARACTER_VARIANT_COUNT - 1
+	)
 	session.profile_victories = clampi(requested_victories, 0, 1000000)
 	session.profile_experience = clampi(requested_experience, 0, 100000000)
 	session.ready = false

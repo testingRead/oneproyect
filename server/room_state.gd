@@ -162,6 +162,8 @@ func apply_shot(peer_id: int, origin: Vector3, direction: Vector3) -> bool:
 	if source == null or not source.connected or not source.active:
 		return false
 	var weapon_id: int = WEAPONS.from_round_seed(round_seed)
+	if server_tick < source.weapon_reload_until_tick:
+		return false
 	if server_tick - source.last_shot_tick < WEAPONS.cooldown_ticks(weapon_id):
 		return false
 	if (
@@ -192,6 +194,12 @@ func apply_shot(peer_id: int, origin: Vector3, direction: Vector3) -> bool:
 		best_distance = distance_along
 		best_target = candidate
 	source.last_shot_tick = server_tick
+	source.weapon_shots += 1
+	if source.weapon_shots >= WEAPONS.magazine_size(weapon_id):
+		source.weapon_shots = 0
+		source.weapon_reload_until_tick = (
+			server_tick + ceili(WEAPONS.reload_seconds(weapon_id) * NET.SERVER_TICK_RATE)
+		)
 	resolved_shooter_player_id = source.player_id
 	resolved_target_player_id = 0
 	resolved_hit_position = origin + ray * 32.0

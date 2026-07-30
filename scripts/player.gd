@@ -86,6 +86,9 @@ var _look_sensitivity_scale := 1.0
 var _walk_phase := 0.0
 var _push_animation := 0.0
 var _hurt_animation := 0.0
+var _combat_pose := false
+var _shoot_animation := 0.0
+var _reload_animation := 0.0
 var _limb_health := PackedInt32Array()
 var _limb_mask := ALL_LIMBS_MASK
 var _head_accessory_health := ACCESSORY_MAX_HEALTH
@@ -114,6 +117,8 @@ func _physics_process(delta: float) -> void:
 	_push_cooldown = maxf(0.0, _push_cooldown - delta)
 	_push_animation = maxf(0.0, _push_animation - delta)
 	_hurt_animation = maxf(0.0, _hurt_animation - delta)
+	_shoot_animation = maxf(0.0, _shoot_animation - delta)
+	_reload_animation = maxf(0.0, _reload_animation - delta)
 	var desktop_move := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var movement_input := _touch_move if _touch_move.length_squared() > desktop_move.length_squared() else desktop_move
 	if not _controls_enabled:
@@ -154,7 +159,10 @@ func _physics_process(delta: float) -> void:
 		_walk_phase,
 		is_on_floor(),
 		clampf(_push_animation / 0.30, 0.0, 1.0),
-		clampf(_hurt_animation / 0.25, 0.0, 1.0)
+		clampf(_hurt_animation / 0.25, 0.0, 1.0),
+		1.0 if _combat_pose else 0.0,
+		clampf(_shoot_animation / 0.14, 0.0, 1.0),
+		clampf(_reload_animation / 1.1, 0.0, 1.0)
 	)
 
 	move_and_slide()
@@ -337,6 +345,26 @@ func set_texture_detail(enabled: bool) -> void:
 
 func set_model_quality(rounded: bool) -> void:
 	HUMANOID_RIG.set_model_quality(visual, rounded)
+
+
+func set_detail_quality(level: int) -> void:
+	HUMANOID_RIG.set_detail_quality(visual, level)
+	HUMANOID_RIG.apply_limb_mask(visual, _limb_mask, _character_variant_index)
+
+
+func set_combat_pose(enabled: bool) -> void:
+	_combat_pose = enabled
+	if not enabled:
+		_shoot_animation = 0.0
+		_reload_animation = 0.0
+
+
+func play_shoot_animation() -> void:
+	_shoot_animation = 0.14
+
+
+func play_reload_animation(duration := 1.1) -> void:
+	_reload_animation = maxf(0.2, duration)
 
 
 func apply_damage_and_knockback(origin: Vector3, force: float, damage: int) -> void:

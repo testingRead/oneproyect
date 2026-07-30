@@ -89,6 +89,36 @@ func _run() -> void:
 	)
 	shooter_room.queue_free()
 
+	var reload_room: Node = ROOM_SCRIPT.new()
+	reload_room.name = "ReloadRoomTest"
+	root.add_child(reload_room)
+	await process_frame
+	var reloader: RefCounted = reload_room.session_manager.register_session(
+		55, "abababababababab", "", "Rafa", 0, 0, 0, 0
+	)
+	reloader.position = Vector3.ZERO
+	reload_room.phase = NET.RoomPhase.ACTIVE
+	reload_room.mode_id = NET.ModeId.SHOOTER
+	reload_room.round_seed = WEAPONS.Id.T12
+	reload_room.phase_end_tick = 2000
+	for shell in WEAPONS.magazine_size(WEAPONS.Id.T12):
+		reload_room.server_tick += WEAPONS.cooldown_ticks(WEAPONS.Id.T12)
+		_require(
+			reload_room.apply_shot(55, Vector3.ZERO, Vector3.FORWARD),
+			"Every shell inside the authoritative magazine must fire"
+		)
+	reload_room.server_tick += WEAPONS.cooldown_ticks(WEAPONS.Id.T12)
+	_require(
+		not reload_room.apply_shot(55, Vector3.ZERO, Vector3.FORWARD),
+		"Server must reject firing during authoritative reload"
+	)
+	reload_room.server_tick = reloader.weapon_reload_until_tick
+	_require(
+		reload_room.apply_shot(55, Vector3.ZERO, Vector3.FORWARD),
+		"Server must accept the next magazine after reload"
+	)
+	reload_room.queue_free()
+
 	var domain_room: Node = ROOM_SCRIPT.new()
 	domain_room.name = "DomainRoomTest"
 	root.add_child(domain_room)

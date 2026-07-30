@@ -5,6 +5,7 @@ const WEAPONS := preload("res://shared/weapon_profiles.gd")
 
 var _player: GrayboxPlayer
 var _shoot_button: Control
+var _reload_button: Control
 var _weapon_label: Label
 var _network: Variant
 var _disaster: DisasterController
@@ -16,6 +17,9 @@ var _weapon_root: Node3D
 var _weapon_base_position := Vector3(0.34, -0.28, -0.62)
 var _recoil := 0.0
 var _weapon_id := 0
+var _ammo := 0
+var _reload_remaining := 0.0
+var _reload_duration := 1.0
 
 
 func _ready() -> void:
@@ -29,6 +33,9 @@ func activate(context: Dictionary) -> void:
 	var hud := context.get("hud") as CanvasLayer
 	var plan := context.get("plan", {}) as Dictionary
 	_weapon_id = WEAPONS.from_round_seed(int(plan.get("round_seed", 0)))
+	_ammo = WEAPONS.magazine_size(_weapon_id)
+	_reload_duration = WEAPONS.reload_seconds(_weapon_id)
+	_reload_remaining = 0.0
 	_network = get_node("/root/Network")
 	var world := context.get("world") as Node3D
 	_disaster = (
@@ -42,14 +49,20 @@ func activate(context: Dictionary) -> void:
 		else null
 	)
 	_shoot_button = hud.get_node_or_null("Shoot") as Control if hud != null else null
+	_reload_button = hud.get_node_or_null("Reload") as Control if hud != null else null
 	if _shoot_button != null:
 		_shoot_button.visible = true
 		if not _shoot_button.action_pressed.is_connected(_request_shot):
 			_shoot_button.action_pressed.connect(_request_shot)
+	if _reload_button != null:
+		_reload_button.visible = true
+		if not _reload_button.action_pressed.is_connected(_begin_reload):
+			_reload_button.action_pressed.connect(_begin_reload)
 	_ensure_weapon_label(hud)
 	if _player != null:
 		_previous_first_person = _player.is_first_person()
 		_player.set_first_person(true)
+		_player.set_combat_pose(true)
 		_rebuild_weapon()
 		_weapon_root.visible = true
 	_active = true
@@ -61,8 +74,11 @@ func deactivate() -> void:
 	set_process(false)
 	if _shoot_button != null:
 		_shoot_button.visible = false
+	if _reload_button != null:
+		_reload_button.visible = false
 	if _player != null:
 		_player.set_first_person(_previous_first_person)
+		_player.set_combat_pose(false)
 	if _weapon_root != null:
 		_weapon_root.visible = false
 	if _weapon_label != null:
@@ -72,19 +88,49 @@ func deactivate() -> void:
 
 func _process(delta: float) -> void:
 	_cooldown = maxf(0.0, _cooldown - delta)
+	if _reload_remaining > 0.0:
+		_reload_remaining = maxf(0.0, _reload_remaining - delta)
+		if _reload_remaining <= 0.0:
+			_ammo = WEAPONS.magazine_size(_weapon_id)
+			_update_weapon_label()
 	_recoil = move_toward(_recoil, 0.0, delta * 8.0)
 	if _weapon_root != null:
-		_weapon_root.position = _weapon_base_position + Vector3(0.0, -_recoil * 0.025, _recoil * 0.11)
-		_weapon_root.rotation.x = -_recoil * 0.09
+		var reload_weight := (
+			sin(PI * (1.0 - _reload_remaining / _reload_duration))
+			if _reload_remaining > 0.0
+			else 0.0
+		)
+		_weapon_root.position = (
+			_weapon_base_position
+			+ Vector3(0.0, -_recoil * 0.025 - reload_weight * 0.26, _recoil * 0.11)
+		)
+		_weapon_root.rotation = Vector3(
+			-_recoil * 0.09 + reload_weight * 0.32,
+			0.0,
+			reload_weight * 0.42
+		)
+	if _active and Input.is_action_just_pressed("reload"):
+		_begin_reload()
 	if _active and Input.is_action_just_pressed("shoot"):
 		_request_shot()
 
 
 func _request_shot() -> void:
-	if not _active or _player == null or _cooldown > 0.0:
+	if (
+		not _active
+		or _player == null
+		or _cooldown > 0.0
+		or _reload_remaining > 0.0
+	):
+		return
+	if _ammo <= 0:
+		_begin_reload()
 		return
 	_cooldown = WEAPONS.cooldown_seconds(_weapon_id)
+	_ammo -= 1
 	_recoil = 1.0
+	_player.play_shoot_animation()
+	_update_weapon_label()
 	var origin := _player.get_shoot_origin()
 	var direction := _player.get_shoot_direction()
 	if _network.is_online():
@@ -97,6 +143,8 @@ func _request_shot() -> void:
 		)
 		if _sounds != null:
 			_sounds.play_weapon_shot(_weapon_id)
+	if _ammo <= 0:
+		_begin_reload()
 
 
 func _rebuild_weapon() -> void:
@@ -190,11 +238,33 @@ func _ensure_weapon_label(hud: CanvasLayer) -> void:
 		_weapon_label.add_theme_font_size_override("font_size", 18)
 		_weapon_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
 		hud.add_child(_weapon_label)
-	_weapon_label.text = "%s\n%s" % [
-		WEAPONS.display_name(_weapon_id),
-		WEAPONS.reference_name(_weapon_id),
-	]
+	_update_weapon_label()
 	_weapon_label.visible = true
+
+
+func _update_weapon_label() -> void:
+	if _weapon_label == null:
+		return
+	_weapon_label.text = "%s · %d/%d\n%s%s" % [
+		WEAPONS.display_name(_weapon_id),
+		_ammo,
+		WEAPONS.magazine_size(_weapon_id),
+		WEAPONS.reference_name(_weapon_id),
+		" · RECARGANDO" if _reload_remaining > 0.0 else "",
+	]
+
+
+func _begin_reload() -> void:
+	if (
+		not _active
+		or _player == null
+		or _reload_remaining > 0.0
+		or _ammo >= WEAPONS.magazine_size(_weapon_id)
+	):
+		return
+	_reload_remaining = _reload_duration
+	_player.play_reload_animation(_reload_duration)
+	_update_weapon_label()
 
 
 func _add_box(

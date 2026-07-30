@@ -379,6 +379,9 @@ func _on_shot_received(
 ) -> void:
 	disaster.spawn_network_shot(origin, hit_position, weapon_id)
 	sounds.play_weapon_shot(weapon_id)
+	var shooter_avatar: RemoteAvatar = _remote_avatars.get(_shooter_player_id)
+	if shooter_avatar != null:
+		shooter_avatar.play_shoot_animation(weapon_id)
 	if target_player_id == network.get_local_player_id() and damage > 0:
 		player.apply_shot_damage(damage, hit_position)
 
@@ -547,6 +550,7 @@ func _on_remote_player_joined(peer_id: int, player_name: String, player_color: i
 	avatar.set_shadow_quality(_quality_level >= 1)
 	avatar.set_texture_detail(_quality_level >= 1)
 	avatar.set_model_quality(_quality_level >= 2)
+	avatar.set_detail_quality(_quality_level)
 	_remote_avatars[peer_id] = avatar
 
 
@@ -653,7 +657,9 @@ func _load_profile() -> void:
 			config.get_value("player", "last_completed_match_id", 0)
 		)
 		_install_id = str(config.get_value("player", "install_id", ""))
-		network.color_index = clampi(int(config.get_value("player", "character", 0)), 0, 4)
+		network.color_index = CHARACTER_CATALOG.sanitize_index(
+			int(config.get_value("player", "character", 0))
+		)
 		sounds.set_enabled(bool(config.get_value("settings", "sound", true)))
 		_vibration_enabled = bool(config.get_value("settings", "vibration", true))
 		_first_person_enabled = bool(config.get_value("settings", "first_person", false))
@@ -818,10 +824,13 @@ func _apply_quality() -> void:
 		avatar.set_shadow_quality(_quality_level >= 1)
 		avatar.set_texture_detail(_quality_level >= 1)
 		avatar.set_model_quality(_quality_level >= 2)
+		avatar.set_detail_quality(_quality_level)
 	player.set_texture_detail(_quality_level >= 1)
 	player.set_model_quality(_quality_level >= 2)
+	player.set_detail_quality(_quality_level)
 	preview_avatar.set_texture_detail(_quality_level >= 1)
 	preview_avatar.set_model_quality(_quality_level >= 2)
+	preview_avatar.set_detail_quality(_quality_level)
 	for receiver in get_tree().get_nodes_in_group(&"quality_receiver"):
 		if receiver.has_method("set_quality_level"):
 			receiver.call("set_quality_level", _quality_level)
@@ -843,7 +852,7 @@ func _apply_fps_limit() -> void:
 func _on_character_selected(index: int) -> void:
 	var next_index := CHARACTER_CATALOG.sanitize_index(index)
 	if (
-		next_index == CHARACTER_CATALOG.NAMES.size() - 1
+		next_index == CHARACTER_CATALOG.GOLDEN_INDEX
 		and _total_victories < CHARACTER_CATALOG.GOLDEN_CHARACTER_COST
 	):
 		character_button.select(int(network.color_index))
@@ -879,7 +888,7 @@ func _populate_option_lists() -> void:
 	for index in CHARACTER_CATALOG.NAMES.size():
 		var suffix := (
 			" · BLOQUEADO (%d)" % CHARACTER_CATALOG.GOLDEN_CHARACTER_COST
-			if index == CHARACTER_CATALOG.NAMES.size() - 1
+			if index == CHARACTER_CATALOG.GOLDEN_INDEX
 			else ""
 		)
 		character_button.add_item("%s%s" % [CHARACTER_CATALOG.NAMES[index], suffix])

@@ -113,7 +113,7 @@ func _ready() -> void:
 	server_address = str(ProjectSettings.get_setting("network/server_address", server_address))
 	server_port = int(ProjectSettings.get_setting("network/server_port", NET.DEFAULT_PORT))
 	display_name = "Jugador%03d" % (randi() % 1000)
-	color_index = randi() % 5
+	color_index = randi() % NET.CHARACTER_VARIANT_COUNT
 	_state_packet = CODEC.create_owned_state_buffer()
 	_load_identity()
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
@@ -195,7 +195,7 @@ func set_room_profile(ready: bool, mode_exclusion: int = excluded_mode_id) -> vo
 		excluded_mode_id = clampi(mode_exclusion, -1, NET.ModeId.size() - 1)
 		_rpc_set_room_profile.rpc_id(
 			1,
-			clampi(color_index, 0, 4),
+			clampi(color_index, 0, NET.CHARACTER_VARIANT_COUNT - 1),
 			ready,
 			excluded_mode_id
 		)

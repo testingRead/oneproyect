@@ -1,10 +1,11 @@
 class_name NetConstants
 extends RefCounted
 
-const PROTOCOL_VERSION := 8
+const PROTOCOL_VERSION := 9
 const DEFAULT_PORT := 9999
 const MAX_ROOMS := 5
 const MAX_PLAYERS_PER_ROOM := 5
+const CHARACTER_VARIANT_COUNT := 6
 const MAX_SERVER_CONNECTIONS := MAX_ROOMS * MAX_PLAYERS_PER_ROOM
 const MIN_PLAYERS_TO_START := 2
 const SERVER_TICK_RATE := 20

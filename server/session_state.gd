@@ -32,6 +32,8 @@ var last_state_sequence := 0
 var last_state_tick := 0
 var last_shot_tick := -1000
 var objective_ticks := 0
+var weapon_shots := 0
+var weapon_reload_until_tick := 0
 
 
 func accept_owned_state(
@@ -80,6 +82,8 @@ func prepare_next_round() -> void:
 	body_mask = NET.ALL_BODY_PARTS_MASK
 	last_shot_tick = -1000
 	objective_ticks = 0
+	weapon_shots = 0
+	weapon_reload_until_tick = 0
 
 
 func player_flags() -> int:

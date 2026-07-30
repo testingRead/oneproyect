@@ -72,3 +72,23 @@ static func damage(weapon_id: int, distance: float) -> int:
 			return 48 if distance <= 8.0 else 30
 		_:
 			return 34
+
+
+static func magazine_size(weapon_id: int) -> int:
+	match weapon_id:
+		Id.C16:
+			return 12
+		Id.T12:
+			return 5
+		_:
+			return 8
+
+
+static func reload_seconds(weapon_id: int) -> float:
+	match weapon_id:
+		Id.C16:
+			return 1.35
+		Id.T12:
+			return 1.75
+		_:
+			return 1.1

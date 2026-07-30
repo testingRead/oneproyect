@@ -59,6 +59,10 @@ shoot={
 "deadzone": 0.3,
 "events": [Object(InputEventMouseButton,"button_index":1), Object(InputEventKey,"physical_keycode":70)]
 }
+reload={
+"deadzone": 0.3,
+"events": [Object(InputEventKey,"physical_keycode":82)]
+}
 pause={
 "deadzone": 0.3,
 "events": [Object(InputEventKey,"physical_keycode":80), Object(InputEventKey,"physical_keycode":4194305)]

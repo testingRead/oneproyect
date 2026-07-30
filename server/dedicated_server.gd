@@ -234,7 +234,7 @@ func _rpc_set_room_profile(
 	if session == null:
 		_rpc_room_action_failed.rpc_id(sender, "not_in_room")
 		return
-	session.color_index = clampi(character_index, 0, 4)
+	session.color_index = clampi(character_index, 0, NET.CHARACTER_VARIANT_COUNT - 1)
 	session.excluded_mode_id = clampi(excluded_mode_id, -1, NET.ModeId.size() - 1)
 	session.ready = ready
 	_broadcast_player_profile(room, session)
