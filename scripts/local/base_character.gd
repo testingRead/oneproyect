@@ -9,6 +9,9 @@ signal hand_action_changed(label: String)
 signal action_resolved(action: StringName, hit: bool)
 signal local_health_changed(current: int, maximum: int)
 signal object_impulse_requested(object_name: String, impulse: Vector3)
+signal bat_charge_changed(ratio: float, charged: bool)
+signal bat_hit(target: Node3D, charged: bool)
+signal bat_swing_started(charged: bool)
 
 const ACTION_PUSH := &"PUSH"
 const ACTION_KICK := &"KICK"
@@ -59,6 +62,11 @@ var _goalkeeper_remaining := 0.0
 var _goalkeeper_side := 0
 var _goalkeeper_level := 1
 var _local_health := 100
+var _top_down_mode := false
+var _saved_camera_transform := Transform3D.IDENTITY
+var _bat_enabled := false
+var _bat_charge := 0.0
+var _bat_cooldown := 0.0
 
 
 func _ready() -> void:
@@ -81,6 +89,12 @@ func _physics_process(delta: float) -> void:
 	_foot_cooldown = maxf(0.0, _foot_cooldown - delta)
 	_goalkeeper_cooldown = maxf(0.0, _goalkeeper_cooldown - delta)
 	_goalkeeper_remaining = maxf(0.0, _goalkeeper_remaining - delta)
+	_bat_cooldown = maxf(0.0, _bat_cooldown - delta)
+	if _bat_enabled and _bat_cooldown <= 0.0:
+		var previous_charge := _bat_charge
+		_bat_charge = minf(3.0, _bat_charge + delta)
+		if absf(previous_charge - _bat_charge) > 0.04 or _bat_charge >= 3.0:
+			bat_charge_changed.emit(_bat_charge / 3.0, _bat_charge >= 3.0)
 	_align_interaction_nodes()
 	_resolve_kick(delta)
 	_resolve_take(delta)
@@ -136,6 +150,12 @@ func _physics_process(delta: float) -> void:
 		visual_root.rotation.y = lerp_angle(
 			visual_root.rotation.y,
 			atan2(direction.x, direction.z),
+			delta * 12.0
+		)
+	elif _top_down_mode and _bat_enabled:
+		visual_root.rotation.y = lerp_angle(
+			visual_root.rotation.y,
+			camera_pivot.rotation.y,
 			delta * 12.0
 		)
 	move_and_slide()
@@ -258,6 +278,78 @@ func set_first_person(enabled: bool) -> void:
 	visual_root.visible = not enabled
 
 
+func set_top_down_mode(enabled: bool) -> void:
+	if _top_down_mode == enabled:
+		return
+	_top_down_mode = enabled
+	if enabled:
+		_saved_camera_transform = camera_pivot.transform
+		camera_pivot.position = Vector3(0.0, 12.0, 0.0)
+		camera_pivot.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
+		spring_arm.spring_length = 0.0
+		visual_root.visible = true
+	else:
+		camera_pivot.transform = _saved_camera_transform
+		spring_arm.spring_length = _third_person_spring_length
+
+
+func set_bat_enabled(enabled: bool) -> void:
+	_bat_enabled = enabled
+	_bat_charge = 0.0
+	_bat_cooldown = 0.0
+	visual_root.set_bat_equipped(enabled)
+	bat_charge_changed.emit(0.0, false)
+
+
+func is_top_down_mode() -> bool:
+	return _top_down_mode
+
+
+func request_bat_swing() -> bool:
+	if not controls_enabled or not _bat_enabled or _bat_cooldown > 0.0:
+		return false
+	var charged := _bat_charge >= 3.0
+	_bat_cooldown = 0.58
+	_bat_charge = 0.0
+	bat_swing_started.emit(charged)
+	_resolve_bat_swing(charged)
+	return true
+
+
+func perform_network_bat_swing(charged: bool) -> void:
+	if not _bat_enabled:
+		return
+	_resolve_bat_swing(charged)
+
+
+func _resolve_bat_swing(charged: bool) -> void:
+	visual_root.trigger_bat_swing(charged)
+	bat_charge_changed.emit(0.0, false)
+	var forward := get_facing_direction()
+	var hit_count := 0
+	for candidate in get_tree().get_nodes_in_group(&"local_base_character"):
+		if candidate == self or not candidate is LocalBaseCharacter:
+			continue
+		var target := candidate as LocalBaseCharacter
+		var offset := target.global_position - global_position
+		var horizontal := Vector3(offset.x, 0.0, offset.z)
+		var reach := 2.9 if charged else 1.75
+		if horizontal.length() > reach or horizontal.length_squared() < 0.02:
+			continue
+		if forward.dot(horizontal.normalized()) < 0.25:
+			continue
+		target.apply_local_damage(14 if charged else 8)
+		if charged:
+			target.apply_external_push((horizontal.normalized() + Vector3.UP * 0.16).normalized(), 8.6)
+		bat_hit.emit(target, charged)
+		hit_count += 1
+	action_resolved.emit(&"BAT", hit_count > 0)
+
+
+func get_bat_charge_ratio() -> float:
+	return _bat_charge / 3.0
+
+
 func is_first_person() -> bool:
 	return _first_person
 
@@ -320,6 +412,9 @@ func get_goalkeeper_level() -> int:
 
 
 func add_touch_look(delta: Vector2) -> void:
+	if _top_down_mode:
+		camera_pivot.rotation.y -= delta.x * 0.005
+		return
 	camera_pivot.rotation.y -= delta.x * 0.0035
 	camera_pivot.rotation.x = clampf(
 		camera_pivot.rotation.x - delta.y * 0.0035,

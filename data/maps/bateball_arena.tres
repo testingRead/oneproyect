@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="MinigameMapDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/minigames/map_definition.gd" id="1_map"]
+[ext_resource type="PackedScene" path="res://scenes/local/maps/bateball_arena.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_map")
+map_id = &"bateball_arena"
+tags = PackedStringArray("teams", "topdown", "bat", "ball")
+maximum_players = 6
+map_scene = ExtResource("2_scene")
+footprint = Vector2(30, 40)
+playable_area_index = 1
+boundary_policy = 0
+spawn_points = PackedVector3Array(0, 0.02, -6, -8, 0.02, -9, 8, 0.02, -9, 0, 0.02, -34, -8, 0.02, -31, 8, 0.02, -31)
+safe_zone_centres = PackedVector3Array()
+event_points = PackedVector3Array(0, 0.2, -20)
+navigation_points = PackedVector3Array(-10, 0, -10, 10, 0, -10, -10, 0, -30, 10, 0, -30)
+available_objects = PackedStringArray("bate", "balon", "bloques")
+compatible_disasters = PackedStringArray()
+compatible_minigames = PackedStringArray("bateball_arena")
+modular_slots = PackedStringArray()

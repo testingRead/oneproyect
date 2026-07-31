@@ -26,6 +26,9 @@ var _goalkeeper_remaining := 0.0
 var _goalkeeper_side := 0
 var _goalkeeper_level := 1
 var _heavy_carry := false
+var _bat_remaining := 0.0
+var _bat_charged := false
+var _bat_mesh: Node3D
 
 
 func set_stature(stature: float) -> void:
@@ -180,6 +183,16 @@ func update_motion(
 		left_arm.rotation.z = lerpf(left_arm.rotation.z, -0.5, delta * 18.0)
 		right_arm.rotation.z = lerpf(right_arm.rotation.z, 0.5, delta * 18.0)
 		torso.rotation.x = lerpf(torso.rotation.x, 0.16, delta * 12.0)
+	if _bat_remaining > 0.0:
+		_bat_remaining = maxf(0.0, _bat_remaining - delta)
+		var bat_progress := 1.0 - _bat_remaining / 0.46
+		var bat_weight := sin(bat_progress * PI)
+		var swing_angle := lerpf(0.72, -1.42, smoothstep(0.08, 0.72, bat_progress))
+		right_arm.rotation.x = lerpf(right_arm.rotation.x, swing_angle, bat_weight)
+		left_arm.rotation.x = lerpf(left_arm.rotation.x, -0.58, bat_weight)
+		right_arm.rotation.z = lerpf(right_arm.rotation.z, -0.38, bat_weight)
+		torso.rotation.y = lerpf(torso.rotation.y, -0.24, bat_weight)
+		torso.rotation.x = lerpf(torso.rotation.x, 0.12, bat_weight)
 	$Model/LeftLegPivot.position.y = (
 		0.72
 		+ _left_ground_offset * grounded_weight
@@ -235,6 +248,55 @@ func trigger_goalkeeper_dive(side: int, level: int) -> void:
 
 func set_heavy_carry(enabled: bool) -> void:
 	_heavy_carry = enabled
+
+
+func set_bat_equipped(enabled: bool) -> void:
+	if enabled and _bat_mesh == null:
+		_bat_mesh = _build_bat_mesh()
+		$Model/RightArmPivot/ItemSocket.add_child(_bat_mesh)
+	if enabled and _bat_mesh != null:
+		_bat_mesh.visible = enabled
+	elif not enabled and _bat_mesh != null:
+		_bat_mesh.queue_free()
+		_bat_mesh = null
+
+
+func trigger_bat_swing(charged: bool) -> void:
+	_bat_charged = charged
+	_bat_remaining = 0.46
+	if _bat_mesh != null:
+		_bat_mesh.scale = Vector3.ONE * (1.18 if charged else 1.0)
+
+
+func _build_bat_mesh() -> Node3D:
+	var root := Node3D.new()
+	root.name = "ArenaBat"
+	root.position = Vector3(0.0, 0.0, -0.12)
+	root.rotation_degrees = Vector3(0.0, 0.0, 88.0)
+	var handle := MeshInstance3D.new()
+	var handle_mesh := CylinderMesh.new()
+	handle_mesh.top_radius = 0.035
+	handle_mesh.bottom_radius = 0.045
+	handle_mesh.height = 0.55
+	handle.mesh = handle_mesh
+	var handle_material := StandardMaterial3D.new()
+	handle_material.albedo_color = Color(0.18, 0.07, 0.025)
+	handle.material_override = handle_material
+	handle.position.y = 0.25
+	root.add_child(handle)
+	var barrel := MeshInstance3D.new()
+	var barrel_mesh := CylinderMesh.new()
+	barrel_mesh.top_radius = 0.11
+	barrel_mesh.bottom_radius = 0.075
+	barrel_mesh.height = 0.72
+	barrel.mesh = barrel_mesh
+	var barrel_material := StandardMaterial3D.new()
+	barrel_material.albedo_color = Color(0.78, 0.2, 0.12) if _bat_charged else Color(0.62, 0.43, 0.18)
+	barrel_material.roughness = 0.68
+	barrel.material_override = barrel_material
+	barrel.position.y = 0.85
+	root.add_child(barrel)
+	return root
 
 
 func get_movement_ratio() -> float:
