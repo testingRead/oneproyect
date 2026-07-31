@@ -2,6 +2,14 @@ class_name LocalBateballArena
 extends Node3D
 
 const CENTRE := Vector3(0.0, 0.0, -20.0)
+const TEAM_SPAWNS := [
+	Vector3(0.0, 0.02, -6.0),
+	Vector3(-8.0, 0.02, -9.0),
+	Vector3(8.0, 0.02, -9.0),
+	Vector3(0.0, 0.02, -34.0),
+	Vector3(-8.0, 0.02, -31.0),
+	Vector3(8.0, 0.02, -31.0),
+]
 
 
 func _ready() -> void:
@@ -10,10 +18,10 @@ func _ready() -> void:
 	var cover := _material(Color(0.72, 0.38, 0.12), 0.82)
 	_add_box("ArenaFloor", CENTRE, Vector3(30.0, 0.04, 40.0), floor, false)
 	for item in [
-		[Vector3(-15.0, 1.6, -20.0), Vector3(0.5, 3.2, 40.5)],
-		[Vector3(15.0, 1.6, -20.0), Vector3(0.5, 3.2, 40.5)],
-		[Vector3(0.0, 1.6, -40.0), Vector3(30.5, 3.2, 0.5)],
-		[Vector3(0.0, 1.6, 0.0), Vector3(30.5, 3.2, 0.5)],
+		[Vector3(-15.0, 2.5, -20.0), Vector3(0.5, 5.0, 40.5)],
+		[Vector3(15.0, 2.5, -20.0), Vector3(0.5, 5.0, 40.5)],
+		[Vector3(0.0, 2.5, -40.0), Vector3(30.5, 5.0, 0.5)],
+		[Vector3(0.0, 2.5, 0.0), Vector3(30.5, 5.0, 0.5)],
 	]:
 		_add_box("ArenaWall", item[0], item[1], wall, true)
 	for item in [
@@ -53,6 +61,8 @@ func _add_ball() -> void:
 	ball.position = CENTRE + Vector3(0.0, 0.28, 0.0)
 	ball.mass = 0.34
 	ball.linear_damp = 0.34
+	ball.continuous_cd = true
+	ball.max_contacts_reported = 8
 	ball.collision_layer = 1
 	ball.collision_mask = 1
 	ball.add_to_group(&"bateball_ball")
@@ -70,6 +80,16 @@ func _add_ball() -> void:
 	mesh.material_override = _material(Color(1.0, 0.78, 0.12), 0.54)
 	ball.add_child(mesh)
 	add_child(ball)
+
+
+func get_team_for_slot(slot: int) -> StringName:
+	return &"home" if posmod(slot, 2) == 0 else &"away"
+
+
+func get_spawn_for_slot(slot: int) -> Transform3D:
+	var team_index := posmod(slot, 6) >> 1
+	var spawn_index := team_index if get_team_for_slot(slot) == &"home" else 3 + team_index
+	return Transform3D(Basis.IDENTITY, TEAM_SPAWNS[spawn_index])
 
 
 func _add_box(node_name: String, position_value: Vector3, size_value: Vector3, material: Material, collision_enabled: bool) -> void:

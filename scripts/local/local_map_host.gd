@@ -49,10 +49,21 @@ func unmount_map() -> void:
 
 
 func get_spawn_transform(slot := 0) -> Transform3D:
-	if current_definition == null or current_definition.spawn_points.is_empty():
+	if current_definition == null:
 		return Transform3D(Basis.IDENTITY, Vector3(0.0, 0.02, 8.0))
-	var index := posmod(slot, current_definition.spawn_points.size())
-	return Transform3D(Basis.IDENTITY, current_definition.spawn_points[index])
+	return Transform3D(Basis.IDENTITY, current_definition.get_spawn_for_slot(slot))
+
+
+func has_team_layout() -> bool:
+	return current_definition != null and current_definition.has_team_layout()
+
+
+func get_team_for_slot(slot: int) -> StringName:
+	return current_definition.get_team_for_slot(slot) if current_definition != null else &"home"
+
+
+func get_team_facing_for_slot(slot: int) -> Vector3:
+	return current_definition.get_team_facing_for_slot(slot) if current_definition != null else Vector3(0.0, 0.0, -1.0)
 
 
 func get_mounted_node_count() -> int:

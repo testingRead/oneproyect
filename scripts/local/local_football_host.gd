@@ -201,6 +201,14 @@ func get_player_team() -> StringName:
 	return _player_team
 
 
+func get_local_score() -> int:
+	return opponent_score if _player_team == &"away" else score
+
+
+func get_rival_score() -> int:
+	return score if _player_team == &"away" else opponent_score
+
+
 func get_player_goal_side() -> StringName:
 	# Home attacks north and defends south; away attacks south and defends north.
 	return &"away" if _player_team == &"home" else &"home"
@@ -216,9 +224,9 @@ func set_player_team(team: StringName) -> void:
 func get_winner() -> int:
 	if _penalty_winner != 0:
 		return _penalty_winner
-	if score > opponent_score:
+	if get_local_score() > get_rival_score():
 		return 1
-	if opponent_score > score:
+	if get_rival_score() > get_local_score():
 		return -1
 	return 0
 

@@ -29,11 +29,35 @@ var _heavy_carry := false
 var _bat_remaining := 0.0
 var _bat_charged := false
 var _bat_mesh: Node3D
+var _ball_shot_remaining := 0.0
 
 
 func set_stature(stature: float) -> void:
 	_stature = clampf(stature, 0.8, 1.2)
 	$Model.scale = Vector3(1.0, _stature, 1.0)
+
+
+func set_team_color(team: StringName) -> void:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = (
+		Color(0.88, 0.2, 0.18)
+		if team == &"away"
+		else Color(0.12, 0.5, 0.96)
+	)
+	material.roughness = 0.82
+	for path in [
+		"Model/Torso",
+		"Model/Pelvis",
+		"Model/LeftShoulder",
+		"Model/RightShoulder",
+		"Model/LeftArmPivot/Arm",
+		"Model/RightArmPivot/Arm",
+		"Model/LeftLegPivot/Leg",
+		"Model/RightLegPivot/Leg",
+	]:
+		var part := get_node_or_null(path) as MeshInstance3D
+		if part != null:
+			part.material_override = material
 
 
 func update_motion(
@@ -57,6 +81,10 @@ func update_motion(
 	var lift := maxf(0.0, sin(_phase)) * _movement_ratio
 	left_arm.rotation.x = lerpf(left_arm.rotation.x, swing, delta * 14.0)
 	right_arm.rotation.x = lerpf(right_arm.rotation.x, -swing, delta * 14.0)
+	left_arm.rotation.y = lerpf(left_arm.rotation.y, 0.0, delta * 13.0)
+	right_arm.rotation.y = lerpf(right_arm.rotation.y, 0.0, delta * 13.0)
+	left_arm.rotation.z = lerpf(left_arm.rotation.z, 0.0, delta * 13.0)
+	right_arm.rotation.z = lerpf(right_arm.rotation.z, 0.0, delta * 13.0)
 	left_leg.rotation.x = lerpf(
 		left_leg.rotation.x,
 		-swing * grounded_weight,
@@ -93,6 +121,7 @@ func update_motion(
 		sin(_phase) * 0.055 * _movement_ratio,
 		delta * 12.0
 	)
+	torso.rotation.y = lerpf(torso.rotation.y, 0.0, delta * 12.0)
 	if not on_floor:
 		left_arm.rotation.x = lerpf(left_arm.rotation.x, -0.32, delta * 9.0)
 		right_arm.rotation.x = lerpf(right_arm.rotation.x, -0.32, delta * 9.0)
@@ -186,13 +215,29 @@ func update_motion(
 	if _bat_remaining > 0.0:
 		_bat_remaining = maxf(0.0, _bat_remaining - delta)
 		var bat_progress := 1.0 - _bat_remaining / 0.46
-		var bat_weight := sin(bat_progress * PI)
-		var swing_angle := lerpf(0.72, -1.42, smoothstep(0.08, 0.72, bat_progress))
-		right_arm.rotation.x = lerpf(right_arm.rotation.x, swing_angle, bat_weight)
-		left_arm.rotation.x = lerpf(left_arm.rotation.x, -0.58, bat_weight)
-		right_arm.rotation.z = lerpf(right_arm.rotation.z, -0.38, bat_weight)
-		torso.rotation.y = lerpf(torso.rotation.y, -0.24, bat_weight)
-		torso.rotation.x = lerpf(torso.rotation.x, 0.12, bat_weight)
+		var bat_weight := sin(clampf(bat_progress, 0.0, 1.0) * PI)
+		var sweep := smoothstep(0.12, 0.78, bat_progress)
+		# One-handed baseball sweep: wind up over the anatomical right shoulder,
+		# rotate the torso, then follow through across the body.
+		right_arm.rotation.x = lerpf(right_arm.rotation.x, -1.28, bat_weight)
+		right_arm.rotation.z = lerpf(right_arm.rotation.z, lerpf(-0.72, 0.92, sweep), bat_weight)
+		right_arm.rotation.y = lerpf(right_arm.rotation.y, lerpf(-0.5, 0.7, sweep), bat_weight)
+		left_arm.rotation.x = lerpf(left_arm.rotation.x, -0.38, bat_weight)
+		left_arm.rotation.z = lerpf(left_arm.rotation.z, 0.32, bat_weight)
+		torso.rotation.y = lerpf(torso.rotation.y, lerpf(0.52, -0.62, sweep), bat_weight)
+		torso.rotation.x = lerpf(torso.rotation.x, 0.1, bat_weight)
+		if _bat_mesh != null:
+			_bat_mesh.rotation.z = lerpf(-0.28, 0.62, sweep)
+			_bat_mesh.rotation.x = lerpf(-0.2, 0.18, sweep)
+	if _ball_shot_remaining > 0.0:
+		_ball_shot_remaining = maxf(0.0, _ball_shot_remaining - delta)
+		var shot_progress := 1.0 - _ball_shot_remaining / 0.34
+		var shot_weight := sin(shot_progress * PI)
+		left_arm.rotation.x = lerpf(left_arm.rotation.x, -1.18, shot_weight)
+		right_arm.rotation.x = lerpf(right_arm.rotation.x, -1.18, shot_weight)
+		left_arm.rotation.z = lerpf(left_arm.rotation.z, -0.2, shot_weight)
+		right_arm.rotation.z = lerpf(right_arm.rotation.z, 0.2, shot_weight)
+		torso.rotation.x = lerpf(torso.rotation.x, 0.16, shot_weight)
 	$Model/LeftLegPivot.position.y = (
 		0.72
 		+ _left_ground_offset * grounded_weight
@@ -259,6 +304,8 @@ func set_bat_equipped(enabled: bool) -> void:
 	elif not enabled and _bat_mesh != null:
 		_bat_mesh.queue_free()
 		_bat_mesh = null
+	if enabled and _bat_mesh != null:
+		_bat_mesh.rotation = Vector3(-0.2, 0.0, -0.28)
 
 
 func trigger_bat_swing(charged: bool) -> void:
@@ -268,11 +315,15 @@ func trigger_bat_swing(charged: bool) -> void:
 		_bat_mesh.scale = Vector3.ONE * (1.18 if charged else 1.0)
 
 
+func trigger_ball_shot() -> void:
+	_ball_shot_remaining = 0.34
+
+
 func _build_bat_mesh() -> Node3D:
 	var root := Node3D.new()
 	root.name = "ArenaBat"
-	root.position = Vector3(0.0, 0.0, -0.12)
-	root.rotation_degrees = Vector3(0.0, 0.0, 88.0)
+	root.position = Vector3(0.0, -0.02, 0.0)
+	root.rotation = Vector3(-0.2, 0.0, -0.28)
 	var handle := MeshInstance3D.new()
 	var handle_mesh := CylinderMesh.new()
 	handle_mesh.top_radius = 0.035

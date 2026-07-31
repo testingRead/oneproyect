@@ -118,6 +118,7 @@ func _ready() -> void:
 	bateball_host.score_changed.connect(_on_bateball_score_changed)
 	bateball_host.ball_holder_changed.connect(_on_bateball_holder_changed)
 	bateball_host.goal_scored.connect(_on_bateball_goal_scored)
+	bateball_host.ball_holder_peer_changed.connect(_on_local_bateball_holder_peer_changed)
 	player.bat_charge_changed.connect(_on_bat_charge_changed)
 	player.bat_swing_started.connect(_on_local_bat_swing)
 	_build_aim_guide()
@@ -167,8 +168,7 @@ func _physics_process(delta: float) -> void:
 			continue
 		var target: Dictionary = _lan_targets[peer_id]
 		remote.global_position = remote.global_position.lerp(target.position, minf(1.0, delta * 14.0))
-		remote.velocity = target.velocity
-		remote.visual_root.rotation.y = lerp_angle(remote.visual_root.rotation.y, float(target.yaw), minf(1.0, delta * 16.0))
+		remote.update_remote_presentation(delta, target.velocity, float(target.yaw))
 
 
 func _load_room_content() -> void:
@@ -189,11 +189,16 @@ func _setup_lan_session() -> void:
 	if lan_session == null or not lan_session.is_active():
 		return
 	round_controller.player_slot = lan_session.get_local_slot()
+	player.set_meta(&"lan_slot", round_controller.player_slot)
+	player.set_meta(&"lan_peer_id", lan_session.get_local_peer_id())
 	lan_session.player_state_received.connect(_on_lan_player_state)
 	lan_session.physics_state_received.connect(_on_lan_physics_state)
 	lan_session.object_impulse_received.connect(_on_lan_object_impulse)
 	lan_session.bat_swing_received.connect(_on_lan_bat_swing)
 	lan_session.bateball_shot_received.connect(_on_lan_bateball_shot)
+	lan_session.bateball_holder_received.connect(_on_lan_bateball_holder)
+	lan_session.bateball_score_received.connect(_on_lan_bateball_score)
+	bateball_host.set_session_authority(lan_session.is_host)
 	lan_session.lobby_changed.connect(_sync_lan_players)
 	_sync_lan_players()
 
@@ -210,10 +215,15 @@ func _sync_lan_players() -> void:
 		remote.controls_enabled = false
 		remote.emit_metrics = false
 		remote.set_meta("display_name", lan_session.get_player_name(int(peer_id)))
+		var remote_slot: int = int(lan_session.get_peer_slot(int(peer_id)))
+		remote.set_meta(&"lan_slot", remote_slot)
+		remote.set_meta(&"lan_peer_id", int(peer_id))
 		var camera := remote.get_node("CameraPivot/SpringArm/Camera") as Camera3D
 		camera.current = false
 		$World.add_child(remote)
-		remote.global_position = map_host.get_spawn_transform(lan_session.players.keys().find(peer_id)).origin
+		remote.set_physics_process(false)
+		var remote_spawn := map_host.get_spawn_transform(remote_slot)
+		remote.global_transform = remote_spawn
 		_lan_remotes[peer_id] = remote
 	for peer_id in _lan_remotes.keys():
 		if not lan_session.players.has(peer_id):
@@ -298,6 +308,23 @@ func _on_lan_bateball_shot(peer_id: int, direction: Vector3) -> void:
 	var remote: LocalBaseCharacter = _lan_remotes.get(peer_id)
 	if is_instance_valid(remote) and is_instance_valid(bateball_host):
 		bateball_host.request_ball_shot(remote, direction)
+
+
+func _on_local_bateball_holder_peer_changed(peer_id: int) -> void:
+	if lan_session != null and lan_session.is_active() and lan_session.is_host:
+		lan_session.broadcast_bateball_holder(peer_id)
+
+
+func _on_lan_bateball_holder(peer_id: int) -> void:
+	if lan_session == null or lan_session.is_host:
+		return
+	var holder: LocalBaseCharacter = player if peer_id == lan_session.get_local_peer_id() else _lan_remotes.get(peer_id)
+	bateball_host.apply_authoritative_holder(holder if is_instance_valid(holder) else null)
+
+
+func _on_lan_bateball_score(home_score: int, away_score: int, complete: bool) -> void:
+	if lan_session != null and not lan_session.is_host:
+		bateball_host.apply_authoritative_score(home_score, away_score, complete)
 
 
 func _find_round_body(object_name: String) -> RigidBody3D:
@@ -425,6 +452,7 @@ func _on_round_phase_changed(
 			banner_progress.text = "Dos arcos · paredes · primero a 3" if _selected_minigame_id == &"futbol_rebote" else "Vista aérea · primero a 2" if _is_bateball_game() else "Una sola regla clara, una ronda limpia"
 			_on_player_metrics(player.get_diagnostics())
 		LocalRoundController.Phase.PREPARE:
+			call_deferred("_position_lan_teams")
 			round_button.hide()
 			crosshair.show()
 			banner_title.text = "PREPARANDO %s" % _minigame_title()
@@ -456,16 +484,16 @@ func _on_round_phase_changed(
 
 func _score_text() -> String:
 	return "TÚ %d  ·  RIVAL %d  ·  PRIMERO A %d" % [
-		football_host.score,
-		football_host.opponent_score,
+		football_host.get_local_score(),
+		football_host.get_rival_score(),
 		football_host.target_score,
 	]
 
 
 func _bateball_score_text() -> String:
 	return "TÚ %d · RIVAL %d · PRIMERO A 2 · BATE %d%%" % [
-		bateball_host.score,
-		bateball_host.opponent_score,
+		bateball_host.get_local_score(),
+		bateball_host.get_rival_score(),
 		round(player.get_bat_charge_ratio() * 100.0),
 	]
 
@@ -481,7 +509,7 @@ func _on_football_score_changed(
 func _on_goal_scored(scoring_side: StringName) -> void:
 	banner_detail.text = (
 		"¡GOL TUYO! El balón vuelve al centro"
-		if scoring_side == &"home"
+		if scoring_side == football_host.get_player_team()
 		else "¡GOL DEL RIVAL! El balón vuelve al centro"
 	)
 
@@ -490,8 +518,29 @@ func _on_kickoff_ready() -> void:
 	if round_controller.phase != LocalRoundController.Phase.ACTIVE:
 		return
 	player.set_spawn_transform(map_host.get_spawn_transform(round_controller.player_slot))
-	player.set_facing_direction(Vector3(0.0, 0.0, -1.0))
+	player.set_facing_direction(map_host.get_team_facing_for_slot(round_controller.player_slot))
 	banner_detail.text = "Saque desde el centro"
+
+
+func _position_lan_teams() -> void:
+	if lan_session == null or not map_host.has_team_layout():
+		return
+	var local_slot: int = int(lan_session.get_local_slot())
+	var local_team := map_host.get_team_for_slot(local_slot)
+	player.set_meta(&"football_team", local_team)
+	player.set_meta(&"bateball_team", local_team)
+	player.set_team(local_team)
+	for peer_id: Variant in _lan_remotes:
+		var remote: LocalBaseCharacter = _lan_remotes[peer_id]
+		if not is_instance_valid(remote):
+			continue
+		var slot: int = int(lan_session.get_peer_slot(int(peer_id)))
+		var team := map_host.get_team_for_slot(slot)
+		remote.set_meta(&"football_team", team)
+		remote.set_meta(&"bateball_team", team)
+		remote.set_team(team)
+		remote.global_transform = map_host.get_spawn_transform(slot)
+		remote.set_facing_direction(map_host.get_team_facing_for_slot(slot))
 
 
 func _on_crown_holder_changed(holder_name: String) -> void:
@@ -610,6 +659,12 @@ func _update_aim_guide() -> void:
 func _on_bateball_score_changed(_home: int, _away: int, _target: int) -> void:
 	if _is_bateball_game():
 		banner_progress.text = _bateball_score_text()
+		if lan_session != null and lan_session.is_active() and lan_session.is_host:
+			lan_session.broadcast_bateball_score(
+				bateball_host.score,
+				bateball_host.opponent_score,
+				bateball_host.is_complete()
+			)
 
 
 func _on_bateball_holder_changed(holder_name: String) -> void:
@@ -619,7 +674,7 @@ func _on_bateball_holder_changed(holder_name: String) -> void:
 
 func _on_bateball_goal_scored(scoring_side: StringName) -> void:
 	if _is_bateball_game():
-		banner_detail.text = "¡GOL TUYO!" if scoring_side == &"home" else "¡GOL RIVAL!"
+		banner_detail.text = "¡GOL TUYO!" if scoring_side == bateball_host.get_local_team() else "¡GOL RIVAL!"
 
 
 func _on_bat_charge_changed(_ratio: float, _charged: bool) -> void:

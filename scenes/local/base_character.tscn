@@ -97,13 +97,13 @@ mesh = SubResource("MeshSkinSphere")
 cast_shadow = 0
 
 [node name="LeftShoulder" type="MeshInstance3D" parent="VisualRoot/Model"]
-position = Vector3(-0.38, 1.36, 0)
+position = Vector3(0.38, 1.36, 0)
 scale = Vector3(0.25, 0.28, 0.28)
 mesh = SubResource("MeshBodySphere")
 cast_shadow = 0
 
 [node name="RightShoulder" type="MeshInstance3D" parent="VisualRoot/Model"]
-position = Vector3(0.38, 1.36, 0)
+position = Vector3(-0.38, 1.36, 0)
 scale = Vector3(0.25, 0.28, 0.28)
 mesh = SubResource("MeshBodySphere")
 cast_shadow = 0
@@ -121,7 +121,7 @@ mesh = SubResource("MeshEye")
 cast_shadow = 0
 
 [node name="LeftArmPivot" type="Node3D" parent="VisualRoot/Model"]
-position = Vector3(-0.42, 1.4, 0)
+position = Vector3(0.42, 1.4, 0)
 
 [node name="Arm" type="MeshInstance3D" parent="VisualRoot/Model/LeftArmPivot"]
 position = Vector3(0, -0.28, 0)
@@ -136,7 +136,7 @@ mesh = SubResource("MeshSkinSphere")
 cast_shadow = 0
 
 [node name="RightArmPivot" type="Node3D" parent="VisualRoot/Model"]
-position = Vector3(0.42, 1.4, 0)
+position = Vector3(-0.42, 1.4, 0)
 
 [node name="Arm" type="MeshInstance3D" parent="VisualRoot/Model/RightArmPivot"]
 position = Vector3(0, -0.28, 0)
@@ -154,7 +154,7 @@ cast_shadow = 0
 position = Vector3(0, -0.64, 0.14)
 
 [node name="LeftLegPivot" type="Node3D" parent="VisualRoot/Model"]
-position = Vector3(-0.2, 0.72, 0)
+position = Vector3(0.2, 0.72, 0)
 
 [node name="Leg" type="MeshInstance3D" parent="VisualRoot/Model/LeftLegPivot"]
 position = Vector3(0, -0.33, 0)
@@ -173,7 +173,7 @@ cast_shadow = 0
 position = Vector3(0, 0, 0.5)
 
 [node name="RightLegPivot" type="Node3D" parent="VisualRoot/Model"]
-position = Vector3(0.2, 0.72, 0)
+position = Vector3(-0.2, 0.72, 0)
 
 [node name="Leg" type="MeshInstance3D" parent="VisualRoot/Model/RightLegPivot"]
 position = Vector3(0, -0.33, 0)
@@ -211,16 +211,16 @@ collision_mask = 1
 position = Vector3(0, 1.8, 0)
 
 [node name="LeftHand" type="Marker3D" parent="AnchorPoints"]
-position = Vector3(-0.47, 0.79, 0)
+position = Vector3(0.47, 0.79, 0)
 
 [node name="RightHand" type="Marker3D" parent="AnchorPoints"]
-position = Vector3(0.47, 0.79, 0)
+position = Vector3(-0.47, 0.79, 0)
 
 [node name="Back" type="Marker3D" parent="AnchorPoints"]
 position = Vector3(0, 1.15, -0.25)
 
 [node name="HeldItem" type="Marker3D" parent="AnchorPoints"]
-position = Vector3(0.48, 0.92, -0.3)
+position = Vector3(-0.48, 0.92, -0.3)
 
 [node name="CameraPivot" type="Node3D" parent="."]
 position = Vector3(0, 1.476, 0)

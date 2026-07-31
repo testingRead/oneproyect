@@ -313,6 +313,32 @@ func get_top_down_aim_direction() -> Vector3:
 	return _top_down_aim_direction
 
 
+func update_remote_presentation(delta: float, remote_velocity: Vector3, facing_yaw: float) -> void:
+	velocity = remote_velocity
+	visual_root.rotation.y = lerp_angle(
+		visual_root.rotation.y,
+		facing_yaw,
+		minf(1.0, delta * 16.0)
+	)
+	visual_root.update_motion(
+		delta,
+		Vector2(remote_velocity.x, remote_velocity.z).length(),
+		SCALE.RUN_SPEED,
+		absf(remote_velocity.y) < 0.35
+	)
+
+
+func set_team(team: StringName) -> void:
+	var normalized := &"away" if team == &"away" else &"home"
+	set_meta(&"team", normalized)
+	visual_root.set_team_color(normalized)
+
+
+func set_bateball_team(team: StringName) -> void:
+	set_team(team)
+	set_meta(&"bateball_team", get_meta(&"team"))
+
+
 func set_bat_enabled(enabled: bool) -> void:
 	_bat_enabled = enabled
 	_bat_charge = 0.0

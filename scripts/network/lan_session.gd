@@ -9,6 +9,8 @@ signal physics_state_received(names: PackedStringArray, positions: PackedVector3
 signal object_impulse_received(object_name: String, impulse: Vector3)
 signal bat_swing_received(peer_id: int, facing: Vector3, charged: bool)
 signal bateball_shot_received(peer_id: int, direction: Vector3)
+signal bateball_holder_received(peer_id: int)
+signal bateball_score_received(home_score: int, away_score: int, complete: bool)
 
 const LAN_PORT := 9998
 const DISCOVERY_PORT := 9997
@@ -115,9 +117,13 @@ func get_local_peer_id() -> int:
 
 
 func get_local_slot() -> int:
+	return get_peer_slot(get_local_peer_id())
+
+
+func get_peer_slot(peer_id: int) -> int:
 	var ids := PackedInt32Array(players.keys())
 	ids.sort()
-	return maxi(0, ids.find(get_local_peer_id()))
+	return maxi(0, ids.find(peer_id))
 
 
 func get_player_name(peer_id: int) -> String:
@@ -209,6 +215,16 @@ func request_bateball_shot(direction: Vector3) -> void:
 		_rpc_request_bateball_shot.rpc_id(1, direction)
 
 
+func broadcast_bateball_holder(peer_id: int) -> void:
+	if is_host and is_active():
+		_rpc_bateball_holder.rpc(peer_id)
+
+
+func broadcast_bateball_score(home_score: int, away_score: int, complete: bool) -> void:
+	if is_host and is_active():
+		_rpc_bateball_score.rpc(home_score, away_score, complete)
+
+
 @rpc("any_peer", "call_remote", "reliable", 0)
 func _rpc_register_player(display_name: String, character_path: String) -> void:
 	if not multiplayer.is_server():
@@ -284,6 +300,16 @@ func _rpc_request_bat_swing(facing: Vector3, charged: bool) -> void:
 func _rpc_request_bateball_shot(direction: Vector3) -> void:
 	if multiplayer.is_server():
 		bateball_shot_received.emit(multiplayer.get_remote_sender_id(), direction)
+
+
+@rpc("authority", "call_remote", "reliable", 2)
+func _rpc_bateball_holder(peer_id: int) -> void:
+	bateball_holder_received.emit(peer_id)
+
+
+@rpc("authority", "call_remote", "reliable", 2)
+func _rpc_bateball_score(home_score: int, away_score: int, complete: bool) -> void:
+	bateball_score_received.emit(home_score, away_score, complete)
 
 
 func _set_profile_ready(peer_id: int, ready: bool) -> void:

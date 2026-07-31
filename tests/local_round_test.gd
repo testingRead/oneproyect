@@ -25,6 +25,21 @@ func _run() -> void:
 		"Football map must package one scene and eight spawn points (4v4)"
 	)
 	_require(
+		LAB_MAP.has_team_layout()
+		and LAB_MAP.get_team_for_slot(0) == &"home"
+		and LAB_MAP.get_team_for_slot(1) == &"away"
+		and LAB_MAP.get_team_for_slot(2) == &"home"
+		and LAB_MAP.get_team_for_slot(3) == &"away",
+		"Team slots must alternate and remain balanced"
+	)
+	_require(
+		LAB_MAP.get_spawn_for_slot(0).z > -20.0
+		and LAB_MAP.get_spawn_for_slot(1).z < -20.0
+		and LAB_MAP.get_spawn_for_slot(2).distance_to(LAB_MAP.get_spawn_for_slot(0)) > 1.0
+		and LAB_MAP.get_spawn_for_slot(3).distance_to(LAB_MAP.get_spawn_for_slot(1)) > 1.0,
+		"First two friends must spawn on opposite halves and teammates must not overlap"
+	)
+	_require(
 		LAB_MAP.available_objects == PackedStringArray(
 			["balon_futbol", "dos_porterias", "muros_rebote"]
 		),

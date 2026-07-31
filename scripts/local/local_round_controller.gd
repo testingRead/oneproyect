@@ -99,8 +99,16 @@ func _run_round(generation: int) -> void:
 		== MinigameMapDefinition.BoundaryPolicy.PHYSICAL_AREA
 	)
 	player.controls_enabled = false
-	player.set_spawn_transform(map_host.get_spawn_transform(player_slot))
-	player.set_facing_direction(Vector3(0.0, 0.0, -1.0))
+	var player_spawn := map_host.get_spawn_transform(player_slot)
+	var initial_facing := map_host.get_team_facing_for_slot(player_slot)
+	var mounted_map := map_host.get_node_or_null("MountedMap") as Node3D
+	if map_host.has_team_layout():
+		var team := map_host.get_team_for_slot(player_slot)
+		player.set_team(team)
+		player.set_meta(&"bateball_team", team)
+		player.set_meta(&"football_team", team)
+	player.set_spawn_transform(player_spawn)
+	player.set_facing_direction(initial_facing)
 	player.set_first_person(minigame_id != &"bateball_arena")
 	player.set_top_down_mode(minigame_id == &"bateball_arena")
 	if not await _wait_phase(0.4, generation):
@@ -120,7 +128,7 @@ func _run_round(generation: int) -> void:
 	elif minigame_id == &"bateball_arena":
 		active_duration = 90.0
 	_transition(Phase.ACTIVE, active_duration)
-	var mounted_map := map_host.get_node_or_null("MountedMap") as Node3D
+	mounted_map = map_host.get_node_or_null("MountedMap") as Node3D
 	var started := false
 	if minigame_id == &"futbol_rebote":
 		started = football_host.start_match(mounted_map, duration_multiplier, player)

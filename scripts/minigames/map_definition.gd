@@ -16,6 +16,8 @@ enum BoundaryPolicy {
 @export_range(0, 2, 1) var playable_area_index := 1
 @export var boundary_policy := BoundaryPolicy.PHYSICAL_AREA
 @export var spawn_points := PackedVector3Array()
+@export var team_spawns_home := PackedVector3Array()
+@export var team_spawns_away := PackedVector3Array()
 @export var safe_zone_centres := PackedVector3Array()
 @export var event_points := PackedVector3Array()
 @export var navigation_points := PackedVector3Array()
@@ -41,6 +43,42 @@ func supports_disaster(disaster_id: StringName) -> bool:
 
 func supports_minigame(minigame_id: StringName) -> bool:
 	return String(minigame_id) in compatible_minigames
+
+
+func has_team_layout() -> bool:
+	return not team_spawns_home.is_empty() and not team_spawns_away.is_empty()
+
+
+func get_team_for_slot(slot: int) -> StringName:
+	return &"home" if posmod(slot, 2) == 0 else &"away"
+
+
+func get_spawn_for_slot(slot: int) -> Vector3:
+	if not has_team_layout():
+		if spawn_points.is_empty():
+			return Vector3(0.0, 0.02, 8.0)
+		return spawn_points[posmod(slot, spawn_points.size())]
+	var points := team_spawns_home if get_team_for_slot(slot) == &"home" else team_spawns_away
+	var team_index := posmod(slot, maximum_players) >> 1
+	return points[posmod(team_index, points.size())]
+
+
+func get_team_facing_for_slot(slot: int) -> Vector3:
+	if not has_team_layout():
+		return Vector3(0.0, 0.0, -1.0)
+	var spawn := get_spawn_for_slot(slot)
+	var centre := Vector3.ZERO
+	var count := 0
+	for point in team_spawns_home:
+		centre += point
+		count += 1
+	for point in team_spawns_away:
+		centre += point
+		count += 1
+	centre /= maxf(1.0, float(count))
+	var facing := centre - spawn
+	facing.y = 0.0
+	return facing.normalized() if facing.length_squared() > 0.01 else Vector3(0.0, 0.0, -1.0)
 
 
 func variation_signature(seed: int) -> PackedByteArray:

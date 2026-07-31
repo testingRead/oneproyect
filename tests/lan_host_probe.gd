@@ -6,6 +6,7 @@ var _lan
 var _got_client_state := false
 var _got_start := false
 var _got_impulse := false
+var _got_bateball_shot := false
 
 
 func _init() -> void:
@@ -24,6 +25,9 @@ func _run() -> void:
 	_lan.object_impulse_received.connect(func(name: String, impulse: Vector3) -> void:
 		_got_impulse = name == "Ball" and impulse.length() > 1.0
 	)
+	_lan.bateball_shot_received.connect(func(peer_id: int, direction: Vector3) -> void:
+		_got_bateball_shot = peer_id != 1 and direction.dot(Vector3.RIGHT) > 0.9
+	)
 	if _lan.host_room("HostProbe", "res://data/characters/base_character.tres") != OK:
 		push_error("LAN_HOST_FAIL: cannot host")
 		quit(1)
@@ -37,10 +41,12 @@ func _run() -> void:
 		await process_frame
 	for frame in 240:
 		_lan.send_physics_state(PackedStringArray(["Ball"]), PackedVector3Array([Vector3(1.0, 0.5, -20.0)]), PackedVector3Array([Vector3.ZERO]), PackedVector3Array([Vector3(2.0, 0.0, 0.0)]))
-		if _got_client_state and _got_start and _got_impulse:
+		_lan.broadcast_bateball_holder(1)
+		_lan.broadcast_bateball_score(1, 0, false)
+		if _got_client_state and _got_start and _got_impulse and _got_bateball_shot:
 			for settle_frame in 90:
 				await process_frame
-			print("LAN_HOST_OK players=%d start=%s state=%s impulse=%s" % [_lan.players.size(), _got_start, _got_client_state, _got_impulse])
+			print("LAN_HOST_OK players=%d start=%s state=%s impulse=%s bateball=%s" % [_lan.players.size(), _got_start, _got_client_state, _got_impulse, _got_bateball_shot])
 			_lan.leave_room()
 			quit(0)
 			return
