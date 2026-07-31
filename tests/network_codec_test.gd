@@ -37,7 +37,7 @@ func _init() -> void:
 	)
 
 	var snapshot := CODEC.create_snapshot_buffer()
-	CODEC.write_snapshot_header(snapshot, 1, 5, 2, 100, 7, 9876, 240, 1, 42)
+	CODEC.write_snapshot_header(snapshot, 1, 8, 2, 100, 7, 9876, 240, 1, 42)
 	CODEC.write_snapshot_player(
 		snapshot,
 		0,
@@ -51,7 +51,7 @@ func _init() -> void:
 		NET.ALL_BODY_PARTS_MASK
 	)
 	_require(CODEC.is_valid_snapshot(snapshot), "Snapshot packet must validate")
-	_require(snapshot.size() == 144, "Five-player snapshot must remain compact")
+	_require(snapshot.size() == 216, "Eight-player snapshot must remain compact")
 	_require(CODEC.snapshot_server_tick(snapshot) == 100, "Server tick must round-trip")
 	_require(CODEC.snapshot_ack_sequence(snapshot) == 42, "Owner ACK must round-trip")
 	_require(CODEC.snapshot_player_id(snapshot, 0) == 9, "Player ID must round-trip")
