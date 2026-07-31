@@ -1,6 +1,8 @@
 class_name LocalFootballField
 extends Node3D
 
+const BOT_SCRIPT := preload("res://scripts/local/maps/football_goalkeeper_bot.gd")
+
 const FIELD_CENTRE_Z := -20.0
 const BALL_SPAWN := Vector3(0.0, 2.0, FIELD_CENTRE_Z)
 const NORTH_GOAL_CENTRE := Vector3(0.0, 1.18, -38.45)
@@ -264,6 +266,7 @@ func _add_ball() -> void:
 
 func _add_goalkeeper_bot(side: StringName, position_value: Vector3) -> void:
 	var bot := Node3D.new()
+	bot.set_script(BOT_SCRIPT)
 	bot.name = "HomeGoalkeeperBot" if side == &"home" else "AwayGoalkeeperBot"
 	bot.position = position_value
 	bot.add_to_group(&"football_goalkeeper_bot")

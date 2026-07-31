@@ -23,6 +23,7 @@ var _goalkeeper
 var _goalkeeper_zone := &""
 var _player_team: StringName = &"home"
 var _bot_cooldown := {&"home": 0.0, &"away": 0.0}
+var _bots := {}
 
 
 func start_match(map_root: Node3D, time_scale := 1.0, goalkeeper_value = null) -> bool:
@@ -57,6 +58,10 @@ func start_match(map_root: Node3D, time_scale := 1.0, goalkeeper_value = null) -
 	_goal_lock = false
 	_active = true
 	_bot_cooldown = {&"home": 0.0, &"away": 0.0}
+	_bots = {}
+	for bot in get_tree().get_nodes_in_group(&"football_goalkeeper_bot"):
+		if map_root.is_ancestor_of(bot):
+			_bots[bot.get_meta(&"goal_side", &"")] = bot
 	score_changed.emit(score, opponent_score, target_score)
 	return true
 
@@ -83,6 +88,9 @@ func _try_bot_save(side: StringName) -> bool:
 	_goal_lock = true
 	var away := Vector3(0.0, 0.0, -1.0 if side == &"home" else 1.0)
 	var lateral := clampf(-_ball.global_position.x * 0.22, -1.2, 1.2)
+	var bot = _bots.get(side)
+	if is_instance_valid(bot) and bot.has_method("trigger_save"):
+		bot.trigger_save(_ball.global_position.x, 1 if _ball.global_position.y < 1.65 else 2)
 	_ball.sleeping = false
 	_ball.apply_central_impulse(away * 4.6 + Vector3(lateral, 1.4, 0.0))
 	goalkeeper_save.emit(side, 1)
