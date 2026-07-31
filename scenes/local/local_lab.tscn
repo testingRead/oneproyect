@@ -259,6 +259,7 @@ accent = Color(0.34, 0.66, 0.18, 0.9)
 
 [node name="GoalkeeperLeftHigh" type="Control" parent="HUD"]
 visible = false
+z_index = 30
 layout_mode = 3
 anchors_preset = 3
 anchor_top = 1.0
@@ -274,6 +275,7 @@ accent = Color(0.78, 0.42, 0.16, 0.9)
 
 [node name="GoalkeeperLeftMid" type="Control" parent="HUD"]
 visible = false
+z_index = 30
 layout_mode = 3
 anchors_preset = 3
 anchor_top = 1.0
@@ -289,6 +291,7 @@ accent = Color(0.72, 0.48, 0.16, 0.9)
 
 [node name="GoalkeeperLeftLow" type="Control" parent="HUD"]
 visible = false
+z_index = 30
 layout_mode = 3
 anchors_preset = 3
 anchor_top = 1.0
@@ -304,6 +307,7 @@ accent = Color(0.66, 0.52, 0.16, 0.9)
 
 [node name="GoalkeeperRightHigh" type="Control" parent="HUD"]
 visible = false
+z_index = 30
 layout_mode = 3
 anchors_preset = 3
 anchor_left = 1.0
@@ -322,6 +326,7 @@ accent = Color(0.78, 0.42, 0.16, 0.9)
 
 [node name="GoalkeeperRightMid" type="Control" parent="HUD"]
 visible = false
+z_index = 30
 layout_mode = 3
 anchors_preset = 3
 anchor_left = 1.0
@@ -340,6 +345,7 @@ accent = Color(0.72, 0.48, 0.16, 0.9)
 
 [node name="GoalkeeperRightLow" type="Control" parent="HUD"]
 visible = false
+z_index = 30
 layout_mode = 3
 anchors_preset = 3
 anchor_left = 1.0

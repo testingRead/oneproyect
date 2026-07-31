@@ -93,7 +93,11 @@ func _run() -> void:
 			_require(
 				lab.football_host.is_goalkeeper_in_zone()
 				and lab.goalkeeper_left_mid.visible
-				and lab.goalkeeper_right_high.visible,
+				and lab.goalkeeper_left_high.visible
+				and lab.goalkeeper_left_low.visible
+				and lab.goalkeeper_right_high.visible
+				and lab.goalkeeper_right_mid.visible
+				and lab.goalkeeper_right_low.visible,
 				"Goalkeeper controls must appear inside the goal area"
 			)
 			ball.freeze = true
