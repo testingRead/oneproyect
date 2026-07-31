@@ -25,6 +25,7 @@ var _throw_remaining := 0.0
 var _goalkeeper_remaining := 0.0
 var _goalkeeper_side := 0
 var _goalkeeper_level := 1
+var _heavy_carry := false
 
 
 func set_stature(stature: float) -> void:
@@ -172,6 +173,13 @@ func update_motion(
 			0.28 + float(_goalkeeper_level) * 0.05,
 			dive_weight
 		)
+	if _heavy_carry:
+		# Both hands meet in front of the chest so a large bomb reads as heavy.
+		left_arm.rotation.x = lerpf(left_arm.rotation.x, -1.05, delta * 18.0)
+		right_arm.rotation.x = lerpf(right_arm.rotation.x, -1.05, delta * 18.0)
+		left_arm.rotation.z = lerpf(left_arm.rotation.z, -0.5, delta * 18.0)
+		right_arm.rotation.z = lerpf(right_arm.rotation.z, 0.5, delta * 18.0)
+		torso.rotation.x = lerpf(torso.rotation.x, 0.16, delta * 12.0)
 	$Model/LeftLegPivot.position.y = (
 		0.72
 		+ _left_ground_offset * grounded_weight
@@ -223,6 +231,10 @@ func trigger_goalkeeper_dive(side: int, level: int) -> void:
 	_goalkeeper_side = clampi(side, -1, 1)
 	_goalkeeper_level = clampi(level, 0, 2)
 	_goalkeeper_remaining = 0.72
+
+
+func set_heavy_carry(enabled: bool) -> void:
+	_heavy_carry = enabled
 
 
 func get_movement_ratio() -> float:
