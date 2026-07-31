@@ -8,6 +8,7 @@ var _got_client_state := false
 var _got_start := false
 var _got_impulse := false
 var _got_bateball_shot := false
+var _sent_round_contract := false
 
 
 func _init() -> void:
@@ -43,13 +44,38 @@ func _run() -> void:
 		await process_frame
 	for frame in 240:
 		_lan.send_physics_state(PackedStringArray(["Ball"]), PackedVector3Array([Vector3(1.0, 0.5, -20.0)]), PackedVector3Array([Vector3.ZERO]), PackedVector3Array([Vector3(2.0, 0.0, 0.0)]))
+		_lan.send_hazard_state(LAN_EVENT.Subject.TORNADO, Vector3(3.0, 0.0, -20.0), 31.0)
 		_lan.broadcast_bateball_holder(1)
 		_lan.broadcast_bateball_score(1, 0, false)
-		_lan.broadcast_round_event(
-			LAN_EVENT.Kind.HOLDER_CHANGED,
-			LAN_EVENT.Subject.CROWN,
-			1
-		)
+		if not _sent_round_contract:
+			_sent_round_contract = true
+			_lan.broadcast_action(
+				1, LAN_EVENT.Action.FOOTBALL_KICK, Vector3.FORWARD
+			)
+			_lan.broadcast_round_event(
+				LAN_EVENT.Kind.HOLDER_CHANGED,
+				LAN_EVENT.Subject.CROWN,
+				1
+			)
+			_lan.broadcast_round_event(
+				LAN_EVENT.Kind.HOLDER_CHANGED,
+				LAN_EVENT.Subject.BOMB,
+				1,
+				PackedInt32Array([19000])
+			)
+			_lan.broadcast_round_event(
+				LAN_EVENT.Kind.SCORE_CHANGED,
+				LAN_EVENT.Subject.FOOTBALL,
+				0,
+				PackedInt32Array([2, 1, 0, 0, 0])
+			)
+			_lan.broadcast_round_event(
+				LAN_EVENT.Kind.DAMAGE_CONFIRMED,
+				LAN_EVENT.Subject.TORNADO,
+				1,
+				PackedInt32Array([76, 1]),
+				PackedVector3Array([Vector3(4.0, 1.0, 0.0)])
+			)
 		if _got_client_state and _got_start and _got_impulse and _got_bateball_shot:
 			for settle_frame in 90:
 				await process_frame

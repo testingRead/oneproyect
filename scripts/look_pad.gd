@@ -10,6 +10,7 @@ var _aim_mode := false
 var _aim_origin := Vector2.ZERO
 var _aim_current := Vector2.ZERO
 var _aim_value := Vector2.ZERO
+var _input_enabled := true
 
 const AIM_RADIUS := 82.0
 const AIM_DEADZONE := 0.16
@@ -27,11 +28,21 @@ func set_aim_mode(enabled: bool) -> void:
 	queue_redraw()
 
 
+func set_input_enabled(enabled: bool) -> void:
+	_input_enabled = enabled
+	if not enabled:
+		_finger_id = -1
+		_aim_value = Vector2.ZERO
+		queue_redraw()
+
+
 func is_aim_mode() -> bool:
 	return _aim_mode
 
 
 func _gui_input(event: InputEvent) -> void:
+	if not _input_enabled:
+		return
 	if event is InputEventScreenTouch:
 		if event.pressed and _finger_id == -1:
 			_finger_id = event.index

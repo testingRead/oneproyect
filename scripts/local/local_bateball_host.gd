@@ -6,6 +6,7 @@ signal ball_holder_changed(holder_name: String)
 signal goal_scored(scoring_side: StringName)
 signal match_completed(home_score: int, away_score: int)
 signal ball_holder_peer_changed(peer_id: int)
+signal character_health_authorized(peer_id: int, health: int, respawned: bool, position: Vector3)
 
 const TARGET_SCORE := 2
 const BALL_MIN := Vector3(-14.35, 0.2, -39.35)
@@ -25,6 +26,7 @@ var _connected_bat_characters: Dictionary = {}
 var _pickup_cooldown := 0.0
 var _local_team: StringName = &"home"
 var _session_authority := true
+var _local_player: LocalBaseCharacter
 
 
 func start_match(map_root: Node3D, player: LocalBaseCharacter) -> bool:
@@ -34,6 +36,7 @@ func start_match(map_root: Node3D, player: LocalBaseCharacter) -> bool:
 		return false
 	_generation += 1
 	_map_root = map_root
+	_local_player = player
 	_ball_parent = _ball.get_parent()
 	_ball_spawn = _ball.global_transform
 	_connect_bat_character(player)
@@ -134,6 +137,7 @@ func stop_and_clean() -> void:
 	_ball = null
 	_ball_parent = null
 	_map_root = null
+	_local_player = null
 	_connected_bat_characters.clear()
 
 
@@ -164,7 +168,10 @@ func get_local_team() -> StringName:
 
 
 func get_holder_name() -> String:
-	return str(_holder.get_meta(&"display_name", _holder.name)) if is_instance_valid(_holder) else "NADIE"
+	if not is_instance_valid(_holder):
+		return "NADIE"
+	var display_name := str(_holder.get_meta(&"display_name", "")).strip_edges()
+	return display_name if not display_name.is_empty() else "JUGADOR"
 
 
 func get_ball() -> RigidBody3D:
@@ -225,10 +232,14 @@ func _clear_holder_without_impulse(announce := true) -> void:
 
 
 func _on_bat_hit(target: Node3D, charged: bool, attacker: LocalBaseCharacter) -> void:
-	if not charged or target != _holder:
-		return
-	var direction := attacker.get_facing_direction()
-	_release_ball(direction.normalized() * 4.0 + Vector3.UP * 0.35, direction)
+	if charged and target == _holder:
+		var direction := attacker.get_facing_direction()
+		_release_ball(direction.normalized() * 4.0 + Vector3.UP * 0.35, direction)
+	if _session_authority and target is LocalBaseCharacter:
+		var character := target as LocalBaseCharacter
+		_emit_character_health(character, false)
+		if character.get_local_health() <= 0:
+			_respawn_character(character, _generation)
 
 
 func _connect_bat_character(character: LocalBaseCharacter) -> void:
@@ -236,9 +247,30 @@ func _connect_bat_character(character: LocalBaseCharacter) -> void:
 	if _connected_bat_characters.has(key):
 		return
 	character.set_bat_enabled(true)
+	character.reset_local_health()
 	_configure_character(character)
 	character.bat_hit.connect(_on_bat_hit.bind(character))
 	_connected_bat_characters[key] = character
+
+
+func _respawn_character(character: LocalBaseCharacter, generation: int) -> void:
+	character.controls_enabled = false
+	await get_tree().create_timer(2.0).timeout
+	if generation != _generation or not _active or not is_instance_valid(character):
+		return
+	character.reset_local_health()
+	_configure_character(character)
+	character.controls_enabled = character == _local_player
+	_emit_character_health(character, true)
+
+
+func _emit_character_health(character: LocalBaseCharacter, respawned: bool) -> void:
+	character_health_authorized.emit(
+		int(character.get_meta(&"lan_peer_id", 1)),
+		character.get_local_health(),
+		respawned,
+		character.global_position
+	)
 
 
 func _configure_character(character: LocalBaseCharacter) -> void:

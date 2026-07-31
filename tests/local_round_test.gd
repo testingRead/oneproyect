@@ -65,13 +65,26 @@ func _run() -> void:
 
 	for round_index in 8:
 		var phases := PackedInt32Array()
+		var countdown_steps := PackedInt32Array()
+		var countdown_titles := PackedStringArray()
 		var collect_phase := func(
 			next_phase: LocalRoundController.Phase,
 			_label: String,
 			_seconds: float
 		) -> void:
 			phases.append(next_phase)
+		var collect_time := func(
+			current_phase: LocalRoundController.Phase,
+			remaining: float
+		) -> void:
+			if current_phase != LocalRoundController.Phase.COUNTDOWN:
+				return
+			var step := maxi(1, ceili(remaining))
+			if countdown_steps.is_empty() or countdown_steps[-1] != step:
+				countdown_steps.append(step)
+				countdown_titles.append(lab.banner_title.text)
 		lab.round_controller.phase_changed.connect(collect_phase)
+		lab.round_controller.phase_time_changed.connect(collect_time)
 		_require(
 			lab.start_reference_round(1000 + round_index * 37),
 			"Idle lab must accept a football match"
@@ -194,8 +207,20 @@ func _run() -> void:
 			180
 		)
 		lab.round_controller.phase_changed.disconnect(collect_phase)
+		lab.round_controller.phase_time_changed.disconnect(collect_time)
 		_require(completed, "Match must finish after three local goals")
 		_require(phases == expected_phases, "Round phases must follow the official order")
+		_require(
+			countdown_steps == PackedInt32Array([3, 2, 1]),
+			"Countdown must visibly advance through 3, 2 and 1"
+		)
+		_require(
+			countdown_titles.size() == 3
+			and countdown_titles[0].ends_with("3")
+			and countdown_titles[1].ends_with("2")
+			and countdown_titles[2].ends_with("1"),
+			"Countdown HUD title must render each live step"
+		)
 		_require(
 			lab.football_host.score == 3
 			and lab.football_host.opponent_score == 1

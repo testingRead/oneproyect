@@ -2,6 +2,7 @@ class_name LocalRoundController
 extends Node
 
 signal phase_changed(phase: Phase, label: String, seconds: float)
+signal phase_time_changed(phase: Phase, remaining_seconds: float)
 signal round_completed(seed: int)
 
 enum Phase {
@@ -110,7 +111,10 @@ func _run_round(generation: int) -> void:
 	player.set_spawn_transform(player_spawn)
 	player.set_facing_direction(initial_facing)
 	player.set_view_direction(initial_facing)
-	player.set_first_person(minigame_id != &"bateball_arena")
+	# Camera is a minigame profile, not a global side effect of starting a round.
+	# Football needs precise body-aligned kicks, Bateball has its own overhead aim,
+	# and the survival/tag modes retain the reusable third-person controller.
+	player.set_first_person(minigame_id == &"futbol_rebote")
 	player.set_top_down_mode(minigame_id == &"bateball_arena")
 	if not await _wait_phase(0.4, generation):
 		return
@@ -136,7 +140,9 @@ func _run_round(generation: int) -> void:
 	elif minigame_id == &"corona_central":
 		started = crown_host.start_match(mounted_map, player)
 	elif minigame_id == &"bomba_relevo":
-		started = bomb_host.start_match(mounted_map, player)
+		started = bomb_host.start_match(
+			mounted_map, player, round_seed, duration_multiplier
+		)
 	elif minigame_id == &"tornado_supervivencia":
 		started = tornado_host.start_match(mounted_map, player)
 	elif minigame_id == &"bateball_arena":
@@ -148,7 +154,10 @@ func _run_round(generation: int) -> void:
 		return
 	player.controls_enabled = false
 	if minigame_id == &"futbol_rebote" and football_host.is_tied():
-		await football_host.run_penalty_shootout()
+		if football_host.has_session_authority():
+			await football_host.run_penalty_shootout()
+		else:
+			await football_host.wait_for_authoritative_result()
 		if generation != _generation:
 			return
 	if minigame_id == &"futbol_rebote":
@@ -181,16 +190,25 @@ func _run_round(generation: int) -> void:
 
 
 func _wait_phase(seconds: float, generation: int) -> bool:
-	await get_tree().create_timer(seconds * duration_multiplier).timeout
-	return generation == _generation
+	var scaled_seconds := seconds * duration_multiplier
+	var deadline := Time.get_ticks_msec() + int(scaled_seconds * 1000.0)
+	while generation == _generation and Time.get_ticks_msec() < deadline:
+		_emit_phase_time(seconds, scaled_seconds, deadline)
+		await get_tree().process_frame
+	if generation != _generation:
+		return false
+	phase_time_changed.emit(phase, 0.0)
+	return true
 
 
 func _wait_active(seconds: float, generation: int) -> bool:
+	var scaled_seconds := seconds * duration_multiplier
 	var deadline := (
 		Time.get_ticks_msec()
-		+ int(seconds * duration_multiplier * 1000.0)
+		+ int(scaled_seconds * 1000.0)
 	)
 	while generation == _generation and Time.get_ticks_msec() < deadline:
+		_emit_phase_time(seconds, scaled_seconds, deadline)
 		if minigame_id == &"futbol_rebote" and football_host != null and football_host.is_complete():
 			return true
 		if minigame_id == &"bomba_relevo" and bomb_host != null and bomb_host.is_complete():
@@ -205,4 +223,16 @@ func _wait_active(seconds: float, generation: int) -> bool:
 
 func _transition(next_phase: Phase, seconds: float) -> void:
 	phase = next_phase
-	phase_changed.emit(phase, get_phase_name(), seconds * duration_multiplier)
+	phase_changed.emit(phase, get_phase_name(), seconds)
+	phase_time_changed.emit(phase, seconds)
+
+
+func _emit_phase_time(logical_seconds: float, scaled_seconds: float, deadline: int) -> void:
+	if scaled_seconds <= 0.0:
+		phase_time_changed.emit(phase, 0.0)
+		return
+	var wall_remaining := maxf(0.0, float(deadline - Time.get_ticks_msec()) / 1000.0)
+	phase_time_changed.emit(
+		phase,
+		clampf(wall_remaining / scaled_seconds * logical_seconds, 0.0, logical_seconds)
+	)

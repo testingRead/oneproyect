@@ -2,6 +2,7 @@ extends SceneTree
 
 const LAB_SCENE := preload("res://scenes/local/local_lab.tscn")
 const CROWN_MAP: MinigameMapDefinition = preload("res://data/maps/corona_central.tres")
+const BASE_CHARACTER_SCENE := preload("res://scenes/local/base_character.tscn")
 
 var _failed := false
 
@@ -17,7 +18,16 @@ func _run() -> void:
 	var lab := LAB_SCENE.instantiate() as LocalDevelopmentLab
 	root.add_child(lab)
 	await process_frame
-	lab.round_controller.duration_multiplier = 0.02
+	var rival := BASE_CHARACTER_SCENE.instantiate() as LocalBaseCharacter
+	rival.controls_enabled = false
+	rival.emit_metrics = false
+	rival.set_meta(&"display_name", "Rival")
+	rival.set_meta(&"lan_slot", 1)
+	(rival.get_node("CameraPivot/SpringArm/Camera") as Camera3D).current = false
+	lab.get_node("World").add_child(rival)
+	rival.set_physics_process(false)
+	rival.global_position = Vector3(10.0, 0.02, -20.0)
+	lab.round_controller.duration_multiplier = 0.04
 	var baseline_nodes := get_node_count()
 	_require(lab.start_reference_round(4401), "Crown match must start from the room definition")
 	_require(await _wait_for_phase(lab, LocalRoundController.Phase.ACTIVE, 180), "Crown match must reach active")
@@ -26,10 +36,27 @@ func _run() -> void:
 	lab.player.global_position = Vector3(0.0, 0.02, -20.0)
 	for frame in 12:
 		await physics_frame
-	_require(lab.crown_host.get_holder_name() == "CharacterRoot", "Touching crown must equip it")
+	_require(lab.crown_host.get_holder_name() == "JUGADOR", "Touching crown must equip it")
+	rival.global_position = lab.player.global_position
+	for frame in 12:
+		await physics_frame
+	_require(
+		lab.crown_host.get_holder_name() == "JUGADOR",
+		"Overlapping players must not bounce the crown immediately"
+	)
+	for frame in 44:
+		await physics_frame
+	_require(
+		lab.crown_host.get_holder_name() == "Rival",
+		"A nearby rival must steal after cooldown (holder=%s distance=%.2f phase=%s)" % [
+			lab.crown_host.get_holder_name(),
+			rival.global_position.distance_to(lab.player.global_position),
+			lab.round_controller.get_phase_name(),
+		]
+	)
 	_require(await _wait_for_phase(lab, LocalRoundController.Phase.IDLE, 240), "Crown match must clean up")
 	_require(get_node_count() == baseline_nodes, "Crown cleanup must return to baseline")
-	print("CROWN_ROUND_OK holder=CharacterRoot baseline_nodes=%d" % baseline_nodes)
+	print("CROWN_ROUND_OK holder=JUGADOR baseline_nodes=%d" % baseline_nodes)
 	quit(1 if _failed else 0)
 
 

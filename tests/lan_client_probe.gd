@@ -10,6 +10,11 @@ var _got_physics := false
 var _got_holder := false
 var _got_score := false
 var _got_round_event := false
+var _got_bomb_event := false
+var _got_football_event := false
+var _got_damage_event := false
+var _got_hazard_state := false
+var _got_action := false
 
 
 func _init() -> void:
@@ -27,12 +32,27 @@ func _run() -> void:
 	_lan.physics_state_received.connect(func(names: PackedStringArray, _positions: PackedVector3Array, _rotations: PackedVector3Array, _velocities: PackedVector3Array) -> void:
 		_got_physics = names.size() == 1 and names[0] == "Ball"
 	)
+	_lan.hazard_state_received.connect(func(subject: int, position: Vector3, remaining: float) -> void:
+		_got_hazard_state = subject == LAN_EVENT.Subject.TORNADO and position.x == 3.0 and remaining > 0.0
+	)
+	_lan.action_received.connect(func(peer_id: int, action: int, direction: Vector3, _flag: bool) -> void:
+		_got_action = peer_id == 1 and action == LAN_EVENT.Action.FOOTBALL_KICK and direction.dot(Vector3.FORWARD) > 0.9
+	)
 	_lan.bateball_holder_received.connect(func(peer_id: int) -> void: _got_holder = peer_id == 1)
 	_lan.bateball_score_received.connect(func(home: int, away: int, complete: bool) -> void:
 		_got_score = home == 1 and away == 0 and not complete
 	)
-	_lan.round_event_received.connect(func(round_id: int, revision: int, kind: int, subject: int, actor: int, _ints: PackedInt32Array, _vectors: PackedVector3Array) -> void:
-		_got_round_event = round_id == 7701 and revision > 0 and kind == LAN_EVENT.Kind.HOLDER_CHANGED and subject == LAN_EVENT.Subject.CROWN and actor == 1
+	_lan.round_event_received.connect(func(round_id: int, revision: int, kind: int, subject: int, actor: int, ints: PackedInt32Array, vectors: PackedVector3Array) -> void:
+		if round_id != 7701 or revision <= 0:
+			return
+		if kind == LAN_EVENT.Kind.HOLDER_CHANGED and subject == LAN_EVENT.Subject.CROWN and actor == 1:
+			_got_round_event = true
+		elif kind == LAN_EVENT.Kind.HOLDER_CHANGED and subject == LAN_EVENT.Subject.BOMB and ints.size() == 1:
+			_got_bomb_event = ints[0] == 19000
+		elif kind == LAN_EVENT.Kind.SCORE_CHANGED and subject == LAN_EVENT.Subject.FOOTBALL and ints.size() >= 4:
+			_got_football_event = ints[0] == 2 and ints[1] == 1
+		elif kind == LAN_EVENT.Kind.DAMAGE_CONFIRMED and subject == LAN_EVENT.Subject.TORNADO and not vectors.is_empty():
+			_got_damage_event = ints[0] == 76 and vectors[0].length() > 1.0
 	)
 	if _lan.join_room("127.0.0.1", "ClientProbe", "res://data/characters/base_character.tres") != OK:
 		push_error("LAN_CLIENT_FAIL: cannot connect")
@@ -44,7 +64,7 @@ func _run() -> void:
 			_lan.send_player_state(Vector3(2.0, 0.02, -12.0), Vector3(1.0, 0.0, 0.0), 0.4, 88)
 			_lan.request_object_impulse("Ball", Vector3(4.0, 1.0, 0.0))
 			_lan.request_bateball_shot(Vector3.RIGHT)
-		if _started and _got_physics and _got_holder and _got_score and _got_round_event:
+		if _started and _got_physics and _got_holder and _got_score and _got_round_event and _got_bomb_event and _got_football_event and _got_damage_event and _got_hazard_state and _got_action:
 			print("LAN_CLIENT_OK peer=%d players=%d" % [_lan.get_local_peer_id(), _lan.players.size()])
 			_lan.leave_room()
 			quit(0)

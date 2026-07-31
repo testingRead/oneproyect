@@ -6,6 +6,7 @@ enum Kind {
 	SCORE_CHANGED = 2,
 	ROUND_COMPLETED = 3,
 	HAZARD_STATE = 4,
+	DAMAGE_CONFIRMED = 5,
 }
 
 enum Subject {
@@ -14,4 +15,9 @@ enum Subject {
 	FOOTBALL = 3,
 	BATEBALL = 4,
 	TORNADO = 5,
+}
+
+enum Action {
+	FOOTBALL_KICK = 1,
+	BATEBALL_SWING = 2,
 }

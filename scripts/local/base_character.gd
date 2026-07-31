@@ -371,6 +371,17 @@ func perform_network_bat_swing(charged: bool) -> void:
 	_resolve_bat_swing(charged)
 
 
+func play_remote_bat_swing(charged: bool) -> void:
+	if not _bat_enabled:
+		return
+	visual_root.trigger_bat_swing(charged)
+
+
+func perform_network_kick(facing: Vector3) -> void:
+	set_facing_direction(facing)
+	visual_root.trigger_kick()
+
+
 func _resolve_bat_swing(charged: bool) -> void:
 	visual_root.trigger_bat_swing(charged)
 	bat_charge_changed.emit(0.0, false)
@@ -509,6 +520,14 @@ func apply_local_damage(amount: int) -> void:
 	if amount <= 0:
 		return
 	_local_health = maxi(0, _local_health - amount)
+	local_health_changed.emit(_local_health, 100)
+
+
+func set_authoritative_health(value: int) -> void:
+	var normalized := clampi(value, 0, 100)
+	if normalized == _local_health:
+		return
+	_local_health = normalized
 	local_health_changed.emit(_local_health, 100)
 
 

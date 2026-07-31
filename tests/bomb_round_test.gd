@@ -26,10 +26,10 @@ func _run() -> void:
 		mounted != null and get_nodes_in_group(&"bomb_collectible").size() == 1,
 		"Bomb arena must mount a bomb"
 	)
-	_require(lab.bomb_host.get_holder_name() == "CharacterRoot", "Local player must begin holding the bomb")
+	_require(lab.bomb_host.get_holder_name() == "JUGADOR", "Local player must begin holding the bomb")
 	_require(await _wait_for_phase(lab, LocalRoundController.Phase.IDLE, 280), "Bomb match must explode, clean up, and return idle")
 	_require(get_node_count() == baseline_nodes, "Bomb cleanup must return to baseline")
-	print("BOMB_ROUND_OK holder=CharacterRoot baseline_nodes=%d" % baseline_nodes)
+	print("BOMB_ROUND_OK holder=JUGADOR baseline_nodes=%d" % baseline_nodes)
 	quit(1 if _failed else 0)
 
 

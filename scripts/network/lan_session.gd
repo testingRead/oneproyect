@@ -6,7 +6,10 @@ signal lobby_changed
 signal game_started(minigame_path: String, round_seed: int)
 signal player_state_received(peer_id: int, position: Vector3, velocity: Vector3, facing_yaw: float, health: int)
 signal physics_state_received(names: PackedStringArray, positions: PackedVector3Array, rotations: PackedVector3Array, velocities: PackedVector3Array)
+signal hazard_state_received(subject: int, position: Vector3, remaining: float)
 signal object_impulse_received(object_name: String, impulse: Vector3)
+signal object_impulse_peer_received(peer_id: int, object_name: String, impulse: Vector3)
+signal action_received(peer_id: int, action: int, direction: Vector3, flag: bool)
 signal bat_swing_received(peer_id: int, facing: Vector3, charged: bool)
 signal bateball_shot_received(peer_id: int, direction: Vector3)
 signal bateball_holder_received(peer_id: int)
@@ -219,6 +222,16 @@ func send_physics_state(names: PackedStringArray, positions: PackedVector3Array,
 		_rpc_physics_state.rpc(names, positions, rotations, velocities)
 
 
+func send_hazard_state(subject: int, position: Vector3, remaining: float) -> void:
+	if is_host and is_active() and position.is_finite():
+		_rpc_hazard_state.rpc(subject, position, maxf(0.0, remaining))
+
+
+func broadcast_action(peer_id: int, action: int, direction: Vector3, flag := false) -> void:
+	if is_host and is_active() and direction.is_finite() and _round_id != 0:
+		_rpc_action.rpc(_round_id, peer_id, action, direction, flag)
+
+
 func request_object_impulse(object_name: String, impulse: Vector3) -> void:
 	if not is_active() or object_name.is_empty() or not impulse.is_finite():
 		return
@@ -315,10 +328,23 @@ func _rpc_physics_state(names: PackedStringArray, positions: PackedVector3Array,
 	physics_state_received.emit(names, positions, rotations, velocities)
 
 
+@rpc("authority", "call_remote", "unreliable_ordered", 2)
+func _rpc_hazard_state(subject: int, position: Vector3, remaining: float) -> void:
+	hazard_state_received.emit(subject, position, remaining)
+
+
+@rpc("authority", "call_remote", "unreliable_ordered", 2)
+func _rpc_action(round_id: int, peer_id: int, action: int, direction: Vector3, flag: bool) -> void:
+	if round_id == _round_id:
+		action_received.emit(peer_id, action, direction, flag)
+
+
 @rpc("any_peer", "call_remote", "reliable", 2)
 func _rpc_request_object_impulse(object_name: String, impulse: Vector3) -> void:
 	if multiplayer.is_server():
+		var sender := multiplayer.get_remote_sender_id()
 		object_impulse_received.emit(object_name, impulse)
+		object_impulse_peer_received.emit(sender, object_name, impulse)
 
 
 @rpc("any_peer", "call_remote", "reliable", 2)

@@ -2,6 +2,9 @@
 
 Estado revisado: 31 de julio de 2026, rama `feature/local-minigame`.
 
+La auditoría se mantiene como documento vivo: los hallazgos ya corregidos se
+marcan como tales para no volver a introducir la implementación anterior.
+
 ## Alcance activo
 
 La aplicación contiene actualmente dos rutas distintas:
@@ -38,64 +41,100 @@ principio se conserva.
 
 - Los slots ya se alternan `home, away, home, away`, pero la asignación no se
   congela como parte de un estado de ronda.
-- `set_facing_direction()` gira sólo `VisualRoot`.
-- Movimiento, primera persona e interacción usan el yaw de `CameraPivot`.
-- El jugador `away` aparece en la mitad correcta y su modelo mira al centro,
-  pero la cámara continúa mirando hacia `-Z`, es decir, hacia su propia
-  portería.
-- La mira superior transforma el arrastre directamente a ejes del mundo y no
-  toma en cuenta el yaw del equipo.
+- Corregido: orientación visual y orientación de cámara son operaciones
+  separadas y cada spawn configura ambas hacia el centro.
+- Corregido: la mira superior transforma el arrastre usando el yaw de cámara
+  del equipo.
 
 ### Ronda
 
-- Cada cliente ejecuta sus propios temporizadores PREPARE, RULES, COUNTDOWN,
-  ACTIVE y RESULT.
-- La misma semilla reduce diferencias, pero no existe una revisión de ronda ni
-  una fase autoritativa que permita rechazar eventos atrasados.
-- Un RPC de una ronda anterior podría aplicarse sobre una ronda nueva.
+- Corregido localmente: existe un reloj continuo de fase y la cuenta regresiva
+  emite y muestra `3, 2, 1`; antes el HUD escribía un `3` literal.
+- Los clientes LAN todavía derivan PREPARE, RULES, COUNTDOWN, ACTIVE y RESULT
+  desde la misma semilla y el mismo inicio. La fase LAN autoritativa completa
+  sigue siendo una tarea de consolidación.
+- Los eventos de juego ya incluyen ronda y revisión, y el receptor descarta
+  rondas distintas y revisiones antiguas.
 
 ### Corona
 
-- Cada cliente conecta su propia `Area3D.body_entered`.
-- Cada cliente detecta por distancia quién roba la corona.
-- No existe ningún mensaje LAN para portador, revisión o resultado.
-- Por eso dos teléfonos pueden mostrar portadores distintos indefinidamente.
+- Corregido: sólo el anfitrión decide el portador y lo replica por `peer_id`
+  mediante el contrato versionado de ronda.
+- Corregido: un enfriamiento de 0,65 s evita intercambios repetidos mientras
+  dos cápsulas permanecen solapadas.
+- Corregido: si nadie toma la corona el resultado es empate, no derrota.
 
 ### Bomba
 
-- `start_match()` entrega la bomba al `player` local de cada teléfono.
-- Cada cliente ejecuta su propia mecha y decide los contactos.
-- Portador, tiempo de explosión y perdedor no se sincronizan.
+- Corregido: el anfitrión elige un portador inicial determinista por semilla,
+  decide contactos y ejecuta la única mecha capaz de terminar la ronda.
+- Corregido: portador, tiempo restante, explosión y perdedor viajan como
+  eventos fiables identificados por ronda.
+- Corregido: sólo pierde quien tenía la bomba; los demás sobreviven.
 
 ### Tornado
 
-- Cada cliente avanza `_path_time`, mueve el tornado y calcula impactos.
-- Los cuerpos rígidos reciben snapshots del host, pero el tornado no forma
-  parte de esos snapshots porque no es `RigidBody3D`.
-- Vida, captura, tiempo y final pueden diferir entre teléfonos.
+- Corregido: el anfitrión avanza trayectoria, reloj, objetos y daño; publica
+  el peligro a 15 Hz por un canal `unreliable_ordered`.
+- La respuesta de movimiento del propietario continúa local para no añadir
+  latencia, mientras la vida confirmada usa eventos fiables.
+- Corregido: el tornado daña a todos los participantes y no termina la ronda
+  solamente porque haya muerto el anfitrión.
 
 ### Fútbol de rebote
 
-- El balón recibe snapshots del host, pero todos los clientes ejecutan goles,
-  arqueros bot, reinicios y marcador.
-- Patadas de un cliente se aplican primero localmente y después otra vez en el
-  host como solicitud de impulso.
-- Marcador, bloqueo de gol y penales no tienen estado LAN oficial.
+- Corregido: sólo el anfitrión ejecuta goles, arqueros bot, reinicios y
+  marcador; los demás aplican marcador y resultado oficiales.
+- La patada responde inmediatamente en el cliente propietario y el anfitrión
+  recibe la solicitud equivalente para producir el balón oficial; no son dos
+  impulsos sobre el mismo cuerpo físico.
+- Marcador y ganador de penales tienen estado LAN oficial. La elección del
+  tirador en penales continúa limitada al anfitrión.
 
-### Bateball
+### Interfaz y cámara
 
-- Ya existe autoridad del host para portador y marcador.
-- Sus RPC son específicos y constituyen una solución aislada que no cubre los
-  demás minijuegos.
-- Falta identificar cada actualización por ronda y revisión.
+- Corregido: fútbol usa primera persona, Bateball cámara elevada y corona,
+  bomba y tornado usan tercera persona. Antes todo excepto Bateball se forzaba
+  a primera persona.
+- Corregido: mira y botón PATEAR sólo aparecen en fútbol y durante las fases
+  donde corresponden; joystick, cámara táctil y salto se desactivan antes del
+  inicio y después del final.
+- Corregido: los marcadores de equipo dicen `TU EQUIPO`, no `TÚ`.
+- Corregido: cada resultado explica la regla real del modo; Corona ya no
+  mostrará accidentalmente el marcador de fútbol durante RESULT.
+
+## Matriz semántica de minijuegos
+
+| Modo | Cámara | Acción distintiva | Condición final | Autoridad LAN |
+| --- | --- | --- | --- | --- |
+| Fútbol de rebote | primera persona | patada orientada por cuerpo | 3 goles, tiempo y penales si empata | host: balón, goles, bots y marcador |
+| Corona central | tercera persona | robar por contacto | portador al terminar; empate si nadie | host: portador con enfriamiento |
+| Bomba de relevo | tercera persona | entregar por contacto | explota el portador al agotar la mecha | host: portador, mecha y explosión |
+| Tornado | tercera persona | evitar embudo y proyectiles | tiempo o todos eliminados | host: peligro y daño; reacción local |
+| Bateball | elevada oblicua | apuntar tiro / bate cargado | primer equipo a 2 | host: posesión, balón y marcador |
+
+## Deuda identificada que no debe ocultarse
+
+- Bateball ya usa el contrato versionado común para posesión y marcador. Los
+  métodos RPC antiguos permanecen aislados hasta retirar sus pruebas legadas,
+  pero la ruta activa no depende de ellos.
+- Patada y bate ya usan un evento de acción no fiable y ordenado para que la
+  animación remota acompañe el resultado físico sin bloquear el movimiento.
+- Bateball confirma daño desde el host y respawnea al jugador eliminado en su
+  spawn después de dos segundos. Todavía falta una animación visual específica
+  de eliminación/reaparición.
+- En penales LAN el anfitrión realiza la selección. Para una versión final por
+  equipos deberá declararse explícitamente qué jugador patea cada turno.
+- Los equipos se derivan de slots alternados, pero el roster debe congelarse
+  al iniciar la ronda para que una desconexión no reasigne bandos.
 
 ### Presentación remota
 
 - La locomoción remota ya usa la velocidad recibida.
 - Eventos de animación discretos todavía no tienen un canal general; sólo el
   bate posee un RPC propio.
-- Salud recibida se almacena en `_lan_targets`, pero no se aplica a la
-  presentación remota.
+- Tornado aplica vida confirmada por evento. La salud genérica recibida dentro
+  del snapshot de locomoción todavía no alimenta una barra visual remota.
 
 ## Responsabilidad objetivo
 
@@ -112,8 +151,8 @@ principio se conserva.
 
 ## Diseño de sincronización
 
-Se añadirá un único contrato de estado de ronda LAN, no un RPC independiente
-improvisado para cada texto del HUD.
+Existe un único contrato de estado de ronda LAN para los modos consolidados,
+en lugar de un RPC improvisado para cada texto del HUD.
 
 Cada evento llevará:
 

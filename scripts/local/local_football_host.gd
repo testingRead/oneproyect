@@ -29,6 +29,7 @@ var _bot_cooldown := {&"home": 0.0, &"away": 0.0}
 var _bots := {}
 var _penalty_choice := 99
 var _penalty_winner := 0
+var _session_authority := true
 
 
 func start_match(map_root: Node3D, time_scale := 1.0, goalkeeper_value = null) -> bool:
@@ -73,7 +74,7 @@ func start_match(map_root: Node3D, time_scale := 1.0, goalkeeper_value = null) -
 
 
 func _physics_process(delta: float) -> void:
-	if not _active or _goal_lock or not is_instance_valid(_ball):
+	if not _active or not _session_authority or _goal_lock or not is_instance_valid(_ball):
 		return
 	for side in [&"home", &"away"]:
 		_bot_cooldown[side] = maxf(0.0, float(_bot_cooldown[side]) - delta)
@@ -133,7 +134,7 @@ func submit_penalty_choice(direction: int) -> void:
 
 
 func run_penalty_shootout() -> void:
-	if not is_instance_valid(_ball):
+	if not _session_authority or not is_instance_valid(_ball):
 		return
 	_penalty_winner = 0
 	var home_penalties := 0
@@ -160,6 +161,42 @@ func run_penalty_shootout() -> void:
 		_penalty_winner = 1 if score >= opponent_score else -1
 	else:
 		_penalty_winner = 1 if home_penalties > away_penalties else -1
+	_complete = true
+	score_changed.emit(score, opponent_score, target_score)
+
+
+func wait_for_authoritative_result(max_seconds := 22.0) -> bool:
+	var deadline := Time.get_ticks_msec() + roundi(max_seconds * 1000.0)
+	while not _complete and Time.get_ticks_msec() < deadline:
+		await get_tree().physics_frame
+	return _complete
+
+
+func set_session_authority(enabled: bool) -> void:
+	_session_authority = enabled
+
+
+func has_session_authority() -> bool:
+	return _session_authority
+
+
+func get_penalty_winner_home() -> int:
+	return _penalty_winner
+
+
+func apply_authoritative_score(
+	home_score: int,
+	away_score: int,
+	complete: bool,
+	penalty_winner_home := 0
+) -> void:
+	score = maxi(0, home_score)
+	opponent_score = maxi(0, away_score)
+	_complete = complete
+	_penalty_winner = clampi(penalty_winner_home, -1, 1)
+	if _complete:
+		_active = false
+	score_changed.emit(score, opponent_score, target_score)
 
 
 func _play_penalty_cinematic(shot_direction: int, save_direction: int, scored: bool) -> void:
@@ -223,7 +260,7 @@ func set_player_team(team: StringName) -> void:
 
 func get_winner() -> int:
 	if _penalty_winner != 0:
-		return _penalty_winner
+		return -_penalty_winner if _player_team == &"away" else _penalty_winner
 	if get_local_score() > get_rival_score():
 		return 1
 	if get_rival_score() > get_local_score():
@@ -232,7 +269,7 @@ func get_winner() -> int:
 
 
 func _on_goal_body_entered(body: Node3D, goal: Area3D) -> void:
-	if not _active or _goal_lock or body != _ball:
+	if not _active or not _session_authority or _goal_lock or body != _ball:
 		return
 	if _try_goalkeeper_save(goal):
 		return
@@ -242,10 +279,10 @@ func _on_goal_body_entered(body: Node3D, goal: Area3D) -> void:
 		score += 1
 	else:
 		opponent_score += 1
+	_complete = score >= target_score or opponent_score >= target_score
 	score_changed.emit(score, opponent_score, target_score)
 	goal_scored.emit(scoring_side)
-	if score >= target_score or opponent_score >= target_score:
-		_complete = true
+	if _complete:
 		_active = false
 		_ball.freeze = true
 		match_completed.emit(score, opponent_score)

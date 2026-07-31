@@ -28,7 +28,7 @@ func _run() -> void:
 	rival_camera.current = false
 	lab.get_node("World").add_child(rival)
 	rival.set_physics_process(false)
-	lab.round_controller.duration_multiplier = 0.05
+	lab.round_controller.duration_multiplier = 0.08
 	var baseline_nodes := get_node_count()
 	_require(lab.start_reference_round(7701), "Bateball must start")
 	_require(await _wait_for_phase(lab, LocalRoundController.Phase.ACTIVE, 180), "Bateball must reach active")
@@ -53,7 +53,7 @@ func _run() -> void:
 	lab.player.global_position = Vector3(0.0, 0.02, -20.0)
 	for frame in 10:
 		await physics_frame
-	_require(lab.bateball_host.get_holder_name() == "CharacterRoot", "Player must collect ball")
+	_require(lab.bateball_host.get_holder_name() == "JUGADOR", "Player must collect ball")
 	lab.player.request_bat_swing()
 	for frame in 238:
 		await physics_frame
@@ -78,6 +78,20 @@ func _run() -> void:
 	release.position = drag.position
 	lab.look_pad._gui_input(release)
 	_require(not lab.bateball_host.is_holder(lab.player), "Releasing aim must shoot the held ball")
+	rival.set_authoritative_health(10)
+	rival.global_position = lab.player.global_position + Vector3.RIGHT * 1.0
+	lab.player.set_facing_direction(Vector3.RIGHT)
+	_require(lab.player.request_bat_swing(), "Charged bat swing must start")
+	for frame in 18:
+		await physics_frame
+	_require(rival.get_local_health() == 0, "Bat damage must eliminate a low-health rival")
+	for frame in 130:
+		await physics_frame
+	_require(
+		rival.get_local_health() == 100
+		and rival.global_position.distance_to(Vector3(0.0, 0.02, -34.0)) < 0.2,
+		"Eliminated Bateball players must respawn at their team spawn"
+	)
 	var ball: RigidBody3D = lab.bateball_host.get_ball() as RigidBody3D
 	_require(ball.global_position.distance_to(lab.player.global_position) > 0.6, "Shot must start beyond the player collider")
 	ball.global_position = Vector3(20.0, 0.4, -20.0)
