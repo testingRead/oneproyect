@@ -23,6 +23,7 @@ var map_host: LocalMapHost
 var football_host
 var crown_host
 var bomb_host
+var tornado_host
 var player: LocalBaseCharacter
 var playable_area: LocalPlayableArea
 var minigame_id: StringName = &"futbol_rebote"
@@ -35,6 +36,7 @@ func configure(
 	football_host_value,
 	crown_host_value,
 	bomb_host_value,
+	tornado_host_value,
 	minigame_id_value: StringName,
 	player_value: LocalBaseCharacter,
 	playable_area_value: LocalPlayableArea
@@ -44,6 +46,7 @@ func configure(
 	football_host = football_host_value
 	crown_host = crown_host_value
 	bomb_host = bomb_host_value
+	tornado_host = tornado_host_value
 	minigame_id = minigame_id_value
 	player = player_value
 	playable_area = playable_area_value
@@ -66,6 +69,8 @@ func stop_and_clean() -> void:
 		crown_host.stop_and_clean()
 	if bomb_host != null:
 		bomb_host.stop_and_clean()
+	if tornado_host != null:
+		tornado_host.stop_and_clean()
 	if map_host != null:
 		map_host.unmount_map()
 	if player != null:
@@ -103,6 +108,8 @@ func _run_round(generation: int) -> void:
 	var active_duration := 75.0 if minigame_id == &"futbol_rebote" else 45.0
 	if minigame_id == &"bomba_relevo":
 		active_duration = 24.0
+	elif minigame_id == &"tornado_supervivencia":
+		active_duration = 48.0
 	_transition(Phase.ACTIVE, active_duration)
 	var mounted_map := map_host.get_node_or_null("MountedMap") as Node3D
 	var started := false
@@ -112,6 +119,8 @@ func _run_round(generation: int) -> void:
 		started = crown_host.start_match(mounted_map, player)
 	elif minigame_id == &"bomba_relevo":
 		started = bomb_host.start_match(mounted_map, player)
+	elif minigame_id == &"tornado_supervivencia":
+		started = tornado_host.start_match(mounted_map, player)
 	if not started:
 		stop_and_clean()
 		return
@@ -126,6 +135,8 @@ func _run_round(generation: int) -> void:
 		football_host.finish_match()
 	elif minigame_id == &"corona_central":
 		crown_host.finish_match()
+	elif minigame_id == &"tornado_supervivencia":
+		tornado_host.finish_match()
 	_transition(Phase.RESULT, 1.5)
 	if not await _wait_phase(1.5, generation):
 		return
@@ -133,6 +144,7 @@ func _run_round(generation: int) -> void:
 	football_host.stop_and_clean()
 	crown_host.stop_and_clean()
 	bomb_host.stop_and_clean()
+	tornado_host.stop_and_clean()
 	map_host.unmount_map()
 	playable_area.set_physical_walls_enabled(false)
 	player.set_first_person(false)
@@ -158,6 +170,8 @@ func _wait_active(seconds: float, generation: int) -> bool:
 		if minigame_id == &"futbol_rebote" and football_host != null and football_host.is_complete():
 			return true
 		if minigame_id == &"bomba_relevo" and bomb_host != null and bomb_host.is_complete():
+			return true
+		if minigame_id == &"tornado_supervivencia" and tornado_host != null and tornado_host.is_complete():
 			return true
 		await get_tree().physics_frame
 	return generation == _generation

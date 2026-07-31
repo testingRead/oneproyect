@@ -7,6 +7,7 @@ signal metrics_changed(metrics: Dictionary)
 signal push_performed(hit: bool)
 signal hand_action_changed(label: String)
 signal action_resolved(action: StringName, hit: bool)
+signal local_health_changed(current: int, maximum: int)
 
 const ACTION_PUSH := &"PUSH"
 const ACTION_KICK := &"KICK"
@@ -56,6 +57,7 @@ var _goalkeeper_cooldown := 0.0
 var _goalkeeper_remaining := 0.0
 var _goalkeeper_side := 0
 var _goalkeeper_level := 1
+var _local_health := 100
 
 
 func _ready() -> void:
@@ -338,6 +340,22 @@ func apply_external_push(direction: Vector3, force := 5.0) -> void:
 	safe_direction = safe_direction.normalized()
 	_external_velocity += safe_direction * force
 	velocity.y = maxf(velocity.y, maxf(0.0, safe_direction.y * force))
+
+
+func reset_local_health() -> void:
+	_local_health = 100
+	local_health_changed.emit(_local_health, 100)
+
+
+func get_local_health() -> int:
+	return _local_health
+
+
+func apply_local_damage(amount: int) -> void:
+	if amount <= 0:
+		return
+	_local_health = maxi(0, _local_health - amount)
+	local_health_changed.emit(_local_health, 100)
 
 
 func reset_to_spawn() -> void:

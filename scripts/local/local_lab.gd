@@ -6,6 +6,7 @@ const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/campo_futbol_loc
 const MENU_SCENE := "res://scenes/menu.tscn"
 const CROWN_HOST_SCRIPT := preload("res://scripts/local/local_crown_host.gd")
 const BOMB_HOST_SCRIPT := preload("res://scripts/local/local_bomb_host.gd")
+const TORNADO_HOST_SCRIPT := preload("res://scripts/local/local_tornado_host.gd")
 
 @onready var player: LocalBaseCharacter = $World/CharacterRoot
 @onready var playable_area: LocalPlayableArea = $World/PlayableArea
@@ -35,6 +36,7 @@ var _selected_map: MinigameMapDefinition = LAB_MAP
 var _selected_minigame_id: StringName = &"futbol_rebote"
 var crown_host
 var bomb_host
+var tornado_host
 
 
 func _ready() -> void:
@@ -51,6 +53,9 @@ func _ready() -> void:
 	bomb_host = BOMB_HOST_SCRIPT.new()
 	bomb_host.name = "BombHost"
 	add_child(bomb_host)
+	tornado_host = TORNADO_HOST_SCRIPT.new()
+	tornado_host.name = "TornadoHost"
+	add_child(tornado_host)
 	$HUD/DiagnosticsPanel.hide()
 	hand_button.hide()
 	_create_penalty_buttons()
@@ -68,6 +73,7 @@ func _ready() -> void:
 		football_host,
 		crown_host,
 		bomb_host,
+		tornado_host,
 		_selected_minigame_id,
 		player,
 		playable_area
@@ -84,6 +90,9 @@ func _ready() -> void:
 	bomb_host.bomb_holder_changed.connect(_on_bomb_holder_changed)
 	bomb_host.bomb_timer_changed.connect(_on_bomb_timer_changed)
 	bomb_host.bomb_exploded.connect(_on_bomb_exploded)
+	tornado_host.timer_changed.connect(_on_tornado_timer_changed)
+	tornado_host.health_changed.connect(_on_tornado_health_changed)
+	tornado_host.player_captured.connect(_on_tornado_player_captured)
 	playable_area.set_area_index(_area_index)
 	playable_area.set_physical_walls_enabled(false)
 	_on_player_metrics(player.get_diagnostics())
@@ -210,7 +219,7 @@ func _on_round_phase_changed(
 		"LIMPIANDO",
 	]
 	round_label.text = "%s  %s  ·  %.1f s" % [_minigame_title(), phase_labels[next_phase], seconds]
-	foot_button.visible = not (_is_crown_game() or _is_bomb_game())
+	foot_button.visible = not (_is_crown_game() or _is_bomb_game() or _is_tornado_game())
 	match next_phase:
 		LocalRoundController.Phase.IDLE:
 			if _launched_from_room and _match_has_started:
@@ -228,26 +237,26 @@ func _on_round_phase_changed(
 			round_button.hide()
 			crosshair.show()
 			banner_title.text = "PREPARANDO %s" % _minigame_title()
-			banner_detail.text = "La corona espera en el centro" if _is_crown_game() else "La bomba empieza en tus manos" if _is_bomb_game() else "El balón caerá en el centro"
-			banner_progress.text = "Todos corren a la misma velocidad" if _is_crown_game() else "El contacto entrega la bomba" if _is_bomb_game() else "La patada sigue al cuerpo, no a la cámara"
+			banner_detail.text = "La corona espera en el centro" if _is_crown_game() else "La bomba empieza en tus manos" if _is_bomb_game() else "El tornado se forma en la arena" if _is_tornado_game() else "El balón caerá en el centro"
+			banner_progress.text = "Todos corren a la misma velocidad" if _is_crown_game() else "El contacto entrega la bomba" if _is_bomb_game() else "Objetos y jugadores serán arrastrados" if _is_tornado_game() else "La patada sigue al cuerpo, no a la cámara"
 		LocalRoundController.Phase.RULES:
-			banner_title.text = "CORONA CENTRAL" if _is_crown_game() else "BOMBA DE RELEVO" if _is_bomb_game() else "FÚTBOL · DOS ARCOS"
-			banner_detail.text = "Toma la corona y evita que te la quiten" if _is_crown_game() else "Toca a otro jugador para pasar la bomba" if _is_bomb_game() else "Marca en el arco rival y defiende el tuyo"
-			banner_progress.text = "El contacto roba la corona" if _is_crown_game() else "La mecha acelera al acercarse el final" if _is_bomb_game() else "La pelota rebota en las paredes"
+			banner_title.text = "CORONA CENTRAL" if _is_crown_game() else "BOMBA DE RELEVO" if _is_bomb_game() else "TORNADO DE OBJETOS" if _is_tornado_game() else "FÚTBOL · DOS ARCOS"
+			banner_detail.text = "Toma la corona y evita que te la quiten" if _is_crown_game() else "Toca a otro jugador para pasar la bomba" if _is_bomb_game() else "Mantente lejos del embudo y de los objetos" if _is_tornado_game() else "Marca en el arco rival y defiende el tuyo"
+			banner_progress.text = "El contacto roba la corona" if _is_crown_game() else "La mecha acelera al acercarse el final" if _is_bomb_game() else "El contacto daña; el tornado te puede lanzar" if _is_tornado_game() else "La pelota rebota en las paredes"
 		LocalRoundController.Phase.COUNTDOWN:
-			banner_title.text = "CORONA · 3" if _is_crown_game() else "BOMBA · 3" if _is_bomb_game() else "SAQUE · 3"
-			banner_detail.text = "Corre hacia el círculo central" if _is_crown_game() else "Sujeta la bomba con las dos manos" if _is_bomb_game() else "Muévete para colocarte detrás del balón"
-			banner_progress.text = "La corona aparece al centro" if _is_crown_game() else "No dejes que termine la mecha" if _is_bomb_game() else "La mira es orientativa; el pie usa tu orientación"
+			banner_title.text = "CORONA · 3" if _is_crown_game() else "BOMBA · 3" if _is_bomb_game() else "TORNADO · 3" if _is_tornado_game() else "SAQUE · 3"
+			banner_detail.text = "Corre hacia el círculo central" if _is_crown_game() else "Sujeta la bomba con las dos manos" if _is_bomb_game() else "Los objetos empezarán a volar" if _is_tornado_game() else "Muévete para colocarte detrás del balón"
+			banner_progress.text = "La corona aparece al centro" if _is_crown_game() else "No dejes que termine la mecha" if _is_bomb_game() else "Sobrevive con vida" if _is_tornado_game() else "La mira es orientativa; el pie usa tu orientación"
 		LocalRoundController.Phase.ACTIVE:
-			banner_title.text = "¡CORONA!" if _is_crown_game() else "¡BOMBA!" if _is_bomb_game() else "¡JUGAR!"
-			banner_detail.text = "Consigue la corona" if _is_crown_game() else "Pásala al tocar a otro jugador" if _is_bomb_game() else "PATEA al arco rival · protege el tuyo"
-			banner_progress.text = "CORONA: %s" % crown_host.get_holder_name() if _is_crown_game() else "BOMBA: %.1f s" % bomb_host.get_remaining() if _is_bomb_game() else _score_text()
+			banner_title.text = "¡CORONA!" if _is_crown_game() else "¡BOMBA!" if _is_bomb_game() else "¡TORNADO!" if _is_tornado_game() else "¡JUGAR!"
+			banner_detail.text = "Consigue la corona" if _is_crown_game() else "Pásala al tocar a otro jugador" if _is_bomb_game() else "Evita el embudo y los objetos proyectados" if _is_tornado_game() else "PATEA al arco rival · protege el tuyo"
+			banner_progress.text = "CORONA: %s" % crown_host.get_holder_name() if _is_crown_game() else "BOMBA: %.1f s" % bomb_host.get_remaining() if _is_bomb_game() else "VIDA %d/100 · %.1f s" % [player.get_local_health(), tornado_host.get_remaining()] if _is_tornado_game() else _score_text()
 		LocalRoundController.Phase.RESULT:
 			crosshair.hide()
-			var winner: int = crown_host.get_winner() if _is_crown_game() else bomb_host.get_winner() if _is_bomb_game() else football_host.get_winner()
+			var winner: int = crown_host.get_winner() if _is_crown_game() else bomb_host.get_winner() if _is_bomb_game() else tornado_host.get_winner() if _is_tornado_game() else football_host.get_winner()
 			banner_title.text = "¡GANASTE!" if winner > 0 else "GANÓ EL RIVAL" if winner < 0 else "EMPATE"
 			banner_detail.text = "La arena se limpiará y volverás a la isla"
-			banner_progress.text = "La bomba explotó" if _is_bomb_game() else _score_text()
+			banner_progress.text = "La bomba explotó" if _is_bomb_game() else "VIDA FINAL %d/100" % player.get_local_health() if _is_tornado_game() else _score_text()
 		LocalRoundController.Phase.CLEANUP:
 			banner_title.text = "REINICIANDO CANCHA"
 			banner_detail.text = "Restaurando balón, jugadores y cámara"
@@ -313,6 +322,21 @@ func _on_bomb_exploded(holder_name: String) -> void:
 		banner_detail.text = "%s quedó con la bomba" % holder_name
 
 
+func _on_tornado_timer_changed(remaining: float) -> void:
+	if _is_tornado_game() and round_controller.phase == LocalRoundController.Phase.ACTIVE:
+		banner_progress.text = "VIDA %d/100 · %.1f s" % [player.get_local_health(), remaining]
+
+
+func _on_tornado_health_changed(current: int, maximum: int) -> void:
+	if _is_tornado_game():
+		banner_detail.text = "El tornado te atrapó · %d/%d vida" % [current, maximum]
+
+
+func _on_tornado_player_captured() -> void:
+	if _is_tornado_game():
+		banner_title.text = "¡ARRASTRADO!"
+
+
 func _is_crown_game() -> bool:
 	return _selected_minigame_id == &"corona_central"
 
@@ -321,8 +345,12 @@ func _is_bomb_game() -> bool:
 	return _selected_minigame_id == &"bomba_relevo"
 
 
+func _is_tornado_game() -> bool:
+	return _selected_minigame_id == &"tornado_supervivencia"
+
+
 func _minigame_title() -> String:
-	return "CORONA CENTRAL" if _is_crown_game() else "BOMBA DE RELEVO" if _is_bomb_game() else "FÚTBOL"
+	return "CORONA CENTRAL" if _is_crown_game() else "BOMBA DE RELEVO" if _is_bomb_game() else "TORNADO" if _is_tornado_game() else "FÚTBOL"
 
 
 func _create_penalty_buttons() -> void:

@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="MinigameMapDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/minigames/map_definition.gd" id="1_map"]
+[ext_resource type="PackedScene" path="res://scenes/local/maps/tornado_arena.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_map")
+map_id = &"tornado_isla"
+tags = PackedStringArray("common", "tornado", "physics", "official")
+maximum_players = 8
+map_scene = ExtResource("2_scene")
+footprint = Vector2(34, 34)
+playable_area_index = 1
+boundary_policy = 0
+spawn_points = PackedVector3Array(0, 0.02, -8, -10, 0.02, -12, 10, 0.02, -12, -10, 0.02, -28, 10, 0.02, -28)
+safe_zone_centres = PackedVector3Array()
+event_points = PackedVector3Array(0, 0.6, -20)
+navigation_points = PackedVector3Array(-10, 0, -12, 10, 0, -12, -10, 0, -28, 10, 0, -28)
+available_objects = PackedStringArray("cajas", "piedras", "balones")
+compatible_disasters = PackedStringArray("tornado")
+compatible_minigames = PackedStringArray("tornado_supervivencia")
+modular_slots = PackedStringArray()
