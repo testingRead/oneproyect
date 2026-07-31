@@ -18,6 +18,7 @@ var _player: LocalBaseCharacter
 var _object_parent: Node3D
 var _damage_cooldown := 0.0
 var _path_time := 0.0
+var _impact_cooldowns := {}
 
 
 func start_match(map_root: Node3D, player: LocalBaseCharacter) -> bool:
@@ -76,6 +77,7 @@ func stop_and_clean() -> void:
 	_player = null
 	_object_parent = null
 	_damage_cooldown = 0.0
+	_impact_cooldowns.clear()
 
 
 func _move_tornado(delta: float) -> void:
@@ -96,6 +98,7 @@ func _affect_loose_objects() -> void:
 		var pull := offset.normalized() * (1.0 - distance / INFLUENCE_RADIUS) * 17.0
 		var tangent := Vector3(-offset.z, 0.0, offset.x).normalized() * 9.5
 		body.apply_central_force(pull + tangent + Vector3.UP * 7.0)
+		_apply_object_impact_damage(body)
 
 
 func _affect_characters(delta: float) -> void:
@@ -117,6 +120,59 @@ func _affect_characters(delta: float) -> void:
 			target.apply_local_damage(12)
 			health_changed.emit(target.get_local_health(), 100)
 			player_captured.emit()
+		_apply_character_impact_damage(target)
+
+
+func _apply_object_impact_damage(body: RigidBody3D) -> void:
+	var speed := body.linear_velocity.length()
+	if speed < 4.0:
+		return
+	for character in get_tree().get_nodes_in_group(&"local_base_character"):
+		if not character is LocalBaseCharacter:
+			continue
+		var target := character as LocalBaseCharacter
+		if body.global_position.distance_to(target.global_position) > 1.0:
+			continue
+		var key := "object:%d:%d" % [body.get_instance_id(), target.get_instance_id()]
+		if not _can_damage(key):
+			continue
+		var damage := clampi(roundi(speed * 0.9), 5, 18)
+		target.apply_local_damage(damage)
+		target.apply_external_push(body.linear_velocity.normalized() + Vector3.UP * 0.16, minf(8.0, speed))
+		_emit_player_health_if_needed(target)
+
+
+func _apply_character_impact_damage(source: LocalBaseCharacter) -> void:
+	var speed := source.velocity.length()
+	if speed < 5.5:
+		return
+	for character in get_tree().get_nodes_in_group(&"local_base_character"):
+		if character == source or not character is LocalBaseCharacter:
+			continue
+		var target := character as LocalBaseCharacter
+		if source.global_position.distance_to(target.global_position) > 1.05:
+			continue
+		var key := "player:%d:%d" % [source.get_instance_id(), target.get_instance_id()]
+		if not _can_damage(key):
+			continue
+		var damage := clampi(roundi(speed * 0.7), 4, 14)
+		target.apply_local_damage(damage)
+		target.apply_external_push(source.velocity.normalized() + Vector3.UP * 0.12, speed * 0.55)
+		_emit_player_health_if_needed(target)
+
+
+func _can_damage(key: String) -> bool:
+	var now := Time.get_ticks_msec()
+	var next_allowed := int(_impact_cooldowns.get(key, 0))
+	if now < next_allowed:
+		return false
+	_impact_cooldowns[key] = now + 600
+	return true
+
+
+func _emit_player_health_if_needed(target: LocalBaseCharacter) -> void:
+	if target == _player:
+		health_changed.emit(target.get_local_health(), 100)
 
 
 func _find_descendant(root: Node, group: StringName) -> Node:
