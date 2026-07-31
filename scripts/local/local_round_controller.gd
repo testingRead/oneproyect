@@ -21,8 +21,10 @@ var round_seed := 0
 var map_definition: MinigameMapDefinition
 var map_host: LocalMapHost
 var football_host
+var crown_host
 var player: LocalBaseCharacter
 var playable_area: LocalPlayableArea
+var minigame_id: StringName = &"futbol_rebote"
 var _generation := 0
 
 
@@ -30,12 +32,16 @@ func configure(
 	definition: MinigameMapDefinition,
 	map_host_value: LocalMapHost,
 	football_host_value,
+	crown_host_value,
+	minigame_id_value: StringName,
 	player_value: LocalBaseCharacter,
 	playable_area_value: LocalPlayableArea
 ) -> void:
 	map_definition = definition
 	map_host = map_host_value
 	football_host = football_host_value
+	crown_host = crown_host_value
+	minigame_id = minigame_id_value
 	player = player_value
 	playable_area = playable_area_value
 
@@ -53,6 +59,8 @@ func stop_and_clean() -> void:
 	_generation += 1
 	if football_host != null:
 		football_host.stop_and_clean()
+	if crown_host != null:
+		crown_host.stop_and_clean()
 	if map_host != null:
 		map_host.unmount_map()
 	if player != null:
@@ -87,25 +95,34 @@ func _run_round(generation: int) -> void:
 	if not await _wait_phase(3.0, generation):
 		return
 	player.controls_enabled = true
-	var active_duration := 75.0
+	var active_duration := 75.0 if minigame_id == &"futbol_rebote" else 45.0
 	_transition(Phase.ACTIVE, active_duration)
 	var mounted_map := map_host.get_node_or_null("MountedMap") as Node3D
-	if not football_host.start_match(mounted_map, duration_multiplier, player):
+	var started := false
+	if minigame_id == &"futbol_rebote":
+		started = football_host.start_match(mounted_map, duration_multiplier, player)
+	elif minigame_id == &"corona_central":
+		started = crown_host.start_match(mounted_map, player)
+	if not started:
 		stop_and_clean()
 		return
 	if not await _wait_active(active_duration, generation):
 		return
 	player.controls_enabled = false
-	if football_host.is_tied():
+	if minigame_id == &"futbol_rebote" and football_host.is_tied():
 		await football_host.run_penalty_shootout()
 		if generation != _generation:
 			return
-	football_host.finish_match()
+	if minigame_id == &"futbol_rebote":
+		football_host.finish_match()
+	else:
+		crown_host.finish_match()
 	_transition(Phase.RESULT, 1.5)
 	if not await _wait_phase(1.5, generation):
 		return
 	_transition(Phase.CLEANUP, 0.2)
 	football_host.stop_and_clean()
+	crown_host.stop_and_clean()
 	map_host.unmount_map()
 	playable_area.set_physical_walls_enabled(false)
 	player.set_first_person(false)
@@ -128,7 +145,7 @@ func _wait_active(seconds: float, generation: int) -> bool:
 		+ int(seconds * duration_multiplier * 1000.0)
 	)
 	while generation == _generation and Time.get_ticks_msec() < deadline:
-		if football_host != null and football_host.is_complete():
+		if minigame_id == &"futbol_rebote" and football_host != null and football_host.is_complete():
 			return true
 		await get_tree().physics_frame
 	return generation == _generation

@@ -4,6 +4,7 @@ extends Node3D
 const SCALE := preload("res://shared/gameplay_scale.gd")
 const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/campo_futbol_local.tres")
 const MENU_SCENE := "res://scenes/menu.tscn"
+const CROWN_HOST_SCRIPT := preload("res://scripts/local/local_crown_host.gd")
 
 @onready var player: LocalBaseCharacter = $World/CharacterRoot
 @onready var playable_area: LocalPlayableArea = $World/PlayableArea
@@ -30,6 +31,8 @@ var _penalty_buttons: Array[TouchActionButton] = []
 var _launched_from_room := false
 var _match_has_started := false
 var _selected_map: MinigameMapDefinition = LAB_MAP
+var _selected_minigame_id: StringName = &"futbol_rebote"
+var crown_host
 
 
 func _ready() -> void:
@@ -39,6 +42,9 @@ func _ready() -> void:
 		network.call("disconnect_session")
 	_build_island_once()
 	_load_room_content()
+	crown_host = CROWN_HOST_SCRIPT.new()
+	crown_host.name = "CrownHost"
+	add_child(crown_host)
 	$HUD/DiagnosticsPanel.hide()
 	hand_button.hide()
 	_create_penalty_buttons()
@@ -54,6 +60,8 @@ func _ready() -> void:
 		_selected_map,
 		map_host,
 		football_host,
+		crown_host,
+		_selected_minigame_id,
 		player,
 		playable_area
 	)
@@ -64,6 +72,8 @@ func _ready() -> void:
 	football_host.penalty_choice_requested.connect(_on_penalty_choice_requested)
 	football_host.penalty_cinematic.connect(_on_penalty_cinematic)
 	football_host.penalty_score_changed.connect(_on_penalty_score_changed)
+	crown_host.crown_holder_changed.connect(_on_crown_holder_changed)
+	crown_host.match_completed.connect(_on_crown_match_completed)
 	playable_area.set_area_index(_area_index)
 	playable_area.set_physical_walls_enabled(false)
 	_on_player_metrics(player.get_diagnostics())
@@ -82,6 +92,7 @@ func _load_room_content() -> void:
 		minigame = load(minigame_path)
 	if minigame != null and minigame.map_definition != null:
 		_selected_map = minigame.map_definition
+		_selected_minigame_id = minigame.minigame_id
 	var character_path := str(ProjectSettings.get_setting("oneproyect/session_character_path", ""))
 	if not character_path.is_empty():
 		player.set_meta("character_definition_path", character_path)
@@ -212,24 +223,24 @@ func _on_round_phase_changed(
 		LocalRoundController.Phase.PREPARE:
 			round_button.hide()
 			crosshair.show()
-			banner_title.text = "PREPARANDO LA CANCHA"
-			banner_detail.text = "El balón caerá en el centro"
-			banner_progress.text = "La patada sigue al cuerpo, no a la cámara"
+			banner_title.text = "PREPARANDO %s" % _minigame_title()
+			banner_detail.text = "La corona espera en el centro" if _is_crown_game() else "El balón caerá en el centro"
+			banner_progress.text = "Todos corren a la misma velocidad" if _is_crown_game() else "La patada sigue al cuerpo, no a la cámara"
 		LocalRoundController.Phase.RULES:
-			banner_title.text = "FÚTBOL · DOS ARCOS"
-			banner_detail.text = "Marca en el arco rival y defiende el tuyo"
-			banner_progress.text = "La pelota rebota en las paredes"
+			banner_title.text = "CORONA CENTRAL" if _is_crown_game() else "FÚTBOL · DOS ARCOS"
+			banner_detail.text = "Toma la corona y evita que te la quiten" if _is_crown_game() else "Marca en el arco rival y defiende el tuyo"
+			banner_progress.text = "El contacto roba la corona" if _is_crown_game() else "La pelota rebota en las paredes"
 		LocalRoundController.Phase.COUNTDOWN:
-			banner_title.text = "SAQUE · 3"
-			banner_detail.text = "Muévete para colocarte detrás del balón"
-			banner_progress.text = "La mira es orientativa; el pie usa tu orientación"
+			banner_title.text = "CORONA · 3" if _is_crown_game() else "SAQUE · 3"
+			banner_detail.text = "Corre hacia el círculo central" if _is_crown_game() else "Muévete para colocarte detrás del balón"
+			banner_progress.text = "La corona aparece al centro" if _is_crown_game() else "La mira es orientativa; el pie usa tu orientación"
 		LocalRoundController.Phase.ACTIVE:
-			banner_title.text = "¡JUGAR!"
-			banner_detail.text = "PATEA al arco rival · protege el tuyo"
-			banner_progress.text = _score_text()
+			banner_title.text = "¡CORONA!" if _is_crown_game() else "¡JUGAR!"
+			banner_detail.text = "Consigue la corona" if _is_crown_game() else "PATEA al arco rival · protege el tuyo"
+			banner_progress.text = "CORONA: %s" % crown_host.get_holder_name() if _is_crown_game() else _score_text()
 		LocalRoundController.Phase.RESULT:
 			crosshair.hide()
-			var winner: int = football_host.get_winner()
+			var winner: int = crown_host.get_winner() if _is_crown_game() else football_host.get_winner()
 			banner_title.text = (
 				"¡GANASTE!" if winner > 0
 				else "GANÓ EL RIVAL" if winner < 0
@@ -273,6 +284,25 @@ func _on_kickoff_ready() -> void:
 	player.set_spawn_transform(map_host.get_spawn_transform(0))
 	player.set_facing_direction(Vector3(0.0, 0.0, -1.0))
 	banner_detail.text = "Saque desde el centro"
+
+
+func _on_crown_holder_changed(holder_name: String) -> void:
+	if _is_crown_game():
+		banner_detail.text = "%s tiene la corona" % holder_name
+		banner_progress.text = "CORONA: %s" % holder_name
+
+
+func _on_crown_match_completed(holder_name: String) -> void:
+	if _is_crown_game():
+		banner_detail.text = "%s conserva la corona" % holder_name
+
+
+func _is_crown_game() -> bool:
+	return _selected_minigame_id == &"corona_central"
+
+
+func _minigame_title() -> String:
+	return "CORONA CENTRAL" if _is_crown_game() else "FÚTBOL"
 
 
 func _create_penalty_buttons() -> void:

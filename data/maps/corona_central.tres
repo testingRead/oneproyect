@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="MinigameMapDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/minigames/map_definition.gd" id="1_map"]
+[ext_resource type="PackedScene" path="res://scenes/local/maps/crown_arena.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_map")
+map_id = &"corona_central"
+tags = PackedStringArray("common", "crown", "official", "local_candidate")
+selection_weight = 1.0
+maximum_players = 8
+map_scene = ExtResource("2_scene")
+footprint = Vector2(26, 26)
+playable_area_index = 1
+boundary_policy = 0
+spawn_points = PackedVector3Array(-8, 0.02, -12, 0, 0.02, -10, 8, 0.02, -12, -8, 0.02, -28, 0, 0.02, -30, 8, 0.02, -28, -10, 0.02, -20, 10, 0.02, -20)
+safe_zone_centres = PackedVector3Array(0, 0.02, -20)
+event_points = PackedVector3Array(0, 0.6, -20)
+navigation_points = PackedVector3Array(-8, 0, -12, 8, 0, -12, -8, 0, -28, 8, 0, -28, 0, 0, -20)
+available_objects = PackedStringArray("corona")
+compatible_disasters = PackedStringArray()
+compatible_minigames = PackedStringArray("corona_central")
+modular_slots = PackedStringArray()
