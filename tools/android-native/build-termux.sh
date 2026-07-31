@@ -57,13 +57,9 @@ fi
 APK_LISTING="$(mktemp)"
 trap 'rm -f "$APK_LISTING"' EXIT
 unzip -Z1 "$APK_PATH" >"$APK_LISTING"
-if ! grep -qx "assets/local_development.marker" "$APK_LISTING"; then
-	echo "El APK no contiene la marca de laboratorio local" >&2
-	exit 4
-fi
 if ! grep -qx "lib/arm64-v8a/libgodot_android.so" "$APK_LISTING"; then
 	echo "El APK no contiene Godot ARM64" >&2
-	exit 5
+	exit 4
 fi
 
 mkdir -p "$DOWNLOADS_DIR"

@@ -23,8 +23,8 @@ directamente a:
 $HOME/storage/downloads/oneproyect-android-native-local.apk
 ```
 
-Este APK contiene `local_development.marker`, por lo que abre directamente
-`local_lab.tscn`, sin conexión, autenticación ni sala remota. AGP 9.3 exige
+Este APK abre el menú principal. Desde allí se puede iniciar Local, preparar
+una sala LAN local o entrar al multijugador remoto. AGP 9.3 exige
 Build Tools 36; el paquete ARM64 de Termux omite `dexdump`, `split-select` y
 `llvm-rs-cc`, así que el script enlaza las implementaciones ARM64 reales del
 Build Tools 35 instalado. ADB no forma parte de esta ruta.

@@ -11,6 +11,7 @@ const PROFILE_PATH := "user://profile.cfg"
 @onready var network: OneProjectNetwork = get_node("/root/Network")
 
 var _main_screen: VBoxContainer
+var _lan_screen: VBoxContainer
 var _lobby_screen: VBoxContainer
 var _waiting_screen: VBoxContainer
 var _name_input: LineEdit
@@ -40,6 +41,9 @@ var _multiplayer_experience := 0
 var _multiplayer_matches := 0
 var _multiplayer_rounds := 0
 var _multiplayer_survivals := 0
+var _lan_mode_button: OptionButton
+var _lan_status: Label
+var _lan_start_button: Button
 
 
 func _ready() -> void:
@@ -98,6 +102,7 @@ func _build_interface() -> void:
 	_main_screen = _build_main_screen(screens)
 	_lobby_screen = _build_lobby_screen(screens)
 	_waiting_screen = _build_waiting_screen(screens)
+	_lan_screen = _build_lan_screen(screens)
 
 
 func _build_main_screen(parent: Control) -> VBoxContainer:
@@ -126,16 +131,51 @@ func _build_main_screen(parent: Control) -> VBoxContainer:
 	var local_button := _button("JUGAR LOCAL", "PlayLocal")
 	local_button.pressed.connect(_play_local)
 	screen.add_child(local_button)
+	var lan_button := _button("JUGAR EN LAN", "PlayLan")
+	lan_button.pressed.connect(_open_lan)
+	screen.add_child(lan_button)
 	var multiplayer_button := _button("MULTIJUGADOR", "Multiplayer")
 	multiplayer_button.pressed.connect(_open_multiplayer)
 	screen.add_child(multiplayer_button)
 	screen.add_child(_spacer(8.0))
 	var hint := _label(
-		"Local funciona sin servidor · Multijugador: 2–5 jugadores",
+		"Local sin red · LAN para amigos cercanos · Multijugador por Internet",
 		15
 	)
 	hint.modulate = Color(0.64, 0.74, 0.86)
 	screen.add_child(hint)
+	return screen
+
+
+func _build_lan_screen(parent: Control) -> VBoxContainer:
+	var screen := _new_screen("Lan")
+	parent.add_child(screen)
+	screen.add_child(_title("SALA LAN", 32, Color(0.42, 0.9, 0.52)))
+	var detail := _label(
+		"El anfitrión elige el minijuego. Todos entran, marcan LISTO y juegan.",
+		17
+	)
+	detail.modulate = Color(0.76, 0.86, 1.0)
+	screen.add_child(detail)
+	_lan_mode_button = OptionButton.new()
+	_lan_mode_button.name = "LanMinigame"
+	_lan_mode_button.custom_minimum_size = Vector2(0.0, 54.0)
+	_lan_mode_button.add_theme_font_size_override("font_size", 19)
+	_lan_mode_button.add_item("MINIJUEGO: FÚTBOL DE REBOTE", 0)
+	_lan_mode_button.disabled = false
+	screen.add_child(_lan_mode_button)
+	_lan_status = _label(
+		"LAN local: el transporte ENet se añadirá sin depender del VPS.",
+		16
+	)
+	_lan_status.modulate = Color(0.68, 0.8, 0.9)
+	screen.add_child(_lan_status)
+	_lan_start_button = _button("PROBAR COMO ANFITRIÓN LOCAL", "LanHostLocal")
+	_lan_start_button.pressed.connect(_play_lan_host_local)
+	screen.add_child(_lan_start_button)
+	var back := _button("VOLVER", "LanBack")
+	back.pressed.connect(func() -> void: _show_screen(_main_screen))
+	screen.add_child(back)
 	return screen
 
 
@@ -269,6 +309,18 @@ func _play_local() -> void:
 	network.disconnect_session()
 	_loading_game = true
 	_show_loading(LOCAL_LAB_SCENE, "PREPARANDO BASE LOCAL")
+
+
+func _open_lan() -> void:
+	_save_name()
+	network.disconnect_session()
+	_lan_status.text = "Anfitrión: selecciona FÚTBOL DE REBOTE y prepara la sala LAN."
+	_show_screen(_lan_screen)
+
+
+func _play_lan_host_local() -> void:
+	_loading_game = true
+	_show_loading(LOCAL_LAB_SCENE, "PREPARANDO SALA LAN LOCAL")
 
 
 func _open_multiplayer() -> void:
@@ -450,6 +502,7 @@ func _on_returned_to_lobby() -> void:
 
 func _show_screen(screen: Control) -> void:
 	_main_screen.visible = screen == _main_screen
+	_lan_screen.visible = screen == _lan_screen
 	_lobby_screen.visible = screen == _lobby_screen
 	_waiting_screen.visible = screen == _waiting_screen
 
