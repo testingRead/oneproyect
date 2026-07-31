@@ -17,12 +17,6 @@ const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/campo_futbol_loc
 @onready var jump_button: TouchActionButton = $HUD/Jump
 @onready var hand_button: TouchActionButton = $HUD/HandAction
 @onready var foot_button: TouchActionButton = $HUD/FootAction
-@onready var goalkeeper_left_high: TouchActionButton = $HUD/GoalkeeperLeftHigh
-@onready var goalkeeper_left_mid: TouchActionButton = $HUD/GoalkeeperLeftMid
-@onready var goalkeeper_left_low: TouchActionButton = $HUD/GoalkeeperLeftLow
-@onready var goalkeeper_right_high: TouchActionButton = $HUD/GoalkeeperRightHigh
-@onready var goalkeeper_right_mid: TouchActionButton = $HUD/GoalkeeperRightMid
-@onready var goalkeeper_right_low: TouchActionButton = $HUD/GoalkeeperRightLow
 @onready var round_button: TouchActionButton = $HUD/Round
 @onready var crosshair: Label = $HUD/Crosshair
 @onready var map_host: LocalMapHost = $World/RoundContent/MapHost
@@ -46,12 +40,6 @@ func _ready() -> void:
 	look_pad.look_delta.connect(player.add_touch_look)
 	jump_button.action_pressed.connect(player.request_jump)
 	foot_button.action_pressed.connect(player.request_foot_action)
-	goalkeeper_left_high.action_pressed.connect(_on_goalkeeper_dive.bind(-1, 2))
-	goalkeeper_left_mid.action_pressed.connect(_on_goalkeeper_dive.bind(-1, 1))
-	goalkeeper_left_low.action_pressed.connect(_on_goalkeeper_dive.bind(-1, 0))
-	goalkeeper_right_high.action_pressed.connect(_on_goalkeeper_dive.bind(1, 2))
-	goalkeeper_right_mid.action_pressed.connect(_on_goalkeeper_dive.bind(1, 1))
-	goalkeeper_right_low.action_pressed.connect(_on_goalkeeper_dive.bind(1, 0))
 	round_button.action_pressed.connect(start_reference_round)
 	player.metrics_changed.connect(_on_player_metrics)
 	playable_area.area_changed.connect(_on_area_changed)
@@ -66,8 +54,6 @@ func _ready() -> void:
 	football_host.score_changed.connect(_on_football_score_changed)
 	football_host.goal_scored.connect(_on_goal_scored)
 	football_host.kickoff_ready.connect(_on_kickoff_ready)
-	football_host.goalkeeper_zone_changed.connect(_on_goalkeeper_zone_changed)
-	football_host.goalkeeper_save.connect(_on_goalkeeper_save)
 	playable_area.set_area_index(_area_index)
 	playable_area.set_physical_walls_enabled(false)
 	_on_player_metrics(player.get_diagnostics())
@@ -170,8 +156,6 @@ func _on_round_phase_changed(
 		"FÚTBOL  %s  ·  %.1f s"
 		% [phase_labels[next_phase], seconds]
 	)
-	if next_phase != LocalRoundController.Phase.ACTIVE:
-		_on_goalkeeper_zone_changed(false, &"")
 	match next_phase:
 		LocalRoundController.Phase.IDLE:
 			round_button.show()
@@ -236,30 +220,6 @@ func _on_goal_scored(scoring_side: StringName) -> void:
 		if scoring_side == &"home"
 		else "¡GOL DEL RIVAL! El balón vuelve al centro"
 	)
-
-
-func _on_goalkeeper_dive(side: int, level: int) -> void:
-	if football_host.is_goalkeeper_in_zone():
-		player.request_goalkeeper_dive(side, level)
-
-
-func _on_goalkeeper_zone_changed(active: bool, _side: StringName) -> void:
-	active = active and _side == football_host.get_player_goal_side()
-	for button in [
-		goalkeeper_left_high,
-		goalkeeper_left_mid,
-		goalkeeper_left_low,
-		goalkeeper_right_high,
-		goalkeeper_right_mid,
-		goalkeeper_right_low,
-	]:
-		button.visible = active and round_controller.phase == LocalRoundController.Phase.ACTIVE
-
-
-func _on_goalkeeper_save(_side: StringName, level: int) -> void:
-	banner_detail.text = "¡ATAJADA! %s · brazos extendidos" % [
-		["abajo", "al centro", "arriba"][level]
-	]
 
 
 func _on_kickoff_ready() -> void:

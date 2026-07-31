@@ -91,14 +91,8 @@ func _run() -> void:
 			for frame in 4:
 				await physics_frame
 			_require(
-				lab.football_host.is_goalkeeper_in_zone()
-				and lab.goalkeeper_left_mid.visible
-				and lab.goalkeeper_left_high.visible
-				and lab.goalkeeper_left_low.visible
-				and lab.goalkeeper_right_high.visible
-				and lab.goalkeeper_right_mid.visible
-				and lab.goalkeeper_right_low.visible,
-				"Goalkeeper controls must appear inside the goal area"
+				get_nodes_in_group(&"football_goalkeeper_bot").size() == 2,
+				"Both goals must contain a goalkeeper bot"
 			)
 			ball.freeze = true
 			ball.global_position = Vector3(0.0, 1.1, -1.55)
@@ -119,9 +113,8 @@ func _run() -> void:
 			for frame in 8:
 				await physics_frame
 			_require(
-				not lab.football_host.is_goalkeeper_in_zone()
-				and not lab.goalkeeper_left_mid.visible,
-				"Opponent goal must not expose goalkeeper controls"
+				not lab.football_host.is_goalkeeper_in_zone(),
+				"Goalkeeper input must remain disabled without player controls"
 			)
 			lab.player.global_position = Vector3(0.0, 0.02, -12.0)
 			for frame in 8:

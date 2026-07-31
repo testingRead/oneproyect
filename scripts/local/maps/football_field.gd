@@ -52,6 +52,8 @@ func _build_field() -> void:
 	_add_field_markings()
 	_add_goal(&"north", -37.7, -39.5, -38.6, NORTH_GOAL_CENTRE)
 	_add_goal(&"south", -2.3, -0.5, -1.4, SOUTH_GOAL_CENTRE)
+	_add_goalkeeper_bot(&"home", Vector3(0.0, 0.95, -2.75))
+	_add_goalkeeper_bot(&"away", Vector3(0.0, 0.95, -37.25))
 	_add_ball()
 
 
@@ -258,6 +260,36 @@ func _add_ball() -> void:
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	ball.add_child(mesh)
 	add_child(ball)
+
+
+func _add_goalkeeper_bot(side: StringName, position_value: Vector3) -> void:
+	var bot := Node3D.new()
+	bot.name = "HomeGoalkeeperBot" if side == &"home" else "AwayGoalkeeperBot"
+	bot.position = position_value
+	bot.add_to_group(&"football_goalkeeper_bot")
+	bot.set_meta(&"goal_side", side)
+	var body := MeshInstance3D.new()
+	var capsule := CapsuleMesh.new()
+	capsule.radius = 0.34
+	capsule.height = 1.55
+	body.mesh = capsule
+	body.material_override = _material(
+		Color(0.92, 0.45, 0.12) if side == &"home" else Color(0.18, 0.48, 0.92),
+		0.92
+	)
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	body.position.y = 0.05
+	bot.add_child(body)
+	var head := MeshInstance3D.new()
+	var head_mesh := SphereMesh.new()
+	head_mesh.radius = 0.24
+	head_mesh.height = 0.48
+	head.mesh = head_mesh
+	head.material_override = _material(Color(0.82, 0.62, 0.45), 0.92)
+	head.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	head.position = Vector3(0.0, 0.92, 0.0)
+	bot.add_child(head)
+	add_child(bot)
 
 
 func _add_static_box(

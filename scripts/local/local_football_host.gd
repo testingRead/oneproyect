@@ -22,6 +22,7 @@ var _ball_spawn := Transform3D.IDENTITY
 var _goalkeeper
 var _goalkeeper_zone := &""
 var _player_team: StringName = &"home"
+var _bot_cooldown := {&"home": 0.0, &"away": 0.0}
 
 
 func start_match(map_root: Node3D, time_scale := 1.0, goalkeeper_value = null) -> bool:
@@ -55,7 +56,37 @@ func start_match(map_root: Node3D, time_scale := 1.0, goalkeeper_value = null) -
 	_complete = false
 	_goal_lock = false
 	_active = true
+	_bot_cooldown = {&"home": 0.0, &"away": 0.0}
 	score_changed.emit(score, opponent_score, target_score)
+	return true
+
+
+func _physics_process(delta: float) -> void:
+	if not _active or _goal_lock or not is_instance_valid(_ball):
+		return
+	for side in [&"home", &"away"]:
+		_bot_cooldown[side] = maxf(0.0, float(_bot_cooldown[side]) - delta)
+		_try_bot_save(side)
+
+
+func _try_bot_save(side: StringName) -> bool:
+	if float(_bot_cooldown[side]) > 0.0:
+		return false
+	var z_line := -1.8 if side == &"home" else -38.2
+	var moving_toward_goal := _ball.linear_velocity.z > 0.05 if side == &"home" else _ball.linear_velocity.z < -0.05
+	var close_to_line := absf(_ball.global_position.z - z_line) < 1.15
+	if not moving_toward_goal or not close_to_line:
+		return false
+	if absf(_ball.global_position.x) > 3.25 or _ball.global_position.y > 2.75:
+		return false
+	_bot_cooldown[side] = 0.9
+	_goal_lock = true
+	var away := Vector3(0.0, 0.0, -1.0 if side == &"home" else 1.0)
+	var lateral := clampf(-_ball.global_position.x * 0.22, -1.2, 1.2)
+	_ball.sleeping = false
+	_ball.apply_central_impulse(away * 4.6 + Vector3(lateral, 1.4, 0.0))
+	goalkeeper_save.emit(side, 1)
+	_unlock_after_save(_generation)
 	return true
 
 
