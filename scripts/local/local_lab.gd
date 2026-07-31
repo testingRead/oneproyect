@@ -134,6 +134,9 @@ func _ready() -> void:
 	player.bat_charge_changed.connect(_on_bat_charge_changed)
 	player.bat_swing_started.connect(_on_local_bat_swing)
 	player.local_health_changed.connect(_on_local_player_health_changed)
+	player.foot_action_changed.connect(_on_foot_action_changed)
+	player.hand_action_availability_changed.connect(_on_hand_action_availability_changed)
+	player.character_push_requested.connect(_on_local_character_push)
 	_build_aim_guide()
 	look_pad.set_aim_mode(_is_bateball_game())
 	playable_area.set_area_index(_area_index)
@@ -170,6 +173,7 @@ func _physics_process(delta: float) -> void:
 			player.global_position,
 			player.velocity,
 			player.visual_root.rotation.y,
+			player.get_look_pitch(),
 			player.get_local_health()
 		)
 	if lan_session.is_host:
@@ -184,6 +188,11 @@ func _physics_process(delta: float) -> void:
 		var target: Dictionary = _lan_targets[peer_id]
 		remote.global_position = remote.global_position.lerp(target.position, minf(1.0, delta * 14.0))
 		remote.update_remote_presentation(delta, target.velocity, float(target.yaw))
+		remote.update_remote_look_pitch(
+			float(target.look_pitch)
+			if _selected_minigame_id == &"futbol_rebote"
+			else 0.0
+		)
 
 
 func _load_room_content() -> void:
@@ -211,6 +220,7 @@ func _setup_lan_session() -> void:
 	lan_session.hazard_state_received.connect(_on_lan_hazard_state)
 	lan_session.object_impulse_peer_received.connect(_on_lan_object_impulse)
 	lan_session.action_received.connect(_on_lan_action)
+	lan_session.action_request_received.connect(_on_lan_action_request)
 	lan_session.bat_swing_received.connect(_on_lan_bat_swing)
 	lan_session.bateball_shot_received.connect(_on_lan_bateball_shot)
 	lan_session.round_event_received.connect(_on_lan_round_event)
@@ -254,13 +264,14 @@ func _sync_lan_players() -> void:
 			_lan_targets.erase(peer_id)
 
 
-func _on_lan_player_state(peer_id: int, position: Vector3, velocity: Vector3, facing_yaw: float, health: int) -> void:
+func _on_lan_player_state(peer_id: int, position: Vector3, velocity: Vector3, facing_yaw: float, look_pitch: float, health: int) -> void:
 	if not _lan_remotes.has(peer_id):
 		_sync_lan_players()
 	_lan_targets[peer_id] = {
 		"position": position,
 		"velocity": velocity,
 		"yaw": facing_yaw,
+		"look_pitch": look_pitch,
 		"health": health,
 	}
 
@@ -366,7 +377,61 @@ func _on_lan_bat_swing(peer_id: int, facing: Vector3, charged: bool) -> void:
 		)
 
 
-func _on_lan_action(peer_id: int, action: int, direction: Vector3, flag: bool) -> void:
+func _on_local_character_push(target_peer_id: int, direction: Vector3) -> void:
+	if lan_session == null or not lan_session.is_active() or target_peer_id <= 0:
+		return
+	if lan_session.is_host:
+		lan_session.broadcast_action(
+			lan_session.get_local_peer_id(),
+			LAN_EVENT.Action.CHARACTER_PUSH,
+			direction,
+			false,
+			target_peer_id
+		)
+	else:
+		lan_session.request_action(
+			LAN_EVENT.Action.CHARACTER_PUSH, target_peer_id, direction
+		)
+
+
+func _on_lan_action_request(
+	peer_id: int,
+	action: int,
+	target_peer_id: int,
+	direction: Vector3,
+	flag: bool
+) -> void:
+	if lan_session == null or not lan_session.is_host:
+		return
+	if action != LAN_EVENT.Action.CHARACTER_PUSH:
+		return
+	var actor := _get_lan_character(peer_id)
+	var target := _get_lan_character(target_peer_id)
+	if not is_instance_valid(actor) or not is_instance_valid(target):
+		return
+	var offset := target.global_position - actor.global_position
+	var horizontal := Vector3(offset.x, 0.0, offset.z)
+	if horizontal.length() > 2.0 or horizontal.length_squared() < 0.01:
+		return
+	var push_direction := Vector3(direction.x, 0.0, direction.z).normalized()
+	if push_direction.dot(horizontal.normalized()) < 0.15:
+		return
+	actor.play_remote_push(push_direction)
+	target.apply_external_push(
+		(push_direction + Vector3.UP * 0.12).normalized(), 4.2
+	)
+	lan_session.broadcast_action(
+		peer_id, action, push_direction, flag, target_peer_id
+	)
+
+
+func _on_lan_action(
+	peer_id: int,
+	action: int,
+	target_peer_id: int,
+	direction: Vector3,
+	flag: bool
+) -> void:
 	if lan_session == null or peer_id == lan_session.get_local_peer_id():
 		return
 	var remote := _get_lan_character(peer_id)
@@ -378,6 +443,13 @@ func _on_lan_action(peer_id: int, action: int, direction: Vector3, flag: bool) -
 		LAN_EVENT.Action.BATEBALL_SWING:
 			remote.set_bat_enabled(true)
 			remote.play_remote_bat_swing(flag)
+		LAN_EVENT.Action.CHARACTER_PUSH:
+			remote.play_remote_push(direction)
+			var push_target := _get_lan_character(target_peer_id)
+			if is_instance_valid(push_target):
+				push_target.apply_external_push(
+					(direction + Vector3.UP * 0.12).normalized(), 4.2
+				)
 
 
 func _on_lan_bateball_shot(peer_id: int, direction: Vector3) -> void:
@@ -660,8 +732,16 @@ func _on_round_phase_changed(
 	joystick.set_input_enabled(gameplay_active)
 	look_pad.set_input_enabled(gameplay_active)
 	jump_button.visible = gameplay_active
-	foot_button.visible = gameplay_active and _selected_minigame_id == &"futbol_rebote"
-	hand_button.hide()
+	foot_button.visible = (
+		gameplay_active
+		and _selected_minigame_id == &"futbol_rebote"
+		and player.is_foot_action_available()
+	)
+	hand_button.visible = (
+		gameplay_active
+		and _can_show_hand_action()
+		and player.is_hand_action_available()
+	)
 	crosshair.visible = (
 		_selected_minigame_id == &"futbol_rebote"
 		and next_phase in [
@@ -883,6 +963,11 @@ func _on_crown_match_completed(holder_name: String) -> void:
 func _on_bomb_holder_changed(holder_name: String) -> void:
 	if _is_bomb_game():
 		banner_detail.text = "%s lleva la bomba" % holder_name
+		hand_button.visible = (
+			_can_show_hand_action()
+			and player.is_hand_action_available()
+			and round_controller.phase == LocalRoundController.Phase.ACTIVE
+		)
 
 
 func _on_bomb_timer_changed(remaining: float) -> void:
@@ -897,11 +982,39 @@ func _on_bomb_exploded(holder_name: String) -> void:
 
 
 func _on_hand_action() -> void:
-	pass
+	if not player.request_hand_action():
+		hand_button.hide()
+
+
+func _on_hand_action_availability_changed(label: String, available: bool) -> void:
+	hand_button.set_label(label if available else "EMPUJAR")
+	hand_button.visible = (
+		available
+		and _can_show_hand_action()
+		and round_controller.phase == LocalRoundController.Phase.ACTIVE
+	)
+
+
+func _can_show_hand_action() -> bool:
+	if _is_bateball_game():
+		return false
+	if _is_bomb_game() and bomb_host.is_holder(player):
+		return false
+	return true
 
 
 func _on_foot_action() -> void:
-	player.request_foot_action()
+	if not player.request_foot_action():
+		foot_button.hide()
+
+
+func _on_foot_action_changed(label: String, available: bool) -> void:
+	foot_button.set_label(label if available else "PATEAR")
+	foot_button.visible = (
+		available
+		and _selected_minigame_id == &"futbol_rebote"
+		and round_controller.phase == LocalRoundController.Phase.ACTIVE
+	)
 
 
 func _on_aim_changed(value: Vector2, active: bool) -> void:

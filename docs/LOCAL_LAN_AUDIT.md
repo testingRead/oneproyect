@@ -102,6 +102,16 @@ principio se conserva.
 - Corregido: los marcadores de equipo dicen `TU EQUIPO`, no `TÚ`.
 - Corregido: cada resultado explica la regla real del modo; Corona ya no
   mostrará accidentalmente el marcador de fútbol durante RESULT.
+- Corregido: primera persona conserva el cuerpo local; sólo oculta cabeza y
+  ojos para evitar recorte de cámara. El yaw rota cuerpo, cámara, movimiento e
+  interacciones como una unidad, y el pitch inclina cabeza y torso.
+- La inclinación de mirada se replica en LAN para que los demás vean la pose
+  vertical del jugador.
+- PATEAR es contextual: sólo aparece con un balón realmente dentro del alcance
+  y cono frontal. Un jugador delante ofrece EMPUJAR mediante la acción de mano,
+  nunca una patada falsa.
+- EMPUJAR replica animación y reacción al propietario del objetivo; piedras y
+  objetos físicos siguen utilizando la física nativa local.
 
 ## Matriz semántica de minijuegos
 

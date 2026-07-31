@@ -10,6 +10,8 @@ extends Node3D
 @onready var right_leg: Node3D = $Model/RightLegPivot
 @onready var left_foot: Node3D = $Model/LeftLegPivot/Foot
 @onready var right_foot: Node3D = $Model/RightLegPivot/Foot
+@onready var left_eye: Node3D = $Model/LeftEye
+@onready var right_eye: Node3D = $Model/RightEye
 
 var _phase := 0.0
 var _movement_ratio := 0.0
@@ -30,6 +32,7 @@ var _bat_remaining := 0.0
 var _bat_charged := false
 var _bat_mesh: Node3D
 var _ball_shot_remaining := 0.0
+var _look_pitch := 0.0
 
 
 func set_stature(stature: float) -> void:
@@ -108,9 +111,12 @@ func update_motion(
 		delta * 12.0
 	)
 	var body_bob := absf(sin(_phase * 2.0)) * 0.025 * _movement_ratio
+	var look_down := clampf(-_look_pitch / 0.82, 0.0, 1.0)
+	var torso_look := -_look_pitch * 0.22
 	torso.position.y = 1.17 + body_bob
 	pelvis.position.y = 0.79 + body_bob * 0.55
-	head.position.y = 1.59 + body_bob
+	head.position.y = 1.59 + body_bob - look_down * 0.075
+	head.rotation.x = lerpf(head.rotation.x, -_look_pitch * 0.88, delta * 16.0)
 	torso.rotation.z = lerpf(
 		torso.rotation.z,
 		-sin(_phase) * 0.035 * _movement_ratio,
@@ -134,7 +140,7 @@ func update_motion(
 		right_arm.rotation.x = lerpf(right_arm.rotation.x, -1.28, push_weight)
 		torso.rotation.x = lerpf(torso.rotation.x, 0.16, push_weight)
 	else:
-		torso.rotation.x = lerpf(torso.rotation.x, 0.0, delta * 12.0)
+		torso.rotation.x = lerpf(torso.rotation.x, torso_look, delta * 12.0)
 	if _kick_remaining > 0.0:
 		_kick_remaining = maxf(0.0, _kick_remaining - delta)
 		var kick_progress := 1.0 - _kick_remaining / 0.5
@@ -273,8 +279,28 @@ func trigger_push() -> void:
 	_push_remaining = 0.42
 
 
+func is_pushing() -> bool:
+	return _push_remaining > 0.0
+
+
 func trigger_kick() -> void:
 	_kick_remaining = 0.5
+
+
+func is_kicking() -> bool:
+	return _kick_remaining > 0.0
+
+
+func set_look_pitch(pitch: float, first_person: bool) -> void:
+	_look_pitch = clampf(pitch, -0.82, 0.28) if first_person else 0.0
+
+
+func set_first_person_presentation(enabled: bool) -> void:
+	# Keep the body, arms and legs visible. Only the local head is hidden to
+	# avoid placing the near plane inside its mesh; remote avatars remain whole.
+	head.visible = not enabled
+	left_eye.visible = not enabled
+	right_eye.visible = not enabled
 
 
 func trigger_take() -> void:

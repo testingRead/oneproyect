@@ -15,6 +15,7 @@ var _got_football_event := false
 var _got_damage_event := false
 var _got_hazard_state := false
 var _got_action := false
+var _sent_push_request := false
 
 
 func _init() -> void:
@@ -35,7 +36,7 @@ func _run() -> void:
 	_lan.hazard_state_received.connect(func(subject: int, position: Vector3, remaining: float) -> void:
 		_got_hazard_state = subject == LAN_EVENT.Subject.TORNADO and position.x == 3.0 and remaining > 0.0
 	)
-	_lan.action_received.connect(func(peer_id: int, action: int, direction: Vector3, _flag: bool) -> void:
+	_lan.action_received.connect(func(peer_id: int, action: int, _target_peer_id: int, direction: Vector3, _flag: bool) -> void:
 		_got_action = peer_id == 1 and action == LAN_EVENT.Action.FOOTBALL_KICK and direction.dot(Vector3.FORWARD) > 0.9
 	)
 	_lan.bateball_holder_received.connect(func(peer_id: int) -> void: _got_holder = peer_id == 1)
@@ -61,9 +62,14 @@ func _run() -> void:
 	_lan.set_round_context(7701)
 	for frame in 600:
 		if _registered:
-			_lan.send_player_state(Vector3(2.0, 0.02, -12.0), Vector3(1.0, 0.0, 0.0), 0.4, 88)
+			_lan.send_player_state(Vector3(2.0, 0.02, -12.0), Vector3(1.0, 0.0, 0.0), 0.4, -0.25, 88)
 			_lan.request_object_impulse("Ball", Vector3(4.0, 1.0, 0.0))
 			_lan.request_bateball_shot(Vector3.RIGHT)
+			if not _sent_push_request:
+				_sent_push_request = true
+				_lan.request_action(
+					LAN_EVENT.Action.CHARACTER_PUSH, 1, Vector3.RIGHT
+				)
 		if _started and _got_physics and _got_holder and _got_score and _got_round_event and _got_bomb_event and _got_football_event and _got_damage_event and _got_hazard_state and _got_action:
 			print("LAN_CLIENT_OK peer=%d players=%d" % [_lan.get_local_peer_id(), _lan.players.size()])
 			_lan.leave_room()

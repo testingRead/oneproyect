@@ -82,6 +82,10 @@ func get_remaining() -> float:
 	return _bomb.get_remaining() if is_instance_valid(_bomb) else 0.0
 
 
+func is_holder(character: LocalBaseCharacter) -> bool:
+	return is_instance_valid(character) and character == _holder
+
+
 func is_active() -> bool:
 	return _active and is_instance_valid(_bomb)
 

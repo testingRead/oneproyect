@@ -4,12 +4,13 @@ extends Node
 signal status_changed(text: String)
 signal lobby_changed
 signal game_started(minigame_path: String, round_seed: int)
-signal player_state_received(peer_id: int, position: Vector3, velocity: Vector3, facing_yaw: float, health: int)
+signal player_state_received(peer_id: int, position: Vector3, velocity: Vector3, facing_yaw: float, look_pitch: float, health: int)
 signal physics_state_received(names: PackedStringArray, positions: PackedVector3Array, rotations: PackedVector3Array, velocities: PackedVector3Array)
 signal hazard_state_received(subject: int, position: Vector3, remaining: float)
 signal object_impulse_received(object_name: String, impulse: Vector3)
 signal object_impulse_peer_received(peer_id: int, object_name: String, impulse: Vector3)
-signal action_received(peer_id: int, action: int, direction: Vector3, flag: bool)
+signal action_received(peer_id: int, action: int, target_peer_id: int, direction: Vector3, flag: bool)
+signal action_request_received(peer_id: int, action: int, target_peer_id: int, direction: Vector3, flag: bool)
 signal bat_swing_received(peer_id: int, facing: Vector3, charged: bool)
 signal bateball_shot_received(peer_id: int, direction: Vector3)
 signal bateball_holder_received(peer_id: int)
@@ -207,14 +208,14 @@ func broadcast_round_event(
 	)
 
 
-func send_player_state(position: Vector3, velocity: Vector3, facing_yaw: float, health: int) -> void:
+func send_player_state(position: Vector3, velocity: Vector3, facing_yaw: float, look_pitch: float, health: int) -> void:
 	if not is_active():
 		return
 	_state_sequence += 1
 	if is_host:
-		_rpc_player_state.rpc(get_local_peer_id(), position, velocity, facing_yaw, health, _state_sequence)
+		_rpc_player_state.rpc(get_local_peer_id(), position, velocity, facing_yaw, look_pitch, health, _state_sequence)
 	else:
-		_rpc_submit_player_state.rpc_id(1, position, velocity, facing_yaw, health, _state_sequence)
+		_rpc_submit_player_state.rpc_id(1, position, velocity, facing_yaw, look_pitch, health, _state_sequence)
 
 
 func send_physics_state(names: PackedStringArray, positions: PackedVector3Array, rotations: PackedVector3Array, velocities: PackedVector3Array) -> void:
@@ -227,9 +228,15 @@ func send_hazard_state(subject: int, position: Vector3, remaining: float) -> voi
 		_rpc_hazard_state.rpc(subject, position, maxf(0.0, remaining))
 
 
-func broadcast_action(peer_id: int, action: int, direction: Vector3, flag := false) -> void:
+func broadcast_action(peer_id: int, action: int, direction: Vector3, flag := false, target_peer_id := 0) -> void:
 	if is_host and is_active() and direction.is_finite() and _round_id != 0:
-		_rpc_action.rpc(_round_id, peer_id, action, direction, flag)
+		_rpc_action.rpc(_round_id, peer_id, action, target_peer_id, direction, flag)
+
+
+func request_action(action: int, target_peer_id: int, direction: Vector3, flag := false) -> void:
+	if not is_active() or is_host or not direction.is_finite():
+		return
+	_rpc_request_action.rpc_id(1, action, target_peer_id, direction, flag)
 
 
 func request_object_impulse(object_name: String, impulse: Vector3) -> void:
@@ -310,17 +317,17 @@ func _rpc_start_game(minigame_path: String, round_seed: int) -> void:
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
-func _rpc_submit_player_state(position: Vector3, velocity: Vector3, facing_yaw: float, health: int, sequence: int) -> void:
+func _rpc_submit_player_state(position: Vector3, velocity: Vector3, facing_yaw: float, look_pitch: float, health: int, sequence: int) -> void:
 	if not multiplayer.is_server():
 		return
 	var sender := multiplayer.get_remote_sender_id()
-	_rpc_player_state.rpc(sender, position, velocity, facing_yaw, health, sequence)
+	_rpc_player_state.rpc(sender, position, velocity, facing_yaw, look_pitch, health, sequence)
 
 
 @rpc("authority", "call_local", "unreliable_ordered", 1)
-func _rpc_player_state(peer_id: int, position: Vector3, velocity: Vector3, facing_yaw: float, health: int, _sequence: int) -> void:
+func _rpc_player_state(peer_id: int, position: Vector3, velocity: Vector3, facing_yaw: float, look_pitch: float, health: int, _sequence: int) -> void:
 	if peer_id != get_local_peer_id():
-		player_state_received.emit(peer_id, position, velocity, facing_yaw, health)
+		player_state_received.emit(peer_id, position, velocity, facing_yaw, look_pitch, health)
 
 
 @rpc("authority", "call_remote", "unreliable_ordered", 2)
@@ -334,9 +341,21 @@ func _rpc_hazard_state(subject: int, position: Vector3, remaining: float) -> voi
 
 
 @rpc("authority", "call_remote", "unreliable_ordered", 2)
-func _rpc_action(round_id: int, peer_id: int, action: int, direction: Vector3, flag: bool) -> void:
+func _rpc_action(round_id: int, peer_id: int, action: int, target_peer_id: int, direction: Vector3, flag: bool) -> void:
 	if round_id == _round_id:
-		action_received.emit(peer_id, action, direction, flag)
+		action_received.emit(peer_id, action, target_peer_id, direction, flag)
+
+
+@rpc("any_peer", "call_remote", "reliable", 2)
+func _rpc_request_action(action: int, target_peer_id: int, direction: Vector3, flag: bool) -> void:
+	if multiplayer.is_server() and direction.is_finite():
+		action_request_received.emit(
+			multiplayer.get_remote_sender_id(),
+			action,
+			target_peer_id,
+			direction,
+			flag
+		)
 
 
 @rpc("any_peer", "call_remote", "reliable", 2)

@@ -20,4 +20,5 @@ enum Subject {
 enum Action {
 	FOOTBALL_KICK = 1,
 	BATEBALL_SWING = 2,
+	CHARACTER_PUSH = 3,
 }

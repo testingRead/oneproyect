@@ -106,6 +106,27 @@ func _run() -> void:
 			await _wait_for_phase(lab, LocalRoundController.Phase.ACTIVE, 180),
 			"Football must reach its active phase"
 		)
+		_require(
+			lab.player.is_first_person()
+			and lab.player.visual_root.visible
+			and not lab.player.visual_root.head.visible
+			and lab.player.visual_root.torso.visible,
+			"First person must retain a visible body while hiding only the local head"
+		)
+		_require(
+			not lab.foot_button.visible,
+			"PATEAR must stay hidden when the ball is out of reach"
+		)
+		lab.player.add_touch_look(Vector2(70.0, 85.0))
+		for frame in 3:
+			await physics_frame
+		var view_forward := -lab.player.camera_pivot.global_basis.z
+		view_forward.y = 0.0
+		_require(
+			lab.player.get_facing_direction().dot(view_forward.normalized()) > 0.99
+			and lab.player.visual_root.head.rotation.x > 0.05,
+			"First-person yaw must rotate the body and pitch must pose the head"
+		)
 		var ball: RigidBody3D = lab.football_host.get_ball() as RigidBody3D
 		_require(
 			is_instance_valid(ball)
@@ -149,7 +170,7 @@ func _run() -> void:
 				await physics_frame
 
 		if round_index == 0:
-			# The camera can look elsewhere; the foot must use body orientation.
+			# First-person view, body, interaction cast and kick share one heading.
 			ball.freeze = true
 			ball.global_position = Vector3(0.0, 0.23, -20.0)
 			ball.freeze = false
@@ -157,9 +178,19 @@ func _run() -> void:
 			lab.player.global_position = Vector3(0.0, 0.02, -19.0)
 			lab.player.velocity = Vector3.ZERO
 			lab.player.set_facing_direction(Vector3(0.0, 0.0, -1.0))
-			lab.player.camera_pivot.rotation.y = PI * 0.5
+			lab.player.set_view_direction(Vector3(0.0, 0.0, -1.0))
+			for frame in 4:
+				await physics_frame
+			_require(
+				lab.foot_button.visible,
+				"PATEAR must appear only when a ball is truly reachable"
+			)
 			var kick_origin: Vector3 = ball.global_position
 			_require(lab.player.request_foot_action(), "Foot action must start")
+			_require(
+				lab.player.visual_root.is_kicking(),
+				"Local first-person body must play the kick animation"
+			)
 			for frame in 22:
 				await physics_frame
 			_require(

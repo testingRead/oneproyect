@@ -76,19 +76,54 @@ func _run() -> void:
 	)
 
 	player.set_first_person(true)
+	player.add_touch_look(Vector2(64.0, 72.0))
+	for frame in 3:
+		await physics_frame
+	var first_person_forward := -player.camera_pivot.global_basis.z
+	first_person_forward.y = 0.0
 	_require(
 		player.is_first_person()
-		and not player.visual_root.visible
+		and player.visual_root.visible
+		and not player.visual_root.head.visible
+		and player.visual_root.torso.visible
+		and player.get_facing_direction().dot(first_person_forward.normalized()) > 0.99
+		and player.visual_root.head.rotation.x > 0.05
 		and is_zero_approx(player.spring_arm.spring_length),
-		"First person must hide only the representation"
+		"First person must retain the body and align body/head with the view"
 	)
 	player.set_first_person(false)
 	_require(
 		not player.is_first_person()
 		and player.visual_root.visible
+		and player.visual_root.head.visible
 		and is_equal_approx(player.spring_arm.spring_length, 4.8),
 		"Third person must restore its official distance"
 	)
+	var push_probe := CHARACTER_SCENE.instantiate() as LocalBaseCharacter
+	push_probe.controls_enabled = false
+	push_probe.emit_metrics = false
+	(push_probe.get_node("CameraPivot/SpringArm/Camera") as Camera3D).current = false
+	lab.get_node("World").add_child(push_probe)
+	push_probe.set_physics_process(false)
+	player.set_view_direction(Vector3.FORWARD)
+	player.set_facing_direction(Vector3.FORWARD)
+	push_probe.global_position = player.global_position + Vector3.FORWARD
+	for frame in 12:
+		await physics_frame
+	_require(
+		player.is_hand_action_available()
+		and player.get_hand_label() == "EMPUJAR"
+		and player.request_hand_action()
+		and player.visual_root.is_pushing(),
+		"A player in front must offer EMPUJAR instead of a false kick"
+	)
+	push_probe.perform_network_kick(Vector3.FORWARD)
+	_require(
+		push_probe.visual_root.is_kicking(),
+		"Remote kick events must trigger the visible leg animation"
+	)
+	push_probe.queue_free()
+	await process_frame
 
 	var baseline_nodes := get_node_count()
 	for index in 12:

@@ -6,12 +6,15 @@ const SCALE := preload("res://shared/gameplay_scale.gd")
 signal metrics_changed(metrics: Dictionary)
 signal push_performed(hit: bool)
 signal hand_action_changed(label: String)
+signal hand_action_availability_changed(label: String, available: bool)
+signal foot_action_changed(label: String, available: bool)
 signal action_resolved(action: StringName, hit: bool)
 signal local_health_changed(current: int, maximum: int)
 signal object_impulse_requested(object_name: String, impulse: Vector3)
 signal bat_charge_changed(ratio: float, charged: bool)
 signal bat_hit(target: Node3D, charged: bool)
 signal bat_swing_started(charged: bool)
+signal character_push_requested(target_peer_id: int, direction: Vector3)
 
 const ACTION_PUSH := &"PUSH"
 const ACTION_KICK := &"KICK"
@@ -43,6 +46,7 @@ var _hand_cooldown := 0.0
 var _foot_cooldown := 0.0
 var _hand_action := ACTION_PUSH
 var _context_body: RigidBody3D
+var _context_character: LocalBaseCharacter
 var _kick_target: RigidBody3D
 var _kick_pending := false
 var _kick_elapsed := 0.0
@@ -70,6 +74,8 @@ var _top_down_aim_active := false
 var _bat_enabled := false
 var _bat_charge := 0.0
 var _bat_cooldown := 0.0
+var _foot_action_available := false
+var _hand_action_available := false
 
 
 func _ready() -> void:
@@ -149,7 +155,9 @@ func _physics_process(delta: float) -> void:
 	):
 		velocity.y = SCALE.JUMP_VELOCITY
 	_jump_requested = false
-	if direction.length_squared() > 0.01 and not (_top_down_mode and _top_down_aim_active):
+	if _first_person:
+		_sync_first_person_body()
+	elif direction.length_squared() > 0.01 and not (_top_down_mode and _top_down_aim_active):
 		visual_root.rotation.y = lerp_angle(
 			visual_root.rotation.y,
 			atan2(direction.x, direction.z),
@@ -171,6 +179,7 @@ func _physics_process(delta: float) -> void:
 		SCALE.RUN_SPEED,
 		is_on_floor()
 	)
+	visual_root.set_look_pitch(camera_pivot.rotation.x, _first_person)
 	_sync_held_anchor()
 	if global_position.y < -3.0:
 		reset_to_spawn()
@@ -196,7 +205,9 @@ func configure_stature(value: float) -> void:
 	collision.shape = capsule
 	collision.position.y = capsule.height * 0.5
 	visual_root.set_stature(stature)
-	camera_pivot.position.y = SCALE.CHARACTER_HEIGHT * stature * 0.82
+	camera_pivot.position.y = (
+		SCALE.CHARACTER_HEIGHT * stature * (0.9 if _first_person else 0.82)
+	)
 
 
 func set_touch_move(value: Vector2) -> void:
@@ -231,6 +242,8 @@ func request_hand_action() -> bool:
 	if not controls_enabled or _hand_cooldown > 0.0:
 		return false
 	_refresh_interaction_context()
+	if not _hand_action_available:
+		return false
 	match _hand_action:
 		ACTION_TAKE:
 			return _take_context_object()
@@ -244,6 +257,8 @@ func request_foot_action() -> bool:
 	if not controls_enabled or _foot_cooldown > 0.0:
 		return false
 	_refresh_interaction_context()
+	if not _foot_action_available:
+		return false
 	return _begin_kick()
 
 
@@ -269,6 +284,18 @@ func get_hand_label() -> String:
 			return "EMPUJAR"
 
 
+func is_hand_action_available() -> bool:
+	return _hand_action_available and controls_enabled and _hand_cooldown <= 0.0
+
+
+func get_foot_label() -> String:
+	return "PATEAR" if _foot_action_available else ""
+
+
+func is_foot_action_available() -> bool:
+	return _foot_action_available and controls_enabled and _foot_cooldown <= 0.0
+
+
 func get_held_object() -> RigidBody3D:
 	return _held_object
 
@@ -278,7 +305,12 @@ func set_first_person(enabled: bool) -> void:
 		return
 	_first_person = enabled
 	spring_arm.spring_length = 0.0 if enabled else _third_person_spring_length
-	visual_root.visible = not enabled
+	camera_pivot.position.y = SCALE.CHARACTER_HEIGHT * stature * (0.9 if enabled else 0.82)
+	visual_root.visible = true
+	visual_root.set_first_person_presentation(enabled)
+	visual_root.set_look_pitch(camera_pivot.rotation.x, enabled)
+	if enabled:
+		_sync_first_person_body()
 
 
 func set_top_down_mode(enabled: bool) -> void:
@@ -329,6 +361,10 @@ func update_remote_presentation(delta: float, remote_velocity: Vector3, facing_y
 		SCALE.RUN_SPEED,
 		absf(remote_velocity.y) < 0.35
 	)
+
+
+func update_remote_look_pitch(look_pitch: float) -> void:
+	visual_root.set_look_pitch(look_pitch, true)
 
 
 func set_team(team: StringName) -> void:
@@ -382,6 +418,11 @@ func perform_network_kick(facing: Vector3) -> void:
 	visual_root.trigger_kick()
 
 
+func play_remote_push(facing: Vector3) -> void:
+	set_facing_direction(facing)
+	visual_root.trigger_push()
+
+
 func _resolve_bat_swing(charged: bool) -> void:
 	visual_root.trigger_bat_swing(charged)
 	bat_charge_changed.emit(0.0, false)
@@ -430,6 +471,8 @@ func set_view_direction(direction: Vector3) -> void:
 	# Camera3D looks along local -Z. Movement uses the same pivot yaw, so this
 	# aligns what the player sees, joystick-forward and interaction casts.
 	camera_pivot.rotation.y = atan2(-horizontal.x, -horizontal.z)
+	if _first_person:
+		_sync_first_person_body()
 
 
 func get_facing_direction() -> Vector3:
@@ -490,6 +533,18 @@ func add_touch_look(delta: Vector2) -> void:
 		-0.82,
 		0.28
 	)
+	if _first_person:
+		_sync_first_person_body()
+		visual_root.set_look_pitch(camera_pivot.rotation.x, true)
+
+
+func get_look_pitch() -> float:
+	return camera_pivot.rotation.x
+
+
+func _sync_first_person_body() -> void:
+	# Camera looks along local -Z while the model faces local +Z.
+	visual_root.rotation.y = wrapf(camera_pivot.rotation.y + PI, -PI, PI)
 
 
 func _get_kick_pitch() -> float:
@@ -616,33 +671,66 @@ func _align_interaction_nodes() -> void:
 func _refresh_interaction_context() -> void:
 	var next_action := ACTION_PUSH
 	var next_body: RigidBody3D
+	var next_character: LocalBaseCharacter
 	if not is_instance_valid(_held_object):
 		_align_interaction_nodes()
 		interaction_context.force_shapecast_update()
 		next_body = _get_nearest_body(interaction_context)
+		next_character = _get_nearest_character(interaction_context)
 	_context_body = next_body
+	_context_character = next_character
+	var available := false
 	if is_instance_valid(_held_object):
 		next_action = ACTION_THROW
+		available = true
 	elif is_instance_valid(next_body) and next_body.is_in_group(&"pickup_stone"):
 		next_action = ACTION_TAKE
+		available = true
+	elif is_instance_valid(next_character):
+		next_action = ACTION_PUSH
+		available = true
+	elif is_instance_valid(next_body) and not next_body.is_in_group(&"kickable_ball"):
+		next_action = ACTION_PUSH
+		available = true
 	else:
 		next_action = ACTION_PUSH
-	if next_action == _hand_action:
+	if next_action != _hand_action:
+		_hand_action = next_action
+		hand_action_changed.emit(get_hand_label())
+	if available != _hand_action_available:
+		_hand_action_available = available
+		hand_action_availability_changed.emit(get_hand_label(), available)
+	_refresh_foot_context()
+
+
+func _refresh_foot_context() -> void:
+	var available := (
+		controls_enabled
+		and _foot_cooldown <= 0.0
+		and is_instance_valid(_query_kickable_body())
+	)
+	if available == _foot_action_available:
 		return
-	_hand_action = next_action
-	hand_action_changed.emit(get_hand_label())
+	_foot_action_available = available
+	foot_action_changed.emit(get_foot_label(), available)
 
 
 func _begin_kick() -> bool:
-	_foot_cooldown = 0.52
 	_align_foot_action()
 	interaction_action.force_shapecast_update()
-	_kick_target = _get_nearest_body_in_group(
+	var target := _get_nearest_body_in_group(
 		interaction_action,
 		&"kickable_ball"
 	)
-	if _kick_target == null:
-		_kick_target = _query_kickable_body()
+	if target == null:
+		target = _query_kickable_body()
+	if target == null:
+		_refresh_foot_context()
+		return false
+	_kick_target = target
+	_foot_cooldown = 0.52
+	_foot_action_available = false
+	foot_action_changed.emit("", false)
 	_kick_pending = true
 	_kick_elapsed = 0.0
 	visual_root.trigger_kick()
@@ -844,8 +932,18 @@ func _return_held_object_to_origin() -> void:
 func _perform_generic_push() -> bool:
 	_align_interaction_nodes()
 	interaction_action.force_shapecast_update()
+	var character := _get_nearest_character(interaction_action)
+	if is_instance_valid(character):
+		var direction := _get_interaction_direction()
+		character.apply_external_push(
+			(direction + Vector3.UP * 0.12).normalized(), 4.2
+		)
+		character_push_requested.emit(
+			int(character.get_meta(&"lan_peer_id", 0)), direction
+		)
+		return true
 	var body := _get_nearest_body(interaction_action)
-	if body == null:
+	if body == null or body.is_in_group(&"kickable_ball"):
 		return false
 	body.sleeping = false
 	body.apply_central_impulse(
@@ -882,6 +980,20 @@ func _get_nearest_body(shape_cast: ShapeCast3D) -> RigidBody3D:
 		var distance := global_position.distance_squared_to(body.global_position)
 		if distance < nearest_distance:
 			nearest = body
+			nearest_distance = distance
+	return nearest
+
+
+func _get_nearest_character(shape_cast: ShapeCast3D) -> LocalBaseCharacter:
+	var nearest: LocalBaseCharacter
+	var nearest_distance := INF
+	for index in shape_cast.get_collision_count():
+		var character := shape_cast.get_collider(index) as LocalBaseCharacter
+		if character == null or character == self:
+			continue
+		var distance := global_position.distance_squared_to(character.global_position)
+		if distance < nearest_distance:
+			nearest = character
 			nearest_distance = distance
 	return nearest
 
