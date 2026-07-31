@@ -3,14 +3,15 @@ extends Node3D
 
 const FIELD_CENTRE_Z := -20.0
 const BALL_SPAWN := Vector3(0.0, 2.0, FIELD_CENTRE_Z)
-const NORTH_GOAL_CENTRE := Vector3(0.0, 1.18, -35.45)
-const SOUTH_GOAL_CENTRE := Vector3(0.0, 1.18, -4.55)
+const NORTH_GOAL_CENTRE := Vector3(0.0, 1.18, -38.45)
+const SOUTH_GOAL_CENTRE := Vector3(0.0, 1.18, -1.55)
 
 var _grass: StandardMaterial3D
 var _border: StandardMaterial3D
 var _line: StandardMaterial3D
 var _goal: StandardMaterial3D
 var _ball_material: StandardMaterial3D
+var _ball: RigidBody3D
 
 
 func _ready() -> void:
@@ -22,9 +23,16 @@ func _ready() -> void:
 	_build_field()
 
 
-func configure_variation(_signature: PackedByteArray) -> void:
-	# The first football map is deliberately deterministic.
-	pass
+func configure_variation(signature: PackedByteArray) -> void:
+	# Small seed-driven physical variations keep matches surprising without
+	# changing the official scale or the goal geometry.
+	if not is_instance_valid(_ball) or signature.is_empty():
+		return
+	var material := _ball.physics_material_override as PhysicsMaterial
+	if material == null:
+		return
+	material.friction = 0.42 if signature[0] == 0 else 0.56
+	material.bounce = 0.56 if signature.size() < 2 or signature[1] == 0 else 0.7
 
 
 func get_ball_spawn_transform() -> Transform3D:
@@ -37,43 +45,43 @@ func _build_field() -> void:
 	_add_visual_box(
 		"Pitch",
 		Vector3(0.0, 0.007, FIELD_CENTRE_Z),
-		Vector3(20.0, 0.014, 30.0),
+		Vector3(24.0, 0.014, 36.0),
 		_grass
 	)
 	_add_perimeter()
 	_add_field_markings()
-	_add_goal(&"north", -34.7, -36.5, -35.6, NORTH_GOAL_CENTRE)
-	_add_goal(&"south", -5.3, -3.5, -4.4, SOUTH_GOAL_CENTRE)
+	_add_goal(&"north", -37.7, -39.5, -38.6, NORTH_GOAL_CENTRE)
+	_add_goal(&"south", -2.3, -0.5, -1.4, SOUTH_GOAL_CENTRE)
 	_add_ball()
 
 
 func _add_perimeter() -> void:
 	_add_static_box(
 		"LeftReboundWall",
-		Vector3(-10.2, 0.7, FIELD_CENTRE_Z),
-		Vector3(0.4, 1.4, 30.4),
+		Vector3(-12.2, 1.2, FIELD_CENTRE_Z),
+		Vector3(0.4, 2.4, 36.4),
 		_border
 	)
 	_add_static_box(
 		"RightReboundWall",
-		Vector3(10.2, 0.7, FIELD_CENTRE_Z),
-		Vector3(0.4, 1.4, 30.4),
+		Vector3(12.2, 1.2, FIELD_CENTRE_Z),
+		Vector3(0.4, 2.4, 36.4),
 		_border
 	)
 	for end in [
-		{"prefix": "North", "z": -35.2},
-		{"prefix": "South", "z": -4.8},
+		{"prefix": "North", "z": -38.2},
+		{"prefix": "South", "z": -1.8},
 	]:
 		_add_static_box(
 			"%sLeftWall" % end.prefix,
-			Vector3(-6.65, 0.7, end.z),
-			Vector3(7.1, 1.4, 0.4),
+			Vector3(-8.65, 1.2, end.z),
+			Vector3(9.1, 2.4, 0.4),
 			_border
 		)
 		_add_static_box(
 			"%sRightWall" % end.prefix,
-			Vector3(6.65, 0.7, end.z),
-			Vector3(7.1, 1.4, 0.4),
+			Vector3(8.65, 1.2, end.z),
+			Vector3(9.1, 2.4, 0.4),
 			_border
 		)
 
@@ -87,30 +95,30 @@ func _add_field_markings() -> void:
 	)
 	_add_visual_box(
 		"LeftLine",
-		Vector3(-9.75, 0.023, FIELD_CENTRE_Z),
-		Vector3(0.09, 0.025, 29.4),
+		Vector3(-11.75, 0.023, FIELD_CENTRE_Z),
+		Vector3(0.09, 0.025, 35.4),
 		_line
 	)
 	_add_visual_box(
 		"RightLine",
-		Vector3(9.75, 0.023, FIELD_CENTRE_Z),
-		Vector3(0.09, 0.025, 29.4),
+		Vector3(11.75, 0.023, FIELD_CENTRE_Z),
+		Vector3(0.09, 0.025, 35.4),
 		_line
 	)
 	_add_visual_box(
 		"SouthLine",
-		Vector3(0.0, 0.024, -5.3),
-		Vector3(19.5, 0.025, 0.09),
+		Vector3(0.0, 0.024, -2.3),
+		Vector3(23.5, 0.025, 0.09),
 		_line
 	)
 	_add_visual_box(
 		"NorthLine",
-		Vector3(0.0, 0.024, -34.7),
-		Vector3(19.5, 0.025, 0.09),
+		Vector3(0.0, 0.024, -37.7),
+		Vector3(23.5, 0.025, 0.09),
 		_line
 	)
 	for side in [-1.0, 1.0]:
-		var penalty_z: float = FIELD_CENTRE_Z + side * 11.6
+		var penalty_z: float = FIELD_CENTRE_Z + side * 14.4
 		_add_visual_box(
 			"PenaltyFront%s" % ("South" if side > 0.0 else "North"),
 			Vector3(0.0, 0.025, penalty_z),
@@ -119,13 +127,13 @@ func _add_field_markings() -> void:
 		)
 		_add_visual_box(
 			"PenaltyLeft%s" % ("South" if side > 0.0 else "North"),
-			Vector3(-5.0, 0.025, FIELD_CENTRE_Z + side * 13.15),
+			Vector3(-5.0, 0.025, FIELD_CENTRE_Z + side * 15.95),
 			Vector3(0.09, 0.025, 3.1),
 			_line
 		)
 		_add_visual_box(
 			"PenaltyRight%s" % ("South" if side > 0.0 else "North"),
-			Vector3(5.0, 0.025, FIELD_CENTRE_Z + side * 13.15),
+			Vector3(5.0, 0.025, FIELD_CENTRE_Z + side * 15.95),
 			Vector3(0.09, 0.025, 3.1),
 			_line
 		)
@@ -208,6 +216,7 @@ func _add_ball() -> void:
 	ball.add_to_group(&"football_ball")
 	ball.add_to_group(&"kickable_ball")
 	ball.add_to_group(&"local_round_object")
+	_ball = ball
 	var physics_material := PhysicsMaterial.new()
 	physics_material.friction = 0.48
 	physics_material.bounce = 0.62

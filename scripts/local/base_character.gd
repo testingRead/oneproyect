@@ -269,6 +269,20 @@ func get_facing_direction() -> Vector3:
 	return direction.normalized()
 
 
+func get_kick_direction() -> Vector3:
+	var horizontal := get_facing_direction()
+	var pitch := clampf(camera_pivot.rotation.x, -0.82, 0.28)
+	return (
+		horizontal * cos(pitch)
+		+ Vector3.UP * sin(pitch)
+	).normalized()
+
+
+func get_kick_force() -> float:
+	var pitch := clampf(camera_pivot.rotation.x, -0.82, 0.28)
+	return lerpf(2.5, 6.8, inverse_lerp(-0.82, 0.28, pitch))
+
+
 func add_touch_look(delta: Vector2) -> void:
 	camera_pivot.rotation.y -= delta.x * 0.0035
 	camera_pivot.rotation.x = clampf(
@@ -418,11 +432,9 @@ func _resolve_kick(delta: float) -> void:
 		and _kick_target.is_in_group(&"kickable_ball")
 	)
 	if hit:
-		var direction := get_facing_direction()
+		var direction := get_kick_direction()
 		_kick_target.sleeping = false
-		_kick_target.apply_central_impulse(
-			direction * 4.4 + Vector3.UP * 0.72
-		)
+		_kick_target.apply_central_impulse(direction * get_kick_force())
 	action_resolved.emit(ACTION_KICK, hit)
 	_kick_target = null
 	_refresh_interaction_context()

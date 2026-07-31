@@ -251,7 +251,7 @@ func _on_player_metrics(metrics: Dictionary) -> void:
 
 
 func _on_area_changed(size: float, _bounds: Rect2) -> void:
-	area_label.text = "ISLA %d × %d m  ·  CANCHA 22 × 34 m" % [
+	area_label.text = "ISLA %d × %d m  ·  CANCHA 26 × 40 m" % [
 		int(SCALE.ISLAND_SIZE),
 		int(SCALE.ISLAND_SIZE),
 	]

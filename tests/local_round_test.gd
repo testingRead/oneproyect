@@ -20,7 +20,7 @@ func _run() -> void:
 	)
 	_require(
 		LAB_MAP.map_scene != null
-		and LAB_MAP.footprint == Vector2(22.0, 34.0)
+		and LAB_MAP.footprint == Vector2(26.0, 40.0)
 		and LAB_MAP.spawn_points.size() == 5,
 		"Football map must package one scene and five spawn points"
 	)
@@ -108,10 +108,10 @@ func _run() -> void:
 
 			# Verify that the side wall returns the ball to the field.
 			ball.freeze = true
-			ball.global_position = Vector3(9.25, 0.23, -20.0)
+			ball.global_position = Vector3(11.25, 0.23, -20.0)
 			ball.freeze = false
 			ball.sleeping = false
-			ball.linear_velocity = Vector3(5.0, 0.0, 0.0)
+			ball.linear_velocity = Vector3(8.0, 0.0, 0.0)
 			for frame in 35:
 				await physics_frame
 			_require(
@@ -129,7 +129,7 @@ func _run() -> void:
 		)
 		_require(
 			lab.player.global_position.distance_to(
-				Vector3(0.0, 0.02, -11.0)
+				Vector3(0.0, 0.02, -12.0)
 			) < 0.08,
 			"After a goal the player must return to the kickoff spawn"
 		)
@@ -204,7 +204,7 @@ func _force_goal(
 	ball.global_position = Vector3(
 		0.0,
 		1.0,
-		-35.45 if scoring_side == &"home" else -4.55
+				-38.45 if scoring_side == &"home" else -1.55
 	)
 	ball.linear_velocity = Vector3.ZERO
 	ball.angular_velocity = Vector3.ZERO

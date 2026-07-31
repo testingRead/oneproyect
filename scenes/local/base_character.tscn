@@ -249,7 +249,7 @@ enabled = true
 [node name="InteractionAction" type="ShapeCast3D" parent="."]
 position = Vector3(0, 0.22, 0)
 shape = SubResource("ShapeInteractionAction")
-target_position = Vector3(0, 0, -0.85)
+target_position = Vector3(0, 0, -1.25)
 collision_mask = 1
 exclude_parent = true
 max_results = 4
