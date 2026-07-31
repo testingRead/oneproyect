@@ -85,6 +85,35 @@ func _run() -> void:
 			and ball.is_in_group(&"kickable_ball"),
 			"Football must use one native rigid body"
 		)
+		if round_index == 0:
+			# A player inside the south goal can attempt a real goalkeeper save.
+			lab.player.global_position = Vector3(0.0, 0.02, -2.0)
+			for frame in 4:
+				await physics_frame
+			_require(
+				lab.football_host.is_goalkeeper_in_zone()
+				and lab.goalkeeper_left_mid.visible
+				and lab.goalkeeper_right_high.visible,
+				"Goalkeeper controls must appear inside the goal area"
+			)
+			ball.freeze = true
+			ball.global_position = Vector3(0.0, 1.1, -1.55)
+			ball.freeze = false
+			ball.sleeping = false
+			_require(
+				lab.player.request_goalkeeper_dive(-1, 1),
+				"Goalkeeper dive must start with extended arms"
+			)
+			for frame in 18:
+				await physics_frame
+			_require(
+				lab.football_host.score == 0
+				and lab.football_host.opponent_score == 0,
+				"A correctly timed goalkeeper dive must stop the goal"
+			)
+			lab.player.global_position = Vector3(0.0, 0.02, -12.0)
+			for frame in 8:
+				await physics_frame
 
 		if round_index == 0:
 			# The camera can look elsewhere; the foot must use body orientation.

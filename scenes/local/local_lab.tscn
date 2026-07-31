@@ -257,6 +257,105 @@ script = ExtResource("6_button")
 label = "PATEAR"
 accent = Color(0.34, 0.66, 0.18, 0.9)
 
+[node name="GoalkeeperLeftHigh" type="Control" parent="HUD"]
+visible = false
+layout_mode = 3
+anchors_preset = 3
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 250.0
+offset_top = -205.0
+offset_right = 350.0
+offset_bottom = -125.0
+grow_vertical = 0
+script = ExtResource("6_button")
+label = "IZQ ↑"
+accent = Color(0.78, 0.42, 0.16, 0.9)
+
+[node name="GoalkeeperLeftMid" type="Control" parent="HUD"]
+visible = false
+layout_mode = 3
+anchors_preset = 3
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 250.0
+offset_top = -120.0
+offset_right = 350.0
+offset_bottom = -40.0
+grow_vertical = 0
+script = ExtResource("6_button")
+label = "IZQ ·"
+accent = Color(0.72, 0.48, 0.16, 0.9)
+
+[node name="GoalkeeperLeftLow" type="Control" parent="HUD"]
+visible = false
+layout_mode = 3
+anchors_preset = 3
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 355.0
+offset_top = -120.0
+offset_right = 455.0
+offset_bottom = -40.0
+grow_vertical = 0
+script = ExtResource("6_button")
+label = "IZQ ↓"
+accent = Color(0.66, 0.52, 0.16, 0.9)
+
+[node name="GoalkeeperRightHigh" type="Control" parent="HUD"]
+visible = false
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -455.0
+offset_top = -205.0
+offset_right = -355.0
+offset_bottom = -125.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("6_button")
+label = "DER ↑"
+accent = Color(0.78, 0.42, 0.16, 0.9)
+
+[node name="GoalkeeperRightMid" type="Control" parent="HUD"]
+visible = false
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -350.0
+offset_top = -120.0
+offset_right = -250.0
+offset_bottom = -40.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("6_button")
+label = "DER ·"
+accent = Color(0.72, 0.48, 0.16, 0.9)
+
+[node name="GoalkeeperRightLow" type="Control" parent="HUD"]
+visible = false
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -245.0
+offset_top = -120.0
+offset_right = -145.0
+offset_bottom = -40.0
+grow_horizontal = 0
+grow_vertical = 0
+script = ExtResource("6_button")
+label = "DER ↓"
+accent = Color(0.66, 0.52, 0.16, 0.9)
+
 [node name="Round" type="Control" parent="HUD"]
 layout_mode = 3
 anchors_preset = 3

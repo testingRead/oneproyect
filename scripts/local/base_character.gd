@@ -52,6 +52,10 @@ var _held_collision_layer := 0
 var _held_collision_mask := 0
 var _first_person := false
 var _third_person_spring_length := 4.8
+var _goalkeeper_cooldown := 0.0
+var _goalkeeper_remaining := 0.0
+var _goalkeeper_side := 0
+var _goalkeeper_level := 1
 
 
 func _ready() -> void:
@@ -72,6 +76,8 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_hand_cooldown = maxf(0.0, _hand_cooldown - delta)
 	_foot_cooldown = maxf(0.0, _foot_cooldown - delta)
+	_goalkeeper_cooldown = maxf(0.0, _goalkeeper_cooldown - delta)
+	_goalkeeper_remaining = maxf(0.0, _goalkeeper_remaining - delta)
 	_align_interaction_nodes()
 	_resolve_kick(delta)
 	_resolve_take(delta)
@@ -271,7 +277,7 @@ func get_facing_direction() -> Vector3:
 
 func get_kick_direction() -> Vector3:
 	var horizontal := get_facing_direction()
-	var pitch := clampf(camera_pivot.rotation.x, -0.82, 0.28)
+	var pitch := _get_kick_pitch()
 	return (
 		horizontal * cos(pitch)
 		+ Vector3.UP * sin(pitch)
@@ -279,8 +285,35 @@ func get_kick_direction() -> Vector3:
 
 
 func get_kick_force() -> float:
-	var pitch := clampf(camera_pivot.rotation.x, -0.82, 0.28)
-	return lerpf(2.5, 6.8, inverse_lerp(-0.82, 0.28, pitch))
+	var pitch := _get_kick_pitch()
+	return lerpf(2.8, 7.2, inverse_lerp(-0.6, 0.5, pitch))
+
+
+func request_goalkeeper_dive(side: int, level: int) -> bool:
+	if not controls_enabled or _goalkeeper_cooldown > 0.0:
+		return false
+	_goalkeeper_cooldown = 0.7
+	_goalkeeper_remaining = 0.72
+	_goalkeeper_side = clampi(side, -1, 1)
+	_goalkeeper_level = clampi(level, 0, 2)
+	visual_root.trigger_goalkeeper_dive(_goalkeeper_side, _goalkeeper_level)
+	var horizontal := Vector3(float(_goalkeeper_side) * 2.8, 0.0, 0.0)
+	var vertical: float = [0.35, 1.15, 2.45][_goalkeeper_level]
+	_external_velocity += horizontal
+	velocity.y = maxf(velocity.y, vertical)
+	return true
+
+
+func is_goalkeeper_diving() -> bool:
+	return _goalkeeper_remaining > 0.0
+
+
+func get_goalkeeper_side() -> int:
+	return _goalkeeper_side
+
+
+func get_goalkeeper_level() -> int:
+	return _goalkeeper_level
 
 
 func add_touch_look(delta: Vector2) -> void:
@@ -290,6 +323,12 @@ func add_touch_look(delta: Vector2) -> void:
 		-0.82,
 		0.28
 	)
+
+
+func _get_kick_pitch() -> float:
+	# The default camera looks slightly down at the character. Offset the kick
+	# aim so a neutral view produces a useful, higher football trajectory.
+	return clampf(camera_pivot.rotation.x + 0.22, -0.6, 0.5)
 
 
 func apply_external_push(direction: Vector3, force := 5.0) -> void:
@@ -411,6 +450,8 @@ func _begin_kick() -> bool:
 		interaction_action,
 		&"kickable_ball"
 	)
+	if _kick_target == null:
+		_kick_target = _query_kickable_body()
 	_kick_pending = true
 	_kick_elapsed = 0.0
 	visual_root.trigger_kick()
@@ -428,7 +469,7 @@ func _resolve_kick(delta: float) -> void:
 	interaction_action.force_shapecast_update()
 	var hit := (
 		is_instance_valid(_kick_target)
-		and _cast_contains(interaction_action, _kick_target)
+		and _query_kick_contact(_kick_target)
 		and _kick_target.is_in_group(&"kickable_ball")
 	)
 	if hit:
@@ -443,6 +484,45 @@ func _resolve_kick(delta: float) -> void:
 func _align_foot_action() -> void:
 	# The model's local +Z is its face, while ShapeCast3D points along -Z.
 	interaction_action.rotation.y = visual_root.rotation.y - PI
+
+
+func _query_kickable_body() -> RigidBody3D:
+	var nearest: RigidBody3D
+	var nearest_distance := INF
+	for candidate in get_tree().get_nodes_in_group(&"kickable_ball"):
+		var body := candidate as RigidBody3D
+		if body == null or not _query_kick_contact(body):
+			continue
+		var distance := global_position.distance_squared_to(body.global_position)
+		if distance < nearest_distance:
+			nearest = body
+			nearest_distance = distance
+	return nearest
+
+
+func _query_kick_contact(target: RigidBody3D) -> bool:
+	if not is_instance_valid(target):
+		return false
+	var forward := get_facing_direction()
+	var to_target := target.global_position - global_position
+	var horizontal_target := Vector3(to_target.x, 0.0, to_target.z)
+	# Keep the interaction forgiving enough for a moving ball: the final
+	# impulse still follows the body's facing direction, never the camera.
+	if horizontal_target.length_squared() <= 1.65 * 1.65 and horizontal_target.length_squared() > 0.001:
+		if forward.dot(horizontal_target.normalized()) > 0.18 and absf(to_target.y) < 1.1:
+			return true
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = interaction_action.shape
+	query.transform = Transform3D(
+		Basis.IDENTITY,
+		global_position + Vector3(0.0, 0.22, 0.0) + forward * 0.88
+	)
+	query.collision_mask = 1
+	query.exclude = [get_rid()]
+	for hit in get_world_3d().direct_space_state.intersect_shape(query, 8):
+		if hit.collider == target:
+			return true
+	return false
 
 
 func _take_context_object() -> bool:

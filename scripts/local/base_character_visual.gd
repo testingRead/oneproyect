@@ -22,6 +22,9 @@ var _push_remaining := 0.0
 var _kick_remaining := 0.0
 var _take_remaining := 0.0
 var _throw_remaining := 0.0
+var _goalkeeper_remaining := 0.0
+var _goalkeeper_side := 0
+var _goalkeeper_level := 1
 
 
 func set_stature(stature: float) -> void:
@@ -139,6 +142,31 @@ func update_motion(
 		left_arm.rotation.x = lerpf(left_arm.rotation.x, 0.5, throw_weight)
 		torso.rotation.x = lerpf(torso.rotation.x, 0.18, throw_weight)
 		torso.rotation.z = lerpf(torso.rotation.z, -0.12, throw_weight)
+	if _goalkeeper_remaining > 0.0:
+		_goalkeeper_remaining = maxf(0.0, _goalkeeper_remaining - delta)
+		var dive_weight := sin((_goalkeeper_remaining / 0.72) * PI)
+		left_arm.rotation.x = lerpf(left_arm.rotation.x, -1.42, dive_weight)
+		right_arm.rotation.x = lerpf(right_arm.rotation.x, -1.42, dive_weight)
+		left_arm.rotation.z = lerpf(
+			left_arm.rotation.z,
+			float(_goalkeeper_side) * -0.62,
+			dive_weight
+		)
+		right_arm.rotation.z = lerpf(
+			right_arm.rotation.z,
+			float(_goalkeeper_side) * -0.62,
+			dive_weight
+		)
+		torso.rotation.z = lerpf(
+			torso.rotation.z,
+			float(_goalkeeper_side) * 0.22,
+			dive_weight
+		)
+		torso.rotation.x = lerpf(
+			torso.rotation.x,
+			0.28 + float(_goalkeeper_level) * 0.05,
+			dive_weight
+		)
 	$Model/LeftLegPivot.position.y = (
 		0.72
 		+ _left_ground_offset * grounded_weight
@@ -184,6 +212,12 @@ func trigger_take() -> void:
 
 func trigger_throw() -> void:
 	_throw_remaining = 0.62
+
+
+func trigger_goalkeeper_dive(side: int, level: int) -> void:
+	_goalkeeper_side = clampi(side, -1, 1)
+	_goalkeeper_level = clampi(level, 0, 2)
+	_goalkeeper_remaining = 0.72
 
 
 func get_movement_ratio() -> float:

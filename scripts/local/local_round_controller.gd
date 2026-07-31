@@ -90,7 +90,7 @@ func _run_round(generation: int) -> void:
 	var active_duration := 60.0
 	_transition(Phase.ACTIVE, active_duration)
 	var mounted_map := map_host.get_node_or_null("MountedMap") as Node3D
-	if not football_host.start_match(mounted_map, duration_multiplier):
+	if not football_host.start_match(mounted_map, duration_multiplier, player):
 		stop_and_clean()
 		return
 	if not await _wait_active(active_duration, generation):

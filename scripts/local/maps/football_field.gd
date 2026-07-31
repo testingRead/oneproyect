@@ -74,14 +74,14 @@ func _add_perimeter() -> void:
 	]:
 		_add_static_box(
 			"%sLeftWall" % end.prefix,
-			Vector3(-8.65, 1.2, end.z),
-			Vector3(9.1, 2.4, 0.4),
+			Vector3(-8.15, 1.2, end.z),
+			Vector3(10.1, 2.4, 0.4),
 			_border
 		)
 		_add_static_box(
 			"%sRightWall" % end.prefix,
-			Vector3(8.65, 1.2, end.z),
-			Vector3(9.1, 2.4, 0.4),
+			Vector3(8.15, 1.2, end.z),
+			Vector3(10.1, 2.4, 0.4),
 			_border
 		)
 
@@ -197,10 +197,29 @@ func _add_goal(
 	var collision := CollisionShape3D.new()
 	collision.name = "Collision"
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(5.8, 2.35, 1.25)
+	shape.size = Vector3(6.4, 2.6, 1.6)
 	collision.shape = shape
 	goal_area.add_child(collision)
 	add_child(goal_area)
+	_add_goalkeeper_zone(prefix, area_position)
+
+
+func _add_goalkeeper_zone(prefix: String, area_position: Vector3) -> void:
+	var zone := Area3D.new()
+	zone.name = prefix + "GoalkeeperZone"
+	zone.position = area_position + Vector3(0.0, 0.0, 0.55 if prefix == "North" else -0.55)
+	zone.collision_layer = 0
+	zone.collision_mask = 1
+	zone.monitoring = true
+	zone.add_to_group(&"goalkeeper_zone")
+	zone.set_meta(&"goal_side", &"home" if prefix == "North" else &"away")
+	var collision := CollisionShape3D.new()
+	collision.name = "Collision"
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(7.2, 2.8, 2.8)
+	collision.shape = shape
+	zone.add_child(collision)
+	add_child(zone)
 
 
 func _add_ball() -> void:
