@@ -60,12 +60,20 @@ func _physics_process(_delta: float) -> void:
 				return
 
 
-func request_ball_shot(shooter: LocalBaseCharacter) -> bool:
+func request_ball_shot(shooter: LocalBaseCharacter, aim_direction := Vector3.ZERO) -> bool:
 	if not _active or shooter != _holder or not is_instance_valid(_ball):
 		return false
-	var direction := shooter.get_facing_direction()
-	_release_ball(direction * 9.0 + Vector3.UP * 0.75)
+	var direction := Vector3(aim_direction.x, 0.0, aim_direction.z)
+	if direction.length_squared() < 0.01:
+		direction = shooter.get_facing_direction()
+	direction = direction.normalized()
+	shooter.set_facing_direction(direction)
+	_release_ball(direction * 9.8 + Vector3.UP * 0.72)
 	return true
+
+
+func is_holder(character: LocalBaseCharacter) -> bool:
+	return is_instance_valid(character) and character == _holder
 
 
 func finish_match() -> void:
@@ -79,8 +87,9 @@ func stop_and_clean() -> void:
 	_generation += 1
 	_active = false
 	_complete = false
-	if is_instance_valid(_holder):
-		_holder.set_bat_enabled(false)
+	for character: Variant in _connected_bat_characters.values():
+		if is_instance_valid(character):
+			(character as LocalBaseCharacter).set_bat_enabled(false)
 	if is_instance_valid(_ball) and is_instance_valid(_ball_parent):
 		_ball.reparent(_ball_parent, true)
 		_ball.freeze = false
@@ -145,11 +154,10 @@ func _release_ball(impulse: Vector3) -> void:
 	ball_holder_changed.emit("NADIE")
 
 
-func _on_bat_hit(target: Node3D, charged: bool) -> void:
+func _on_bat_hit(target: Node3D, charged: bool, attacker: LocalBaseCharacter) -> void:
 	if not charged or target != _holder:
 		return
-	var direction := target.global_position - _map_root.global_position
-	direction.y = 0.0
+	var direction := attacker.get_facing_direction()
 	_release_ball(direction.normalized() * 4.0 + Vector3.UP * 0.35)
 
 
@@ -157,8 +165,9 @@ func _connect_bat_character(character: LocalBaseCharacter) -> void:
 	var key := character.get_instance_id()
 	if _connected_bat_characters.has(key):
 		return
-	character.bat_hit.connect(_on_bat_hit)
-	_connected_bat_characters[key] = true
+	character.set_bat_enabled(true)
+	character.bat_hit.connect(_on_bat_hit.bind(character))
+	_connected_bat_characters[key] = character
 
 
 func _on_goal_entered(body: Node3D, goal: Area3D) -> void:

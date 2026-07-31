@@ -64,6 +64,9 @@ var _goalkeeper_level := 1
 var _local_health := 100
 var _top_down_mode := false
 var _saved_camera_transform := Transform3D.IDENTITY
+var _saved_spring_length := 4.8
+var _top_down_aim_direction := Vector3(0.0, 0.0, -1.0)
+var _top_down_aim_active := false
 var _bat_enabled := false
 var _bat_charge := 0.0
 var _bat_cooldown := 0.0
@@ -146,16 +149,16 @@ func _physics_process(delta: float) -> void:
 	):
 		velocity.y = SCALE.JUMP_VELOCITY
 	_jump_requested = false
-	if direction.length_squared() > 0.01:
+	if direction.length_squared() > 0.01 and not (_top_down_mode and _top_down_aim_active):
 		visual_root.rotation.y = lerp_angle(
 			visual_root.rotation.y,
 			atan2(direction.x, direction.z),
 			delta * 12.0
 		)
-	elif _top_down_mode and _bat_enabled:
+	elif _top_down_mode and _top_down_aim_active:
 		visual_root.rotation.y = lerp_angle(
 			visual_root.rotation.y,
-			camera_pivot.rotation.y,
+			atan2(_top_down_aim_direction.x, _top_down_aim_direction.z),
 			delta * 12.0
 		)
 	move_and_slide()
@@ -284,13 +287,30 @@ func set_top_down_mode(enabled: bool) -> void:
 	_top_down_mode = enabled
 	if enabled:
 		_saved_camera_transform = camera_pivot.transform
-		camera_pivot.position = Vector3(0.0, 12.0, 0.0)
-		camera_pivot.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
-		spring_arm.spring_length = 0.0
+		_saved_spring_length = spring_arm.spring_length
+		# Arena view: elevated and oblique, preserving silhouettes and depth.
+		camera_pivot.position = Vector3(0.0, 3.15, 0.0)
+		camera_pivot.rotation = Vector3(-0.88, 0.0, 0.0)
+		spring_arm.spring_length = 8.4
 		visual_root.visible = true
 	else:
+		_top_down_aim_active = false
 		camera_pivot.transform = _saved_camera_transform
-		spring_arm.spring_length = _third_person_spring_length
+		spring_arm.spring_length = _saved_spring_length
+
+
+func set_top_down_aim(value: Vector2, active: bool) -> void:
+	if not _top_down_mode:
+		return
+	_top_down_aim_active = active and value.length_squared() > 0.02
+	if value.length_squared() <= 0.02:
+		return
+	_top_down_aim_direction = Vector3(value.x, 0.0, value.y).normalized()
+	set_facing_direction(_top_down_aim_direction)
+
+
+func get_top_down_aim_direction() -> Vector3:
+	return _top_down_aim_direction
 
 
 func set_bat_enabled(enabled: bool) -> void:
@@ -413,7 +433,6 @@ func get_goalkeeper_level() -> int:
 
 func add_touch_look(delta: Vector2) -> void:
 	if _top_down_mode:
-		camera_pivot.rotation.y -= delta.x * 0.005
 		return
 	camera_pivot.rotation.y -= delta.x * 0.0035
 	camera_pivot.rotation.x = clampf(

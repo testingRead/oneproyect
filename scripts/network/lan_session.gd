@@ -8,6 +8,7 @@ signal player_state_received(peer_id: int, position: Vector3, velocity: Vector3,
 signal physics_state_received(names: PackedStringArray, positions: PackedVector3Array, rotations: PackedVector3Array, velocities: PackedVector3Array)
 signal object_impulse_received(object_name: String, impulse: Vector3)
 signal bat_swing_received(peer_id: int, facing: Vector3, charged: bool)
+signal bateball_shot_received(peer_id: int, direction: Vector3)
 
 const LAN_PORT := 9998
 const DISCOVERY_PORT := 9997
@@ -199,6 +200,15 @@ func request_bat_swing(facing: Vector3, charged: bool) -> void:
 		_rpc_request_bat_swing.rpc_id(1, facing, charged)
 
 
+func request_bateball_shot(direction: Vector3) -> void:
+	if not is_active() or not direction.is_finite():
+		return
+	if is_host:
+		bateball_shot_received.emit(get_local_peer_id(), direction)
+	else:
+		_rpc_request_bateball_shot.rpc_id(1, direction)
+
+
 @rpc("any_peer", "call_remote", "reliable", 0)
 func _rpc_register_player(display_name: String, character_path: String) -> void:
 	if not multiplayer.is_server():
@@ -268,6 +278,12 @@ func _rpc_request_object_impulse(object_name: String, impulse: Vector3) -> void:
 func _rpc_request_bat_swing(facing: Vector3, charged: bool) -> void:
 	if multiplayer.is_server():
 		bat_swing_received.emit(multiplayer.get_remote_sender_id(), facing, charged)
+
+
+@rpc("any_peer", "call_remote", "reliable", 2)
+func _rpc_request_bateball_shot(direction: Vector3) -> void:
+	if multiplayer.is_server():
+		bateball_shot_received.emit(multiplayer.get_remote_sender_id(), direction)
 
 
 func _set_profile_ready(peer_id: int, ready: bool) -> void:

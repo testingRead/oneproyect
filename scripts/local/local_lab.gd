@@ -45,6 +45,10 @@ var _lan_remotes: Dictionary = {}
 var _lan_targets: Dictionary = {}
 var _lan_send_elapsed := 0.0
 var _lan_physics_elapsed := 0.0
+var _aim_value := Vector2(0.0, -1.0)
+var _aim_active := false
+var _aim_line: Line2D
+var _aim_fill: Polygon2D
 
 
 func _ready() -> void:
@@ -75,6 +79,8 @@ func _ready() -> void:
 	round_button.set_label("JUGAR")
 	joystick.value_changed.connect(player.set_touch_move)
 	look_pad.look_delta.connect(player.add_touch_look)
+	look_pad.aim_changed.connect(_on_aim_changed)
+	look_pad.aim_released.connect(_on_aim_released)
 	jump_button.action_pressed.connect(player.request_jump)
 	hand_button.action_pressed.connect(_on_hand_action)
 	foot_button.action_pressed.connect(_on_foot_action)
@@ -114,6 +120,8 @@ func _ready() -> void:
 	bateball_host.goal_scored.connect(_on_bateball_goal_scored)
 	player.bat_charge_changed.connect(_on_bat_charge_changed)
 	player.bat_swing_started.connect(_on_local_bat_swing)
+	_build_aim_guide()
+	look_pad.set_aim_mode(_is_bateball_game())
 	playable_area.set_area_index(_area_index)
 	playable_area.set_physical_walls_enabled(false)
 	_on_player_metrics(player.get_diagnostics())
@@ -125,6 +133,10 @@ func _ready() -> void:
 	if _launched_from_room:
 		round_button.hide()
 		call_deferred("_start_session_round")
+
+
+func _process(_delta: float) -> void:
+	_update_aim_guide()
 
 
 func _start_session_round() -> void:
@@ -181,6 +193,7 @@ func _setup_lan_session() -> void:
 	lan_session.physics_state_received.connect(_on_lan_physics_state)
 	lan_session.object_impulse_received.connect(_on_lan_object_impulse)
 	lan_session.bat_swing_received.connect(_on_lan_bat_swing)
+	lan_session.bateball_shot_received.connect(_on_lan_bateball_shot)
 	lan_session.lobby_changed.connect(_sync_lan_players)
 	_sync_lan_players()
 
@@ -277,6 +290,14 @@ func _on_lan_bat_swing(peer_id: int, facing: Vector3, charged: bool) -> void:
 		remote.set_facing_direction(facing)
 		remote.set_bat_enabled(true)
 		remote.perform_network_bat_swing(charged)
+
+
+func _on_lan_bateball_shot(peer_id: int, direction: Vector3) -> void:
+	if lan_session == null or not lan_session.is_host or peer_id == lan_session.get_local_peer_id():
+		return
+	var remote: LocalBaseCharacter = _lan_remotes.get(peer_id)
+	if is_instance_valid(remote) and is_instance_valid(bateball_host):
+		bateball_host.request_ball_shot(remote, direction)
 
 
 func _find_round_body(object_name: String) -> RigidBody3D:
@@ -388,11 +409,8 @@ func _on_round_phase_changed(
 		"LIMPIANDO",
 	]
 	round_label.text = "%s  %s  ·  %.1f s" % [_minigame_title(), phase_labels[next_phase], seconds]
-	foot_button.visible = not (_is_crown_game() or _is_bomb_game() or _is_tornado_game())
-	hand_button.visible = _is_bateball_game() and next_phase == LocalRoundController.Phase.ACTIVE
-	if _is_bateball_game():
-		hand_button.set_label("BATE")
-		foot_button.set_label("DISPARAR")
+	foot_button.visible = not (_is_crown_game() or _is_bomb_game() or _is_tornado_game() or _is_bateball_game())
+	hand_button.hide()
 	match next_phase:
 		LocalRoundController.Phase.IDLE:
 			if _launched_from_room and _match_has_started:
@@ -411,7 +429,7 @@ func _on_round_phase_changed(
 			crosshair.show()
 			banner_title.text = "PREPARANDO %s" % _minigame_title()
 			banner_detail.text = "La corona espera en el centro" if _is_crown_game() else "La bomba empieza en tus manos" if _is_bomb_game() else "El tornado se forma en la arena" if _is_tornado_game() else "La arena aérea carga el balón" if _is_bateball_game() else "El balón caerá en el centro"
-			banner_progress.text = "Todos corren a la misma velocidad" if _is_crown_game() else "El contacto entrega la bomba" if _is_bomb_game() else "Objetos y jugadores serán arrastrados" if _is_tornado_game() else "BATE carga 3 segundos · DISPARAR apunta" if _is_bateball_game() else "La patada sigue al cuerpo, no a la cámara"
+			banner_progress.text = "Todos corren a la misma velocidad" if _is_crown_game() else "El contacto entrega la bomba" if _is_bomb_game() else "Objetos y jugadores serán arrastrados" if _is_tornado_game() else "Arrastra a la derecha para apuntar · suelta para actuar" if _is_bateball_game() else "La patada sigue al cuerpo, no a la cámara"
 		LocalRoundController.Phase.RULES:
 			banner_title.text = "CORONA CENTRAL" if _is_crown_game() else "BOMBA DE RELEVO" if _is_bomb_game() else "TORNADO DE OBJETOS" if _is_tornado_game() else "BATEBALL ARENA" if _is_bateball_game() else "FÚTBOL · DOS ARCOS"
 			banner_detail.text = "Toma la corona y evita que te la quiten" if _is_crown_game() else "Toca a otro jugador para pasar la bomba" if _is_bomb_game() else "Mantente lejos del embudo y de los objetos" if _is_tornado_game() else "Recoge el balón y apunta para disparar" if _is_bateball_game() else "Marca en el arco rival y defiende el tuyo"
@@ -504,15 +522,89 @@ func _on_bomb_exploded(holder_name: String) -> void:
 
 
 func _on_hand_action() -> void:
-	if _is_bateball_game():
-		player.request_bat_swing()
+	pass
 
 
 func _on_foot_action() -> void:
-	if _is_bateball_game():
-		bateball_host.request_ball_shot(player)
+	player.request_foot_action()
+
+
+func _on_aim_changed(value: Vector2, active: bool) -> void:
+	if not _is_bateball_game():
+		return
+	_aim_active = active
+	if value.length_squared() > 0.02:
+		_aim_value = value.normalized()
+	player.set_top_down_aim(_aim_value, active)
+
+
+func _on_aim_released(value: Vector2) -> void:
+	if not _is_bateball_game() or round_controller.phase != LocalRoundController.Phase.ACTIVE:
+		return
+	var direction := Vector3(value.x, 0.0, value.y).normalized()
+	player.set_facing_direction(direction)
+	if bateball_host.is_holder(player):
+		if bateball_host.request_ball_shot(player, direction):
+			if lan_session != null and lan_session.is_active() and not lan_session.is_host:
+				lan_session.request_bateball_shot(direction)
 	else:
-		player.request_foot_action()
+		player.request_bat_swing()
+
+
+func _build_aim_guide() -> void:
+	_aim_fill = Polygon2D.new()
+	_aim_fill.name = "AimArea"
+	_aim_fill.z_index = 18
+	$HUD.add_child(_aim_fill)
+	_aim_line = Line2D.new()
+	_aim_line.name = "AimLine"
+	_aim_line.width = 4.0
+	_aim_line.antialiased = true
+	_aim_line.z_index = 19
+	$HUD.add_child(_aim_line)
+	_update_aim_guide()
+
+
+func _update_aim_guide() -> void:
+	if _aim_line == null or _aim_fill == null:
+		return
+	var show_guide := (
+		_is_bateball_game()
+		and _aim_active
+		and round_controller.phase == LocalRoundController.Phase.ACTIVE
+	)
+	_aim_line.visible = show_guide
+	_aim_fill.visible = show_guide
+	if not show_guide:
+		return
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return
+	var start := camera.unproject_position(player.global_position + Vector3.UP * 0.48)
+	var direction := _aim_value.normalized()
+	var perpendicular := Vector2(-direction.y, direction.x)
+	var has_ball: bool = bool(bateball_host.is_holder(player))
+	var length := 180.0 if has_ball else 112.0
+	var finish := start + direction * length
+	_aim_line.default_color = Color(0.28, 0.9, 1.0, 0.96) if has_ball else Color(1.0, 0.58, 0.15, 0.96)
+	_aim_line.points = PackedVector2Array([start, finish])
+	if has_ball:
+		_aim_fill.color = Color(0.28, 0.9, 1.0, 0.42)
+		_aim_fill.polygon = PackedVector2Array([
+			start + perpendicular * 5.0,
+			finish - direction * 9.0 + perpendicular * 9.0,
+			finish + direction * 15.0,
+			finish - direction * 9.0 - perpendicular * 9.0,
+			start - perpendicular * 5.0,
+		])
+	else:
+		var half_angle := 0.68
+		_aim_fill.color = Color(1.0, 0.48, 0.1, 0.2)
+		_aim_fill.polygon = PackedVector2Array([
+			start,
+			start + direction.rotated(-half_angle) * length,
+			start + direction.rotated(half_angle) * length,
+		])
 
 
 func _on_bateball_score_changed(_home: int, _away: int, _target: int) -> void:
