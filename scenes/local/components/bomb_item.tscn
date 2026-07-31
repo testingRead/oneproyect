@@ -1,0 +1,57 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/local/bomb_item.gd" id="1_script"]
+
+[sub_resource type="SphereShape3D" id="1_shape"]
+radius = 0.46
+
+[sub_resource type="SphereMesh" id="2_body"]
+radius = 0.46
+height = 0.92
+
+[sub_resource type="StandardMaterial3D" id="3_black"]
+albedo_color = Color(0.035, 0.04, 0.06, 1)
+roughness = 0.42
+
+[sub_resource type="CylinderMesh" id="4_fuse"]
+top_radius = 0.035
+bottom_radius = 0.05
+height = 0.38
+
+[sub_resource type="StandardMaterial3D" id="5_fuse"]
+albedo_color = Color(0.36, 0.18, 0.05, 1)
+
+[sub_resource type="SphereMesh" id="6_tip"]
+radius = 0.08
+height = 0.16
+
+[node name="Bomb" type="Area3D"]
+script = ExtResource("1_script")
+collision_layer = 0
+collision_mask = 1
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+shape = SubResource("1_shape")
+
+[node name="Body" type="MeshInstance3D" parent="."]
+mesh = SubResource("2_body")
+material_override = SubResource("3_black")
+
+[node name="Fuse" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.58, 0)
+mesh = SubResource("4_fuse")
+material_override = SubResource("5_fuse")
+
+[node name="FuseTip" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.8, 0)
+mesh = SubResource("6_tip")
+
+[node name="FuseLight" type="OmniLight3D" parent="."]
+position = Vector3(0, 0.8, 0)
+light_color = Color(1, 0.3, 0.04, 1)
+omni_range = 2.2
+light_energy = 0.6
+shadow_enabled = false
+
+[node name="Beep" type="AudioStreamPlayer3D" parent="."]
+max_distance = 20.0
