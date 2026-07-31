@@ -8,6 +8,7 @@ signal push_performed(hit: bool)
 signal hand_action_changed(label: String)
 signal action_resolved(action: StringName, hit: bool)
 signal local_health_changed(current: int, maximum: int)
+signal object_impulse_requested(object_name: String, impulse: Vector3)
 
 const ACTION_PUSH := &"PUSH"
 const ACTION_KICK := &"KICK"
@@ -492,8 +493,10 @@ func _resolve_kick(delta: float) -> void:
 	)
 	if hit:
 		var direction := get_kick_direction()
+		var impulse := direction * get_kick_force()
 		_kick_target.sleeping = false
-		_kick_target.apply_central_impulse(direction * get_kick_force())
+		_kick_target.apply_central_impulse(impulse)
+		object_impulse_requested.emit(_kick_target.name, impulse)
 	action_resolved.emit(ACTION_KICK, hit)
 	_kick_target = null
 	_refresh_interaction_context()

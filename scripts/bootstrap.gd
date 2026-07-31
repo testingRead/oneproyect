@@ -25,6 +25,11 @@ func _ready() -> void:
 
 
 func _start_menu() -> void:
+	if not get_tree().root.has_node("LanSession"):
+		var lan_script: Script = load("res://scripts/network/lan_session.gd")
+		var lan_session: Node = lan_script.new()
+		lan_session.name = "LanSession"
+		get_tree().root.add_child(lan_session)
 	get_tree().call_deferred("change_scene_to_file", MENU_SCENE)
 
 

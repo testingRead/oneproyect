@@ -851,6 +851,10 @@ func _start_client_peer(address: String) -> Error:
 
 
 func _on_connected_to_server() -> void:
+	# The SceneTree peer can intentionally belong to the separate LAN session.
+	# In that case the remote-server client remains dormant.
+	if _manual_disconnect:
+		return
 	var transport := multiplayer.multiplayer_peer as ENetMultiplayerPeer
 	var server_peer: ENetPacketPeer = transport.get_peer(1)
 	if server_peer != null:

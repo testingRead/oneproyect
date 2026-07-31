@@ -27,6 +27,7 @@ var tornado_host
 var player: LocalBaseCharacter
 var playable_area: LocalPlayableArea
 var minigame_id: StringName = &"futbol_rebote"
+var player_slot := 0
 var _generation := 0
 
 
@@ -93,7 +94,7 @@ func _run_round(generation: int) -> void:
 		== MinigameMapDefinition.BoundaryPolicy.PHYSICAL_AREA
 	)
 	player.controls_enabled = false
-	player.set_spawn_transform(map_host.get_spawn_transform(0))
+	player.set_spawn_transform(map_host.get_spawn_transform(player_slot))
 	player.set_facing_direction(Vector3(0.0, 0.0, -1.0))
 	player.set_first_person(true)
 	if not await _wait_phase(0.4, generation):

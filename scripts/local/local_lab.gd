@@ -7,6 +7,7 @@ const MENU_SCENE := "res://scenes/menu.tscn"
 const CROWN_HOST_SCRIPT := preload("res://scripts/local/local_crown_host.gd")
 const BOMB_HOST_SCRIPT := preload("res://scripts/local/local_bomb_host.gd")
 const TORNADO_HOST_SCRIPT := preload("res://scripts/local/local_tornado_host.gd")
+const BASE_CHARACTER_SCENE := preload("res://scenes/local/base_character.tscn")
 
 @onready var player: LocalBaseCharacter = $World/CharacterRoot
 @onready var playable_area: LocalPlayableArea = $World/PlayableArea
@@ -37,13 +38,20 @@ var _selected_minigame_id: StringName = &"futbol_rebote"
 var crown_host
 var bomb_host
 var tornado_host
+var lan_session
+var _lan_remotes: Dictionary = {}
+var _lan_targets: Dictionary = {}
+var _lan_send_elapsed := 0.0
+var _lan_physics_elapsed := 0.0
 
 
 func _ready() -> void:
 	set_meta(&"runtime_mode", &"LOCAL_DEVELOPMENT")
+	var session_mode := str(ProjectSettings.get_setting("oneproyect/session_mode", "local"))
 	var network := get_node_or_null("/root/Network")
-	if network != null and network.has_method("disconnect_session"):
+	if network != null:
 		player.set_meta("display_name", str(network.get("display_name")))
+	if session_mode != "lan" and network != null and network.has_method("disconnect_session"):
 		network.call("disconnect_session")
 	_build_island_once()
 	_load_room_content()
@@ -66,6 +74,7 @@ func _ready() -> void:
 	foot_button.action_pressed.connect(player.request_foot_action)
 	round_button.action_pressed.connect(_on_round_button_pressed)
 	player.metrics_changed.connect(_on_player_metrics)
+	player.object_impulse_requested.connect(_on_local_object_impulse)
 	playable_area.area_changed.connect(_on_area_changed)
 	round_controller.configure(
 		_selected_map,
@@ -97,11 +106,45 @@ func _ready() -> void:
 	playable_area.set_physical_walls_enabled(false)
 	_on_player_metrics(player.get_diagnostics())
 	_on_round_phase_changed(LocalRoundController.Phase.IDLE, "IDLE", 0.0)
+	if session_mode == "lan":
+		_setup_lan_session()
 	_launched_from_room = bool(ProjectSettings.get_setting("oneproyect/session_auto_start", false))
 	ProjectSettings.set_setting("oneproyect/session_auto_start", false)
 	if _launched_from_room:
 		round_button.hide()
-		call_deferred("start_reference_round")
+		call_deferred("_start_session_round")
+
+
+func _start_session_round() -> void:
+	var seed := int(ProjectSettings.get_setting("oneproyect/session_round_seed", 0))
+	start_reference_round(seed)
+
+
+func _physics_process(delta: float) -> void:
+	if lan_session == null or not lan_session.is_active():
+		return
+	_lan_send_elapsed -= delta
+	if _lan_send_elapsed <= 0.0:
+		_lan_send_elapsed = 0.05
+		lan_session.send_player_state(
+			player.global_position,
+			player.velocity,
+			player.visual_root.rotation.y,
+			player.get_local_health()
+		)
+	if lan_session.is_host:
+		_lan_physics_elapsed -= delta
+		if _lan_physics_elapsed <= 0.0:
+			_lan_physics_elapsed = 1.0 / 15.0
+			_send_lan_physics_state()
+	for peer_id in _lan_targets:
+		var remote: LocalBaseCharacter = _lan_remotes.get(peer_id)
+		if not is_instance_valid(remote):
+			continue
+		var target: Dictionary = _lan_targets[peer_id]
+		remote.global_position = remote.global_position.lerp(target.position, minf(1.0, delta * 14.0))
+		remote.velocity = target.velocity
+		remote.visual_root.rotation.y = lerp_angle(remote.visual_root.rotation.y, float(target.yaw), minf(1.0, delta * 16.0))
 
 
 func _load_room_content() -> void:
@@ -115,6 +158,104 @@ func _load_room_content() -> void:
 	var character_path := str(ProjectSettings.get_setting("oneproyect/session_character_path", ""))
 	if not character_path.is_empty():
 		player.set_meta("character_definition_path", character_path)
+
+
+func _setup_lan_session() -> void:
+	lan_session = get_node_or_null("/root/LanSession")
+	if lan_session == null or not lan_session.is_active():
+		return
+	round_controller.player_slot = lan_session.get_local_slot()
+	lan_session.player_state_received.connect(_on_lan_player_state)
+	lan_session.physics_state_received.connect(_on_lan_physics_state)
+	lan_session.object_impulse_received.connect(_on_lan_object_impulse)
+	lan_session.lobby_changed.connect(_sync_lan_players)
+	_sync_lan_players()
+
+
+func _sync_lan_players() -> void:
+	if lan_session == null:
+		return
+	var local_id: int = lan_session.get_local_peer_id()
+	for peer_id in lan_session.players:
+		if int(peer_id) == local_id or _lan_remotes.has(peer_id):
+			continue
+		var remote := BASE_CHARACTER_SCENE.instantiate() as LocalBaseCharacter
+		remote.name = "LanPlayer%d" % int(peer_id)
+		remote.controls_enabled = false
+		remote.emit_metrics = false
+		remote.set_meta("display_name", lan_session.get_player_name(int(peer_id)))
+		var camera := remote.get_node("CameraPivot/SpringArm/Camera") as Camera3D
+		camera.current = false
+		$World.add_child(remote)
+		remote.global_position = map_host.get_spawn_transform(lan_session.players.keys().find(peer_id)).origin
+		_lan_remotes[peer_id] = remote
+	for peer_id in _lan_remotes.keys():
+		if not lan_session.players.has(peer_id):
+			var remote: LocalBaseCharacter = _lan_remotes[peer_id]
+			if is_instance_valid(remote):
+				remote.queue_free()
+			_lan_remotes.erase(peer_id)
+			_lan_targets.erase(peer_id)
+
+
+func _on_lan_player_state(peer_id: int, position: Vector3, velocity: Vector3, facing_yaw: float, health: int) -> void:
+	if not _lan_remotes.has(peer_id):
+		_sync_lan_players()
+	_lan_targets[peer_id] = {
+		"position": position,
+		"velocity": velocity,
+		"yaw": facing_yaw,
+		"health": health,
+	}
+
+
+func _send_lan_physics_state() -> void:
+	var names := PackedStringArray()
+	var positions := PackedVector3Array()
+	var rotations := PackedVector3Array()
+	var velocities := PackedVector3Array()
+	for object in get_tree().get_nodes_in_group(&"local_round_object"):
+		if object is RigidBody3D and map_host.is_ancestor_of(object):
+			var body := object as RigidBody3D
+			names.append(body.name)
+			positions.append(body.global_position)
+			rotations.append(body.global_rotation)
+			velocities.append(body.linear_velocity)
+	lan_session.send_physics_state(names, positions, rotations, velocities)
+
+
+func _on_lan_physics_state(names: PackedStringArray, positions: PackedVector3Array, rotations: PackedVector3Array, velocities: PackedVector3Array) -> void:
+	if lan_session == null or lan_session.is_host:
+		return
+	var count := mini(mini(names.size(), positions.size()), mini(rotations.size(), velocities.size()))
+	for index in count:
+		var body := _find_round_body(names[index])
+		if body == null:
+			continue
+		body.global_position = body.global_position.lerp(positions[index], 0.72)
+		body.global_rotation = rotations[index]
+		body.linear_velocity = velocities[index]
+
+
+func _on_local_object_impulse(object_name: String, impulse: Vector3) -> void:
+	if lan_session != null and lan_session.is_active() and not lan_session.is_host:
+		lan_session.request_object_impulse(object_name, impulse)
+
+
+func _on_lan_object_impulse(object_name: String, impulse: Vector3) -> void:
+	if lan_session == null or not lan_session.is_host:
+		return
+	var body := _find_round_body(object_name)
+	if body != null:
+		body.sleeping = false
+		body.apply_central_impulse(impulse)
+
+
+func _find_round_body(object_name: String) -> RigidBody3D:
+	for object in get_tree().get_nodes_in_group(&"local_round_object"):
+		if object is RigidBody3D and object.name == object_name and map_host.is_ancestor_of(object):
+			return object as RigidBody3D
+	return null
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -290,7 +431,7 @@ func _on_goal_scored(scoring_side: StringName) -> void:
 func _on_kickoff_ready() -> void:
 	if round_controller.phase != LocalRoundController.Phase.ACTIVE:
 		return
-	player.set_spawn_transform(map_host.get_spawn_transform(0))
+	player.set_spawn_transform(map_host.get_spawn_transform(round_controller.player_slot))
 	player.set_facing_direction(Vector3(0.0, 0.0, -1.0))
 	banner_detail.text = "Saque desde el centro"
 

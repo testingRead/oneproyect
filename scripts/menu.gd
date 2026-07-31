@@ -8,8 +8,10 @@ const LOADING_SCENE := preload("res://scenes/loading_screen.tscn")
 const GAME_SCENE := "res://scenes/main.tscn"
 const LOCAL_LAB_SCENE := "res://scenes/local/local_lab.tscn"
 const PROFILE_PATH := "user://profile.cfg"
+const LAN_SESSION_SCRIPT := preload("res://scripts/network/lan_session.gd")
 
 @onready var network: OneProjectNetwork = get_node("/root/Network")
+var lan
 
 var _main_screen: VBoxContainer
 var _lan_screen: VBoxContainer
@@ -46,6 +48,7 @@ var _multiplayer_survivals := 0
 var _lan_mode_button: OptionButton
 var _lan_status: Label
 var _lan_start_button: Button
+var _lan_address_input: LineEdit
 var _lan_room_title: Label
 var _lan_room_detail: Label
 var _lan_room_character: OptionButton
@@ -54,11 +57,17 @@ var _lan_room_ready: Button
 var _lan_room_start: Button
 var _lan_room_is_local := false
 var _lan_room_ready_state := false
+var _lan_room_is_host := false
 var _local_characters: Array = []
 var _local_minigames: Array = []
 
 
 func _ready() -> void:
+	lan = get_node_or_null("/root/LanSession")
+	if lan == null:
+		lan = LAN_SESSION_SCRIPT.new()
+		lan.name = "LanSession"
+		get_tree().root.add_child(lan)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_local_characters = CONTENT_REGISTRY.load_characters()
 	_local_minigames = CONTENT_REGISTRY.load_minigames()
@@ -81,7 +90,11 @@ func _ready() -> void:
 
 
 func _reopen_room_setup() -> void:
-	_enter_lan_room(ProjectSettings.get_setting("oneproyect/session_mode", "local") == "local")
+	var local_only: bool = ProjectSettings.get_setting("oneproyect/session_mode", "local") == "local"
+	if not local_only and lan.is_active():
+		_enter_lan_room(false, lan.is_host)
+	else:
+		_enter_lan_room(true)
 
 
 func _build_interface() -> void:
@@ -183,14 +196,20 @@ func _build_lan_screen(parent: Control) -> VBoxContainer:
 	)
 	_lan_status.modulate = Color(0.68, 0.8, 0.9)
 	screen.add_child(_lan_status)
+	_lan_address_input = LineEdit.new()
+	_lan_address_input.name = "LanHostAddress"
+	_lan_address_input.placeholder_text = "IP del anfitrión (ej. 192.168.1.25)"
+	_lan_address_input.custom_minimum_size = Vector2(0.0, 50.0)
+	_lan_address_input.add_theme_font_size_override("font_size", 18)
+	screen.add_child(_lan_address_input)
 	_lan_start_button = _button("CREAR SALA LAN", "LanCreateRoom")
 	_lan_start_button.pressed.connect(_create_lan_room)
 	screen.add_child(_lan_start_button)
-	var join := _button("UNIRSE A SALA LAN", "LanJoinRoom")
+	var join := _button("BUSCAR / UNIRSE A SALA LAN", "LanJoinRoom")
 	join.pressed.connect(_join_lan_room)
 	screen.add_child(join)
 	var back := _button("VOLVER", "LanBack")
-	back.pressed.connect(func() -> void: _show_screen(_main_screen))
+	back.pressed.connect(_leave_lan_to_main)
 	screen.add_child(back)
 	return screen
 
@@ -211,6 +230,7 @@ func _build_lan_room_screen(parent: Control) -> VBoxContainer:
 			"MINIJUEGO: %s" % _local_minigames[index].display_name,
 			index
 		)
+	_lan_room_mode.item_selected.connect(_on_lan_mode_selected)
 	screen.add_child(_lan_room_mode)
 	_lan_room_character = OptionButton.new()
 	_lan_room_character.name = "SelectedCharacter"
@@ -234,7 +254,7 @@ func _build_lan_room_screen(parent: Control) -> VBoxContainer:
 	_lan_room_start.pressed.connect(_start_lan_room)
 	screen.add_child(_lan_room_start)
 	var leave := _button("SALIR DE LA SALA", "LanLeave")
-	leave.pressed.connect(func() -> void: _show_screen(_main_screen))
+	leave.pressed.connect(_leave_lan_to_main)
 	screen.add_child(leave)
 	return screen
 
@@ -353,48 +373,73 @@ func _connect_network() -> void:
 	network.room_started.connect(_on_room_started)
 	network.room_action_failed.connect(_on_room_error)
 	network.returned_to_lobby.connect(_on_returned_to_lobby)
+	lan.status_changed.connect(_on_lan_status_changed)
+	lan.lobby_changed.connect(_on_lan_lobby_changed)
+	lan.game_started.connect(_on_lan_game_started)
 
 
 func _open_local_room() -> void:
 	_save_name()
+	lan.leave_room()
 	network.disconnect_session()
 	_enter_lan_room(true)
 
 
 func _open_lan() -> void:
 	_save_name()
+	lan.leave_room()
 	network.disconnect_session()
 	_lan_status.text = "Crea una sala o únete a una sala de tu Wi-Fi."
+	_lan_address_input.text = ""
 	_show_screen(_lan_screen)
 
 
 func _create_lan_room() -> void:
-	_enter_lan_room(false)
+	var error: Error = lan.host_room(network.display_name, _selected_local_character_path())
+	if error == OK:
+		if not _local_minigames.is_empty():
+			lan.set_minigame(_local_minigames[_lan_room_mode.selected].resource_path)
+		_enter_lan_room(false, true)
 
 
 func _join_lan_room() -> void:
-	_lan_status.text = "El descubrimiento de salas ENet LAN se integrará antes de activar UNIRSE."
+	var address := _lan_address_input.text.strip_edges()
+	if address.is_empty():
+		address = lan.get_discovered_address()
+	if address.is_empty():
+		lan.begin_discovery()
+		_lan_status.text = "Buscando… pulsa otra vez cuando aparezca una sala, o escribe su IP."
+		return
+	_lan_address_input.text = address
+	lan.join_room(address, network.display_name, _selected_local_character_path())
 
 
-func _enter_lan_room(local_only: bool) -> void:
+func _enter_lan_room(local_only: bool, host := true) -> void:
 	_lan_room_is_local = local_only
-	_lan_room_ready_state = false
-	_lan_room_title.text = "SALA LOCAL" if local_only else "SALA LAN · ANFITRIÓN"
-	_lan_room_detail.text = "1/1 JUGADOR · SIN RED" if local_only else "1/8 JUGADORES · ANFITRIÓN"
+	_lan_room_is_host = host
+	_lan_room_ready_state = false if local_only else bool(lan.players.get(lan.get_local_peer_id(), {}).get("ready", false))
+	_lan_room_title.text = "SALA LOCAL" if local_only else "SALA LAN · ANFITRIÓN" if host else "SALA LAN"
+	_lan_room_detail.text = "1/1 JUGADOR · SIN RED" if local_only else "Conectando jugadores…"
 	_lan_room_character.select(CHARACTER_CATALOG.sanitize_index(network.color_index))
 	_lan_room_character.disabled = false
-	_lan_room_mode.disabled = false
+	_lan_room_mode.disabled = not local_only and not host
 	_lan_room_ready.text = "MARCAR LISTO"
+	_lan_room_start.visible = local_only or host
 	_lan_room_start.disabled = true
 	_show_screen(_lan_room_screen)
+	if not local_only:
+		_refresh_lan_room()
 
 
 func _toggle_lan_ready() -> void:
 	_lan_room_ready_state = not _lan_room_ready_state
 	_lan_room_character.disabled = _lan_room_ready_state
-	_lan_room_mode.disabled = _lan_room_ready_state
+	_lan_room_mode.disabled = _lan_room_ready_state or (not _lan_room_is_local and not _lan_room_is_host)
 	_lan_room_ready.text = "CANCELAR LISTO" if _lan_room_ready_state else "MARCAR LISTO"
-	_lan_room_start.disabled = not _lan_room_ready_state
+	if _lan_room_is_local:
+		_lan_room_start.disabled = not _lan_room_ready_state
+	else:
+		lan.set_ready(_lan_room_ready_state)
 
 
 func _on_lan_character_selected(index: int) -> void:
@@ -406,11 +451,26 @@ func _on_lan_character_selected(index: int) -> void:
 	)
 	network.color_index = 0
 	_save_character()
+	if not _lan_room_is_local and lan.is_active():
+		lan.set_character(_local_characters[index].resource_path)
+
+
+func _on_lan_mode_selected(index: int) -> void:
+	if _lan_room_is_local or not _lan_room_is_host or index < 0 or index >= _local_minigames.size():
+		return
+	lan.set_minigame(_local_minigames[index].resource_path)
 
 
 func _start_lan_room() -> void:
 	if not _lan_room_ready_state:
 		return
+	if not _lan_room_is_local:
+		lan.start_game()
+		return
+	_start_selected_local_game()
+
+
+func _start_selected_local_game() -> void:
 	ProjectSettings.set_setting("oneproyect/session_auto_start", true)
 	ProjectSettings.set_setting(
 		"oneproyect/session_mode",
@@ -427,6 +487,70 @@ func _start_lan_room() -> void:
 		LOCAL_LAB_SCENE,
 		"PREPARANDO PARTIDA LOCAL" if _lan_room_is_local else "PREPARANDO SALA LAN"
 	)
+
+
+func _on_lan_status_changed(text: String) -> void:
+	_lan_status.text = text
+	var discovered: String = lan.get_discovered_address()
+	if not discovered.is_empty() and _lan_address_input.text.is_empty():
+		_lan_address_input.text = discovered
+
+
+func _on_lan_lobby_changed() -> void:
+	if not lan.is_active():
+		return
+	var local_id: int = lan.get_local_peer_id()
+	if lan.players.has(local_id) and not _lan_room_screen.visible:
+		_enter_lan_room(false, lan.is_host)
+	_refresh_lan_room()
+
+
+func _refresh_lan_room() -> void:
+	if _lan_room_is_local or not lan.is_active():
+		return
+	var ids := PackedInt32Array(lan.players.keys())
+	ids.sort()
+	var lines := PackedStringArray()
+	var ready_count := 0
+	for peer_id in ids:
+		var profile: Dictionary = lan.players[peer_id]
+		var ready := bool(profile.get("ready", false))
+		ready_count += 1 if ready else 0
+		lines.append("%s  ·  %s" % [str(profile.get("name", "Jugador")), "LISTO" if ready else "ESPERANDO"])
+	_lan_room_detail.text = "%d/%d JUGADORES · %d LISTOS\n%s" % [ids.size(), 8, ready_count, "\n".join(lines)]
+	var local_profile: Dictionary = lan.players.get(lan.get_local_peer_id(), {})
+	_lan_room_ready_state = bool(local_profile.get("ready", false))
+	_lan_room_ready.text = "CANCELAR LISTO" if _lan_room_ready_state else "MARCAR LISTO"
+	_lan_room_character.disabled = _lan_room_ready_state
+	_lan_room_mode.disabled = not _lan_room_is_host or _lan_room_ready_state
+	_lan_room_start.disabled = not lan.can_start()
+	if not lan.selected_minigame_path.is_empty():
+		for index in _local_minigames.size():
+			if _local_minigames[index].resource_path == lan.selected_minigame_path:
+				_lan_room_mode.select(index)
+				break
+
+
+func _on_lan_game_started(minigame_path: String, round_seed: int) -> void:
+	ProjectSettings.set_setting("oneproyect/session_auto_start", true)
+	ProjectSettings.set_setting("oneproyect/session_mode", "lan")
+	ProjectSettings.set_setting("oneproyect/session_minigame_path", minigame_path)
+	ProjectSettings.set_setting("oneproyect/session_round_seed", round_seed)
+	ProjectSettings.set_setting("oneproyect/session_character_path", _selected_local_character_path())
+	_loading_game = true
+	_show_loading(LOCAL_LAB_SCENE, "ENTRANDO A PARTIDA LAN")
+
+
+func _selected_local_character_path() -> String:
+	var index := _lan_room_character.selected if _lan_room_character != null else 0
+	if index >= 0 and index < _local_characters.size():
+		return _local_characters[index].resource_path
+	return ""
+
+
+func _leave_lan_to_main() -> void:
+	lan.leave_room()
+	_show_screen(_main_screen)
 
 
 func _open_multiplayer() -> void:
