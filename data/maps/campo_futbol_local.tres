@@ -6,7 +6,7 @@
 [resource]
 script = ExtResource("1_map")
 map_id = &"campo_futbol_local"
-tags = PackedStringArray("common", "football", "first_person", "local_candidate")
+tags = PackedStringArray("common", "football", "first_person", "official", "local_candidate")
 selection_weight = 1.0
 maximum_players = 8
 map_scene = ExtResource("2_scene")

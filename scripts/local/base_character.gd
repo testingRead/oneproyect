@@ -286,7 +286,7 @@ func get_kick_direction() -> Vector3:
 
 func get_kick_force() -> float:
 	var pitch := _get_kick_pitch()
-	return lerpf(2.8, 7.2, inverse_lerp(-0.6, 0.5, pitch))
+	return lerpf(3.2, 8.0, inverse_lerp(-0.6, 0.5, pitch))
 
 
 func request_goalkeeper_dive(side: int, level: int) -> bool:
