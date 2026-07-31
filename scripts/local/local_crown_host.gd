@@ -38,7 +38,7 @@ func finish_match() -> void:
 	if not _active:
 		return
 	_active = false
-	match_completed.emit(_holder.name if is_instance_valid(_holder) else "NADIE")
+	match_completed.emit(get_holder_name())
 
 
 func get_winner() -> int:
@@ -46,7 +46,7 @@ func get_winner() -> int:
 
 
 func get_holder_name() -> String:
-	return _holder.name if is_instance_valid(_holder) else "NADIE"
+	return str(_holder.get_meta(&"display_name", _holder.name)) if is_instance_valid(_holder) else "NADIE"
 
 
 func stop_and_clean() -> void:
@@ -74,7 +74,7 @@ func _assign_holder(next_holder: Node3D) -> void:
 		_crown.position = Vector3(0.0, 0.22, 0.0)
 		_crown.rotation = Vector3.ZERO
 	_crown.monitoring = false
-	crown_holder_changed.emit(next_holder.name)
+	crown_holder_changed.emit(str(next_holder.get_meta(&"display_name", next_holder.name)))
 
 
 func _find_descendant(root: Node, group: StringName) -> Node:

@@ -39,6 +39,7 @@ func _ready() -> void:
 	set_meta(&"runtime_mode", &"LOCAL_DEVELOPMENT")
 	var network := get_node_or_null("/root/Network")
 	if network != null and network.has_method("disconnect_session"):
+		player.set_meta("display_name", str(network.get("display_name")))
 		network.call("disconnect_session")
 	_build_island_once()
 	_load_room_content()
@@ -203,6 +204,7 @@ func _on_round_phase_changed(
 		"FÚTBOL  %s  ·  %.1f s"
 		% [phase_labels[next_phase], seconds]
 	)
+	foot_button.visible = not _is_crown_game()
 	match next_phase:
 		LocalRoundController.Phase.IDLE:
 			if _launched_from_room and _match_has_started:
