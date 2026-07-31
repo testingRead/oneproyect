@@ -86,8 +86,8 @@ func _run() -> void:
 			"Football must use one native rigid body"
 		)
 		if round_index == 0:
-			# The local player belongs to home: only the north goal is his area.
-			lab.player.global_position = Vector3(0.0, 0.02, -38.0)
+			# Home attacks north, therefore its own goal is the south goal.
+			lab.player.global_position = Vector3(0.0, 0.02, -2.0)
 			for frame in 4:
 				await physics_frame
 			_require(
@@ -97,7 +97,7 @@ func _run() -> void:
 				"Goalkeeper controls must appear inside the goal area"
 			)
 			ball.freeze = true
-			ball.global_position = Vector3(0.0, 1.1, -38.45)
+			ball.global_position = Vector3(0.0, 1.1, -1.55)
 			ball.freeze = false
 			ball.sleeping = false
 			_require(
@@ -111,7 +111,7 @@ func _run() -> void:
 				and lab.football_host.opponent_score == 0,
 				"A correctly timed goalkeeper dive must stop the goal"
 			)
-			lab.player.global_position = Vector3(0.0, 0.02, -2.0)
+			lab.player.global_position = Vector3(0.0, 0.02, -38.0)
 			for frame in 8:
 				await physics_frame
 			_require(

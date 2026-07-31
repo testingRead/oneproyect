@@ -102,9 +102,14 @@ func get_player_team() -> StringName:
 	return _player_team
 
 
+func get_player_goal_side() -> StringName:
+	# Home attacks north and defends south; away attacks south and defends north.
+	return &"away" if _player_team == &"home" else &"home"
+
+
 func set_player_team(team: StringName) -> void:
 	_player_team = &"away" if team == &"away" else &"home"
-	if _goalkeeper_zone != &"" and _goalkeeper_zone != _player_team:
+	if _goalkeeper_zone != &"" and _goalkeeper_zone != get_player_goal_side():
 		_goalkeeper_zone = &""
 		goalkeeper_zone_changed.emit(false, team)
 
@@ -175,7 +180,7 @@ func _on_goalkeeper_entered(body: Node3D, zone: Area3D) -> void:
 	if body != _goalkeeper:
 		return
 	var side: StringName = zone.get_meta(&"goal_side", &"")
-	if side != _player_team:
+	if side != get_player_goal_side():
 		# Players may cross the opponent's goal area, but never receive
 		# goalkeeper controls there.
 		return
