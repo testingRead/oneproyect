@@ -96,6 +96,10 @@ func _run_round(generation: int) -> void:
 	if not await _wait_active(active_duration, generation):
 		return
 	player.controls_enabled = false
+	if football_host.is_tied():
+		await football_host.run_penalty_shootout()
+		if generation != _generation:
+			return
 	football_host.finish_match()
 	_transition(Phase.RESULT, 1.5)
 	if not await _wait_phase(1.5, generation):

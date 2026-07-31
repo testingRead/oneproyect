@@ -25,6 +25,7 @@ const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/campo_futbol_loc
 
 var _area_index := 1
 var _last_metrics: Dictionary = {}
+var _penalty_buttons: Array[TouchActionButton] = []
 
 
 func _ready() -> void:
@@ -35,6 +36,7 @@ func _ready() -> void:
 	_build_island_once()
 	$HUD/DiagnosticsPanel.hide()
 	hand_button.hide()
+	_create_penalty_buttons()
 	round_button.set_label("JUGAR")
 	joystick.value_changed.connect(player.set_touch_move)
 	look_pad.look_delta.connect(player.add_touch_look)
@@ -54,6 +56,9 @@ func _ready() -> void:
 	football_host.score_changed.connect(_on_football_score_changed)
 	football_host.goal_scored.connect(_on_goal_scored)
 	football_host.kickoff_ready.connect(_on_kickoff_ready)
+	football_host.penalty_choice_requested.connect(_on_penalty_choice_requested)
+	football_host.penalty_cinematic.connect(_on_penalty_cinematic)
+	football_host.penalty_score_changed.connect(_on_penalty_score_changed)
 	playable_area.set_area_index(_area_index)
 	playable_area.set_physical_walls_enabled(false)
 	_on_player_metrics(player.get_diagnostics())
@@ -228,6 +233,58 @@ func _on_kickoff_ready() -> void:
 	player.set_spawn_transform(map_host.get_spawn_transform(0))
 	player.set_facing_direction(Vector3(0.0, 0.0, -1.0))
 	banner_detail.text = "Saque desde el centro"
+
+
+func _create_penalty_buttons() -> void:
+	var labels := ["IZQUIERDA", "CENTRO", "DERECHA"]
+	for index in 3:
+		var button := TouchActionButton.new()
+		button.name = "Penalty%s" % labels[index]
+		button.label = labels[index]
+		button.accent = Color(0.72, 0.31, 0.12, 0.94)
+		button.visible = false
+		button.z_index = 40
+		button.anchor_left = 0.5
+		button.anchor_right = 0.5
+		button.anchor_top = 1.0
+		button.anchor_bottom = 1.0
+		button.offset_left = -180.0 + index * 120.0
+		button.offset_right = -70.0 + index * 120.0
+		button.offset_top = -140.0
+		button.offset_bottom = -30.0
+		button.action_pressed.connect(_on_penalty_direction.bind(index - 1))
+		$HUD.add_child(button)
+		_penalty_buttons.append(button)
+
+
+func _on_penalty_choice_requested(attempt: int, _seconds: float) -> void:
+	player.set_first_person(false)
+	player.global_position = Vector3(0.0, 0.02, -6.2)
+	player.set_facing_direction(Vector3(0.0, 0.0, -1.0))
+	banner_title.text = "PENALES · TIRO %d DE 5" % attempt
+	banner_detail.text = "Elige la dirección del disparo"
+	banner_progress.text = "El arquero bot elegirá una dirección"
+	for button in _penalty_buttons:
+		button.show()
+
+
+func _on_penalty_direction(direction: int) -> void:
+	for button in _penalty_buttons:
+		button.hide()
+	football_host.submit_penalty_choice(direction)
+
+
+func _on_penalty_cinematic(shot_direction: int, save_direction: int, scored: bool) -> void:
+	banner_title.text = "CINEMÁTICA DE PENAL"
+	banner_detail.text = "Balón %s · arquero %s" % [
+		["IZQUIERDA", "CENTRO", "DERECHA"][shot_direction + 1],
+		["IZQUIERDA", "CENTRO", "DERECHA"][save_direction + 1],
+	]
+	banner_progress.text = "¡GOL!" if scored else "¡ATAJADA!"
+
+
+func _on_penalty_score_changed(home: int, away: int, attempt: int) -> void:
+	banner_progress.text = "PENALES  TÚ %d · RIVAL %d · TIRO %d/5" % [home, away, attempt]
 
 
 func _on_player_metrics(metrics: Dictionary) -> void:

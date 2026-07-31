@@ -7,6 +7,9 @@ signal kickoff_ready
 signal match_completed(home_score: int, away_score: int)
 signal goalkeeper_zone_changed(active: bool, side: StringName)
 signal goalkeeper_save(side: StringName, level: int)
+signal penalty_choice_requested(attempt: int, seconds: float)
+signal penalty_cinematic(shot_direction: int, save_direction: int, scored: bool)
+signal penalty_score_changed(home_score: int, away_score: int, attempt: int)
 
 @export_range(1, 10, 1) var target_score := 3
 
@@ -24,6 +27,8 @@ var _goalkeeper_zone := &""
 var _player_team: StringName = &"home"
 var _bot_cooldown := {&"home": 0.0, &"away": 0.0}
 var _bots := {}
+var _penalty_choice := 99
+var _penalty_winner := 0
 
 
 func start_match(map_root: Node3D, time_scale := 1.0, goalkeeper_value = null) -> bool:
@@ -55,6 +60,7 @@ func start_match(map_root: Node3D, time_scale := 1.0, goalkeeper_value = null) -
 	score = 0
 	opponent_score = 0
 	_complete = false
+	_penalty_winner = 0
 	_goal_lock = false
 	_active = true
 	_bot_cooldown = {&"home": 0.0, &"away": 0.0}
@@ -117,6 +123,60 @@ func finish_match() -> void:
 		_ball.angular_velocity = Vector3.ZERO
 
 
+func is_tied() -> bool:
+	return score == opponent_score
+
+
+func submit_penalty_choice(direction: int) -> void:
+	if _penalty_choice == 99:
+		_penalty_choice = clampi(direction, -1, 1)
+
+
+func run_penalty_shootout() -> void:
+	if not is_instance_valid(_ball):
+		return
+	_penalty_winner = 0
+	var home_penalties := 0
+	var away_penalties := 0
+	for attempt in 5:
+		_penalty_choice = 99
+		penalty_choice_requested.emit(attempt + 1, 3.0)
+		var deadline := Time.get_ticks_msec() + 3000
+		while _penalty_choice == 99 and Time.get_ticks_msec() < deadline:
+			await get_tree().physics_frame
+		if _penalty_choice == 99:
+			_penalty_choice = 0
+		var keeper_choice: int = [-1, 0, 1][posmod(attempt * 5 + score + opponent_score, 3)]
+		var scored: bool = _penalty_choice != keeper_choice
+		await _play_penalty_cinematic(_penalty_choice, keeper_choice, scored)
+		if scored:
+			home_penalties += 1
+		# The rival also takes one simple bot-controlled shot per round.
+		if posmod(attempt * 7 + keeper_choice + score, 3) != 0:
+			away_penalties += 1
+		penalty_score_changed.emit(home_penalties, away_penalties, attempt + 1)
+	# Sudden death stays simple and deterministic for the local prototype.
+	if home_penalties == away_penalties:
+		_penalty_winner = 1 if score >= opponent_score else -1
+	else:
+		_penalty_winner = 1 if home_penalties > away_penalties else -1
+
+
+func _play_penalty_cinematic(shot_direction: int, save_direction: int, scored: bool) -> void:
+	_ball.freeze = true
+	_ball.global_position = Vector3(0.0, 0.24, -9.5)
+	var penalty_bot = _bots.get(&"away")
+	if is_instance_valid(penalty_bot) and penalty_bot.has_method("trigger_save"):
+		penalty_bot.trigger_save(float(save_direction), 1)
+	var target := Vector3(float(shot_direction) * 2.15, 1.25, -37.9)
+	penalty_cinematic.emit(shot_direction, save_direction, scored)
+	var tween := create_tween()
+	tween.tween_property(_ball, "global_position", target, 0.62)
+	await tween.finished
+	_ball.global_transform = _ball_spawn
+
+
+
 func is_complete() -> bool:
 	return _complete
 
@@ -154,6 +214,8 @@ func set_player_team(team: StringName) -> void:
 
 
 func get_winner() -> int:
+	if _penalty_winner != 0:
+		return _penalty_winner
 	if score > opponent_score:
 		return 1
 	if opponent_score > score:

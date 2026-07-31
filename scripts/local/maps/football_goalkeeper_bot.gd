@@ -13,8 +13,6 @@ func _ready() -> void:
 
 func trigger_save(target_x: float, level: int) -> void:
 	_side = signf(target_x)
-	if is_zero_approx(_side):
-		_side = 1.0
 	_level = clampi(level, 0, 2)
 	_remaining = 0.72
 
