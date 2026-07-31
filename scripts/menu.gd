@@ -2,6 +2,7 @@ extends Control
 
 const NET := preload("res://shared/net_constants.gd")
 const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.gd")
+const CONTENT_REGISTRY := preload("res://scripts/content/content_registry.gd")
 const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn")
 const LOADING_SCENE := preload("res://scenes/loading_screen.tscn")
 const GAME_SCENE := "res://scenes/main.tscn"
@@ -53,10 +54,14 @@ var _lan_room_ready: Button
 var _lan_room_start: Button
 var _lan_room_is_local := false
 var _lan_room_ready_state := false
+var _local_characters: Array = []
+var _local_minigames: Array = []
 
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_local_characters = CONTENT_REGISTRY.load_characters()
+	_local_minigames = CONTENT_REGISTRY.load_minigames()
 	_build_interface()
 	_connect_network()
 	_load_name()
@@ -201,13 +206,21 @@ func _build_lan_room_screen(parent: Control) -> VBoxContainer:
 	_lan_room_mode.name = "SelectedMinigame"
 	_lan_room_mode.custom_minimum_size = Vector2(0.0, 54.0)
 	_lan_room_mode.add_theme_font_size_override("font_size", 19)
-	_lan_room_mode.add_item("MINIJUEGO: FÚTBOL DE REBOTE", 0)
+	for index in _local_minigames.size():
+		_lan_room_mode.add_item(
+			"MINIJUEGO: %s" % _local_minigames[index].display_name,
+			index
+		)
 	screen.add_child(_lan_room_mode)
 	_lan_room_character = OptionButton.new()
 	_lan_room_character.name = "SelectedCharacter"
 	_lan_room_character.custom_minimum_size = Vector2(0.0, 54.0)
 	_lan_room_character.add_theme_font_size_override("font_size", 19)
-	_lan_room_character.add_item("PERSONAJE: %s" % CHARACTER_CATALOG.NAMES[0], 0)
+	for index in _local_characters.size():
+		_lan_room_character.add_item(
+			"PERSONAJE: %s" % _local_characters[index].display_name,
+			index
+		)
 	_lan_room_character.item_selected.connect(_on_lan_character_selected)
 	screen.add_child(_lan_room_character)
 	var note := _label("El anfitrión elige el minijuego; todos deben marcar LISTO.", 15)
@@ -385,7 +398,13 @@ func _toggle_lan_ready() -> void:
 
 
 func _on_lan_character_selected(index: int) -> void:
-	network.color_index = CHARACTER_CATALOG.sanitize_index(index)
+	if index < 0 or index >= _local_characters.size():
+		return
+	ProjectSettings.set_setting(
+		"oneproyect/session_character_path",
+		_local_characters[index].resource_path
+	)
+	network.color_index = 0
 	_save_character()
 
 
@@ -397,6 +416,12 @@ func _start_lan_room() -> void:
 		"oneproyect/session_mode",
 		"local" if _lan_room_is_local else "lan"
 	)
+	var selected_mode := _lan_room_mode.selected
+	if selected_mode >= 0 and selected_mode < _local_minigames.size():
+		ProjectSettings.set_setting(
+			"oneproyect/session_minigame_path",
+			_local_minigames[selected_mode].resource_path
+		)
 	_loading_game = true
 	_show_loading(
 		LOCAL_LAB_SCENE,

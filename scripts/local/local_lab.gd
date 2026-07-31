@@ -29,6 +29,7 @@ var _last_metrics: Dictionary = {}
 var _penalty_buttons: Array[TouchActionButton] = []
 var _launched_from_room := false
 var _match_has_started := false
+var _selected_map: MinigameMapDefinition = LAB_MAP
 
 
 func _ready() -> void:
@@ -37,6 +38,7 @@ func _ready() -> void:
 	if network != null and network.has_method("disconnect_session"):
 		network.call("disconnect_session")
 	_build_island_once()
+	_load_room_content()
 	$HUD/DiagnosticsPanel.hide()
 	hand_button.hide()
 	_create_penalty_buttons()
@@ -49,7 +51,7 @@ func _ready() -> void:
 	player.metrics_changed.connect(_on_player_metrics)
 	playable_area.area_changed.connect(_on_area_changed)
 	round_controller.configure(
-		LAB_MAP,
+		_selected_map,
 		map_host,
 		football_host,
 		player,
@@ -71,6 +73,18 @@ func _ready() -> void:
 	if _launched_from_room:
 		round_button.hide()
 		call_deferred("start_reference_round")
+
+
+func _load_room_content() -> void:
+	var minigame_path := str(ProjectSettings.get_setting("oneproyect/session_minigame_path", ""))
+	var minigame: Variant = null
+	if not minigame_path.is_empty():
+		minigame = load(minigame_path)
+	if minigame != null and minigame.map_definition != null:
+		_selected_map = minigame.map_definition
+	var character_path := str(ProjectSettings.get_setting("oneproyect/session_character_path", ""))
+	if not character_path.is_empty():
+		player.set_meta("character_definition_path", character_path)
 
 
 func _unhandled_input(event: InputEvent) -> void:
