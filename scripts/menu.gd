@@ -60,6 +60,10 @@ func _ready() -> void:
 	_build_interface()
 	_connect_network()
 	_load_name()
+	if bool(ProjectSettings.get_setting("oneproyect/reopen_room", false)):
+		ProjectSettings.set_setting("oneproyect/reopen_room", false)
+		call_deferred("_reopen_room_setup")
+		return
 	if network.is_in_waiting_room():
 		if not network.replay_waiting_room():
 			_show_screen(_waiting_screen)
@@ -69,6 +73,10 @@ func _ready() -> void:
 		_on_lobby_ready(NET.MAX_ROOMS, NET.MAX_PLAYERS_PER_ROOM)
 	else:
 		_show_screen(_main_screen)
+
+
+func _reopen_room_setup() -> void:
+	_enter_lan_room(ProjectSettings.get_setting("oneproyect/session_mode", "local") == "local")
 
 
 func _build_interface() -> void:
@@ -199,8 +207,7 @@ func _build_lan_room_screen(parent: Control) -> VBoxContainer:
 	_lan_room_character.name = "SelectedCharacter"
 	_lan_room_character.custom_minimum_size = Vector2(0.0, 54.0)
 	_lan_room_character.add_theme_font_size_override("font_size", 19)
-	for index in CHARACTER_CATALOG.NAMES.size():
-		_lan_room_character.add_item(CHARACTER_CATALOG.NAMES[index], index)
+	_lan_room_character.add_item("PERSONAJE: %s" % CHARACTER_CATALOG.NAMES[0], 0)
 	_lan_room_character.item_selected.connect(_on_lan_character_selected)
 	screen.add_child(_lan_room_character)
 	var note := _label("El anfitrión elige el minijuego; todos deben marcar LISTO.", 15)
@@ -272,16 +279,7 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	_character_button.custom_minimum_size = Vector2(0.0, 52.0)
 	_character_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_character_button.add_theme_font_size_override("font_size", 18)
-	for index in CHARACTER_CATALOG.NAMES.size():
-		var suffix := (
-			" · BLOQUEADO"
-			if index == CHARACTER_CATALOG.GOLDEN_INDEX
-			else ""
-		)
-		_character_button.add_item(
-			"%s%s" % [CHARACTER_CATALOG.NAMES[index], suffix],
-			index
-		)
+	_character_button.add_item("PERSONAJE: %s" % CHARACTER_CATALOG.NAMES[0], 0)
 	_character_button.item_selected.connect(_on_character_selected)
 	character_row.add_child(_character_button)
 	character_row.add_child(_build_character_preview())
@@ -394,6 +392,11 @@ func _on_lan_character_selected(index: int) -> void:
 func _start_lan_room() -> void:
 	if not _lan_room_ready_state:
 		return
+	ProjectSettings.set_setting("oneproyect/session_auto_start", true)
+	ProjectSettings.set_setting(
+		"oneproyect/session_mode",
+		"local" if _lan_room_is_local else "lan"
+	)
 	_loading_game = true
 	_show_loading(
 		LOCAL_LAB_SCENE,
@@ -592,9 +595,8 @@ func _load_name() -> void:
 		var saved := str(config.get_value("player", "name", "")).strip_edges().substr(0, 16)
 		if not saved.is_empty():
 			network.display_name = saved
-		network.color_index = CHARACTER_CATALOG.sanitize_index(
-			int(config.get_value("player", "character", network.color_index))
-		)
+		# Until there are distinct playable local models, expose one honest base body.
+		network.color_index = 0
 		_total_victories = maxi(
 			0,
 			int(config.get_value("player", "total_victories", 0))

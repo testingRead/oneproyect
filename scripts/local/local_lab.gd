@@ -3,6 +3,7 @@ extends Node3D
 
 const SCALE := preload("res://shared/gameplay_scale.gd")
 const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/campo_futbol_local.tres")
+const MENU_SCENE := "res://scenes/menu.tscn"
 
 @onready var player: LocalBaseCharacter = $World/CharacterRoot
 @onready var playable_area: LocalPlayableArea = $World/PlayableArea
@@ -26,6 +27,8 @@ const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/campo_futbol_loc
 var _area_index := 1
 var _last_metrics: Dictionary = {}
 var _penalty_buttons: Array[TouchActionButton] = []
+var _launched_from_room := false
+var _match_has_started := false
 
 
 func _ready() -> void:
@@ -42,7 +45,7 @@ func _ready() -> void:
 	look_pad.look_delta.connect(player.add_touch_look)
 	jump_button.action_pressed.connect(player.request_jump)
 	foot_button.action_pressed.connect(player.request_foot_action)
-	round_button.action_pressed.connect(start_reference_round)
+	round_button.action_pressed.connect(_on_round_button_pressed)
 	player.metrics_changed.connect(_on_player_metrics)
 	playable_area.area_changed.connect(_on_area_changed)
 	round_controller.configure(
@@ -63,6 +66,11 @@ func _ready() -> void:
 	playable_area.set_physical_walls_enabled(false)
 	_on_player_metrics(player.get_diagnostics())
 	_on_round_phase_changed(LocalRoundController.Phase.IDLE, "IDLE", 0.0)
+	_launched_from_room = bool(ProjectSettings.get_setting("oneproyect/session_auto_start", false))
+	ProjectSettings.set_setting("oneproyect/session_auto_start", false)
+	if _launched_from_room:
+		round_button.hide()
+		call_deferred("start_reference_round")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -91,10 +99,19 @@ func reset_lab() -> void:
 
 
 func start_reference_round(seed := 0) -> bool:
+	_match_has_started = true
 	var selected_seed := seed
 	if selected_seed == 0:
 		selected_seed = int(Time.get_ticks_msec())
 	return round_controller.start_round(selected_seed)
+
+
+func _on_round_button_pressed() -> void:
+	if _launched_from_room and _match_has_started:
+		ProjectSettings.set_setting("oneproyect/reopen_room", true)
+		get_tree().change_scene_to_file(MENU_SCENE)
+		return
+	start_reference_round()
 
 
 func get_active_dynamic_object_count() -> int:
@@ -163,10 +180,19 @@ func _on_round_phase_changed(
 	)
 	match next_phase:
 		LocalRoundController.Phase.IDLE:
-			round_button.show()
+			if _launched_from_room and _match_has_started:
+				round_button.set_label("VOLVER A LA SALA")
+				round_button.show()
+			else:
+				round_button.set_label("JUGAR")
+				round_button.show()
 			crosshair.hide()
 			banner_title.text = "FÚTBOL DE REBOTE"
-			banner_detail.text = "Pulsa JUGAR para entrar a la cancha"
+			banner_detail.text = (
+				"La partida terminó. Vuelve a la sala para elegir de nuevo."
+				if _launched_from_room and _match_has_started
+				else "Pulsa JUGAR para entrar a la cancha"
+			)
 			banner_progress.text = "Dos arcos · paredes · primero a 3"
 			_on_player_metrics(player.get_diagnostics())
 		LocalRoundController.Phase.PREPARE:
