@@ -30,9 +30,9 @@ godot --path . -- --local-development
 Resultado actual en Linux y ARM64:
 
 ```text
-LOCAL_BASE_OK nodes=210 objects=5 run_speed=6.00
+LOCAL_BASE_OK nodes=99 objects=0 run_speed=6.00
 jump_height=1.41 area=30
-LOCAL_FOOTBALL_OK repeats=8 score=3 baseline_nodes=210 phases=7
+LOCAL_FOOTBALL_OK repeats=8 score=3-1 baseline_nodes=99 phases=7
 ```
 
 El salto objetivo es 1,35 m; la diferencia observada hasta 1,41 m corresponde

@@ -20,15 +20,11 @@ const LAB_MAP: MinigameMapDefinition = preload("res://data/maps/campo_futbol_loc
 @onready var round_button: TouchActionButton = $HUD/Round
 @onready var crosshair: Label = $HUD/Crosshair
 @onready var map_host: LocalMapHost = $World/RoundContent/MapHost
-@onready var event_host: LocalEventHost = $World/RoundContent/EventHost
 @onready var football_host = $FootballHost
 @onready var round_controller: LocalRoundController = $RoundController
 
 var _area_index := 1
-var _initial_dynamic_count := 0
 var _last_metrics: Dictionary = {}
-var _round_warning_count := 0
-var _round_impact_count := 0
 
 
 func _ready() -> void:
@@ -37,31 +33,27 @@ func _ready() -> void:
 	if network != null and network.has_method("disconnect_session"):
 		network.call("disconnect_session")
 	_build_island_once()
-	_build_scale_references_once()
-	_build_test_course_once()
-	_initial_dynamic_count = get_active_dynamic_object_count()
+	$HUD/DiagnosticsPanel.hide()
+	hand_button.hide()
+	round_button.set_label("JUGAR")
 	joystick.value_changed.connect(player.set_touch_move)
 	look_pad.look_delta.connect(player.add_touch_look)
 	jump_button.action_pressed.connect(player.request_jump)
-	hand_button.action_pressed.connect(player.request_hand_action)
 	foot_button.action_pressed.connect(player.request_foot_action)
 	round_button.action_pressed.connect(start_reference_round)
-	player.hand_action_changed.connect(_on_hand_action_changed)
-	player.action_resolved.connect(_on_action_resolved)
 	player.metrics_changed.connect(_on_player_metrics)
 	playable_area.area_changed.connect(_on_area_changed)
 	round_controller.configure(
 		LAB_MAP,
 		map_host,
-		event_host,
 		football_host,
 		player,
 		playable_area
 	)
 	round_controller.phase_changed.connect(_on_round_phase_changed)
 	football_host.score_changed.connect(_on_football_score_changed)
-	event_host.event_warning.connect(_on_event_warning)
-	event_host.event_impact.connect(_on_event_impact)
+	football_host.goal_scored.connect(_on_goal_scored)
+	football_host.kickoff_ready.connect(_on_kickoff_ready)
 	playable_area.set_area_index(_area_index)
 	playable_area.set_physical_walls_enabled(false)
 	_on_player_metrics(player.get_diagnostics())
@@ -73,12 +65,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey:
 		match event.physical_keycode:
-			KEY_1:
-				set_playable_area_index(0)
-			KEY_2:
-				set_playable_area_index(1)
-			KEY_3:
-				set_playable_area_index(2)
 			KEY_R:
 				reset_lab()
 			KEY_ENTER:
@@ -95,17 +81,7 @@ func set_playable_area_index(index: int) -> void:
 func reset_lab() -> void:
 	round_controller.stop_and_clean()
 	player.reset_to_spawn()
-	for body in get_tree().get_nodes_in_group(&"local_test_object"):
-		if body is RigidBody3D and body.has_meta(&"initial_transform"):
-			var rigid := body as RigidBody3D
-			rigid.freeze = true
-			rigid.global_transform = rigid.get_meta(&"initial_transform")
-			rigid.linear_velocity = Vector3.ZERO
-			rigid.angular_velocity = Vector3.ZERO
-			rigid.freeze = false
-	for platform in get_tree().get_nodes_in_group(&"local_moving_platform"):
-		if platform.has_method("reset_platform"):
-			platform.call("reset_platform")
+	player.set_facing_direction(Vector3(0.0, 0.0, -1.0))
 	_on_player_metrics(player.get_diagnostics())
 
 
@@ -140,15 +116,12 @@ func get_diagnostics() -> Dictionary:
 		"playable_area_size": playable_area.get_area_size(),
 		"boundary_count": playable_area.get_wall_count(),
 		"dynamic_objects": get_active_dynamic_object_count(),
-		"initial_dynamic_objects": _initial_dynamic_count,
+		"initial_dynamic_objects": 0,
 		"round_phase": round_controller.get_phase_name(),
 		"round_seed": round_controller.round_seed,
 		"mounted_map_nodes": map_host.get_mounted_node_count(),
-		"event_pool": event_host.get_pool_size(),
-		"active_event_objects": event_host.get_active_count(),
-		"event_impacts": event_host.get_impact_count(),
-		"football_score": football_host.score,
-		"interaction_counts": get_interaction_counts(),
+		"football_home_score": football_host.score,
+		"football_away_score": football_host.opponent_score,
 		"shore_boundaries": get_tree().get_nodes_in_group(
 			&"island_shore_boundary"
 		).size(),
@@ -174,70 +147,87 @@ func _on_round_phase_changed(
 		"LISTA",
 		"PREPARANDO",
 		"REGLAS",
-		"CUENTA REGRESIVA",
-		"ACTIVA",
+		"SAQUE",
+		"JUGANDO",
 		"RESULTADO",
 		"LIMPIANDO",
 	]
 	round_label.text = (
-		"RONDA %s  ·  %.1f s  ·  semilla %d"
-		% [phase_labels[next_phase], seconds, round_controller.round_seed]
+		"FÚTBOL  %s  ·  %.1f s"
+		% [phase_labels[next_phase], seconds]
 	)
 	match next_phase:
 		LocalRoundController.Phase.IDLE:
+			round_button.show()
 			crosshair.hide()
-			banner_title.text = "LABORATORIO LOCAL"
-			banner_detail.text = (
-				"Acércate y mira un objeto: el botón cambia de acción"
-			)
-			banner_progress.text = (
-				"MANO: objetos · PIE: patear · ambos funcionan por separado"
-			)
+			banner_title.text = "FÚTBOL DE REBOTE"
+			banner_detail.text = "Pulsa JUGAR para entrar a la cancha"
+			banner_progress.text = "Dos arcos · paredes · primero a 3"
 			_on_player_metrics(player.get_diagnostics())
 		LocalRoundController.Phase.PREPARE:
+			round_button.hide()
 			crosshair.show()
-			_round_warning_count = 0
-			_round_impact_count = 0
-			banner_title.text = "MONTANDO CANCHA"
-			banner_detail.text = "Preparando el balón y la cámara en primera persona"
-			banner_progress.text = "Objetivo: marcar 3 goles"
+			banner_title.text = "PREPARANDO LA CANCHA"
+			banner_detail.text = "El balón caerá en el centro"
+			banner_progress.text = "La patada sigue al cuerpo, no a la cámara"
 		LocalRoundController.Phase.RULES:
-			banner_title.text = "FÚTBOL · PRÁCTICA"
-			banner_detail.text = "Apunta con la mira y pulsa PATEAR cerca del balón"
-			banner_progress.text = "Marca 3 goles · física nativa · sin red"
+			banner_title.text = "FÚTBOL · DOS ARCOS"
+			banner_detail.text = "Marca en el arco rival y defiende el tuyo"
+			banner_progress.text = "La pelota rebota en las paredes"
 		LocalRoundController.Phase.COUNTDOWN:
-			banner_title.text = "PREPÁRATE · 3"
-			banner_detail.text = "El arco está frente a ti"
-			banner_progress.text = "Los controles se activan al comenzar"
+			banner_title.text = "SAQUE · 3"
+			banner_detail.text = "Muévete para colocarte detrás del balón"
+			banner_progress.text = "La mira es orientativa; el pie usa tu orientación"
 		LocalRoundController.Phase.ACTIVE:
-			banner_title.text = "¡A JUGAR!"
-			banner_detail.text = "Acércate, apunta y patea"
-			banner_progress.text = "GOLES 0/3"
+			banner_title.text = "¡JUGAR!"
+			banner_detail.text = "PATEA al arco rival · protege el tuyo"
+			banner_progress.text = _score_text()
 		LocalRoundController.Phase.RESULT:
 			crosshair.hide()
+			var winner: int = football_host.get_winner()
 			banner_title.text = (
-				"¡OBJETIVO COMPLETADO!"
-				if football_host.score >= football_host.target_score
-				else "TIEMPO TERMINADO"
+				"¡GANASTE!" if winner > 0
+				else "GANÓ EL RIVAL" if winner < 0
+				else "EMPATE"
 			)
-			banner_detail.text = "La cámara volverá a tercera persona"
-			banner_progress.text = (
-				"GOLES %d/%d"
-				% [football_host.score, football_host.target_score]
-			)
+			banner_detail.text = "La cancha se limpiará y volverás a la isla"
+			banner_progress.text = _score_text()
 		LocalRoundController.Phase.CLEANUP:
-			banner_title.text = "LIMPIANDO ESCENARIO"
-			banner_detail.text = "Eliminando mapa y restaurando objetos"
-			banner_progress.text = "La siguiente ronda parte del mismo estado"
+			banner_title.text = "REINICIANDO CANCHA"
+			banner_detail.text = "Restaurando balón, jugadores y cámara"
+			banner_progress.text = "La siguiente ronda parte del centro"
 
 
-func _on_football_score_changed(score: int, target: int) -> void:
-	banner_progress.text = "GOLES %d/%d" % [score, target]
-	if score > 0 and score < target:
-		banner_detail.text = "¡GOL! El balón vuelve al punto de salida"
-	elif score >= target:
-		banner_title.text = "¡TRES GOLES!"
-		banner_detail.text = "Práctica completada"
+func _score_text() -> String:
+	return "TÚ %d  ·  RIVAL %d  ·  PRIMERO A %d" % [
+		football_host.score,
+		football_host.opponent_score,
+		football_host.target_score,
+	]
+
+
+func _on_football_score_changed(
+	_home_score: int,
+	_away_score: int,
+	_target: int
+) -> void:
+	banner_progress.text = _score_text()
+
+
+func _on_goal_scored(scoring_side: StringName) -> void:
+	banner_detail.text = (
+		"¡GOL TUYO! El balón vuelve al centro"
+		if scoring_side == &"home"
+		else "¡GOL DEL RIVAL! El balón vuelve al centro"
+	)
+
+
+func _on_kickoff_ready() -> void:
+	if round_controller.phase != LocalRoundController.Phase.ACTIVE:
+		return
+	player.set_spawn_transform(map_host.get_spawn_transform(0))
+	player.set_facing_direction(Vector3(0.0, 0.0, -1.0))
+	banner_detail.text = "Saque desde el centro"
 
 
 func _on_player_metrics(metrics: Dictionary) -> void:
@@ -247,7 +237,7 @@ func _on_player_metrics(metrics: Dictionary) -> void:
 	metrics_label.text = (
 		"POS  %6.2f  %5.2f  %6.2f\n"
 		+ "VEL  %5.2f m/s  SUELO %s  MOV %4.2f\n"
-		+ "PIE VIS %+.3f  CÁPSULA %+.3f  OBJ %d/%d"
+		+ "PIE VIS %+.3f  CÁPSULA %+.3f"
 	) % [
 		position.x,
 		position.y,
@@ -257,67 +247,14 @@ func _on_player_metrics(metrics: Dictionary) -> void:
 		float(metrics.movement_ratio),
 		float(metrics.visual_foot),
 		float(metrics.collision_bottom),
-		get_active_dynamic_object_count(),
-		_initial_dynamic_count,
 	]
 
 
-func _on_area_changed(size: float, bounds: Rect2) -> void:
-	area_label.text = (
-		"EVENTOS %d × %d m  ·  ISLA %d × %d m  ·  COSTA FÍSICA"
-		% [
-			int(size),
-			int(size),
-			int(SCALE.ISLAND_SIZE),
-			int(SCALE.ISLAND_SIZE),
-		]
-	)
-
-
-func _on_hand_action_changed(label: String) -> void:
-	hand_button.set_label(label)
-
-
-func _on_action_resolved(action: StringName, hit: bool) -> void:
-	if round_controller.phase != LocalRoundController.Phase.IDLE:
-		return
-	match action:
-		LocalBaseCharacter.ACTION_KICK:
-			banner_progress.text = (
-				"PATADA: contacto con el balón"
-				if hit
-				else "PATADA: fallaste; el balón no estaba frente al pie"
-			)
-		LocalBaseCharacter.ACTION_TAKE:
-			banner_progress.text = (
-				"PIEDRA EQUIPADA · pulsa LANZAR"
-				if hit
-				else "PIEDRA: acércate un poco más para tomarla"
-			)
-		LocalBaseCharacter.ACTION_THROW:
-			banner_progress.text = "PIEDRA LANZADA"
-		_:
-			banner_progress.text = (
-				"EMPUJE: objeto alcanzado"
-				if hit
-				else "EMPUJE: acércate y mira hacia un objeto"
-			)
-
-
-func _on_event_warning(_position: Vector3, _index: int) -> void:
-	_round_warning_count += 1
-	banner_progress.text = (
-		"Advertencias %d/3 · impactos %d/3"
-		% [_round_warning_count, _round_impact_count]
-	)
-
-
-func _on_event_impact(_position: Vector3) -> void:
-	_round_impact_count += 1
-	banner_progress.text = (
-		"Advertencias %d/3 · impactos %d/3"
-		% [_round_warning_count, _round_impact_count]
-	)
+func _on_area_changed(size: float, _bounds: Rect2) -> void:
+	area_label.text = "ISLA %d × %d m  ·  CANCHA 22 × 34 m" % [
+		int(SCALE.ISLAND_SIZE),
+		int(SCALE.ISLAND_SIZE),
+	]
 
 
 func _build_island_once() -> void:
@@ -348,150 +285,6 @@ func _build_island_once() -> void:
 	ocean.material_override = ocean_material
 	ocean.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	content.add_child(ocean)
-	_add_grid(content)
-
-
-func _build_scale_references_once() -> void:
-	var content := $World/ScaleReferences
-	if content.get_child_count() > 0:
-		return
-	var neutral := _material(Color(0.72, 0.77, 0.82), 0.9)
-	var accent := _material(Color(0.96, 0.62, 0.12), 0.84)
-	for metre in 4:
-		_add_visual_box(
-			content,
-			"Ruler%d" % metre,
-			Vector3(-6.0, float(metre) + 0.5, -5.5),
-			Vector3(0.12, 1.0, 0.12),
-			accent if metre % 2 == 0 else neutral
-		)
-	_add_static_box(
-		content,
-		"DoorLeft",
-		Vector3(-3.0 - SCALE.MINIMUM_PASSAGE_WIDTH * 0.5, SCALE.MINIMUM_DOOR_HEIGHT * 0.5, -5.5),
-		Vector3(0.16, SCALE.MINIMUM_DOOR_HEIGHT, 0.22),
-		neutral
-	)
-	_add_static_box(
-		content,
-		"DoorRight",
-		Vector3(-3.0 + SCALE.MINIMUM_PASSAGE_WIDTH * 0.5, SCALE.MINIMUM_DOOR_HEIGHT * 0.5, -5.5),
-		Vector3(0.16, SCALE.MINIMUM_DOOR_HEIGHT, 0.22),
-		neutral
-	)
-	_add_static_box(
-		content,
-		"DoorTop",
-		Vector3(-3.0, SCALE.MINIMUM_DOOR_HEIGHT + 0.12, -5.5),
-		Vector3(SCALE.MINIMUM_PASSAGE_WIDTH + 0.16, 0.24, 0.22),
-		neutral
-	)
-	_add_static_box(
-		content,
-		"StandardPlatform",
-		Vector3(1.5, SCALE.STANDARD_PLATFORM_HEIGHT * 0.5, -5.5),
-		Vector3(3.0, SCALE.STANDARD_PLATFORM_HEIGHT, 2.4),
-		accent
-	)
-
-
-func _build_test_course_once() -> void:
-	var content := $World/TestCourse
-	if content.get_child_count() > 0:
-		return
-	var structure := _material(Color(0.22, 0.34, 0.48), 0.88)
-	var object_material := _material(Color(0.88, 0.42, 0.12), 0.82)
-	_add_static_box(
-		content,
-		"Wall",
-		Vector3(8.0, 1.0, 1.5),
-		Vector3(5.0, 2.0, 0.35),
-		structure
-	)
-	content.get_node("Wall").add_to_group(&"interaction_static")
-	var slope := _add_static_box(
-		content,
-		"Slope",
-		Vector3(-7.0, 0.72, 3.0),
-		Vector3(5.0, 0.35, 3.0),
-		structure
-	)
-	slope.rotation_degrees.z = -14.0
-	var moving_platform := _add_moving_platform(content, structure)
-	_add_object_label(moving_platform, "PLATAFORMA MÓVIL", 0.45, Color(0.5, 0.85, 1.0))
-	var small_box := _add_rigid_box(
-		content,
-		"SmallBox",
-		Vector3(3.0, SCALE.SMALL_OBJECT_SIZE * 0.5, 3.0),
-		Vector3.ONE * SCALE.SMALL_OBJECT_SIZE,
-		0.7,
-		object_material
-	)
-	_add_object_label(small_box, "CAJA LIGERA · 0.7 kg", 0.65, Color(1.0, 0.78, 0.28))
-	var ball := _add_rigid_sphere(
-		content,
-		"Ball",
-		Vector3(-3.5, 0.23, 5.0),
-		0.22,
-		0.43,
-		_material(Color(0.92, 0.9, 0.78), 0.68),
-		Vector3.ONE
-	)
-	ball.add_to_group(&"kickable_ball")
-	_add_object_label(ball, "BALÓN · 0.43 kg · PATEAR", 0.68, Color(1.0, 0.96, 0.72))
-	var rock := _add_rigid_sphere(
-		content,
-		"Rock",
-		Vector3(-5.0, 0.15, 5.0),
-		0.14,
-		0.32,
-		_material(Color(0.36, 0.38, 0.4), 0.98),
-		Vector3.ONE
-	)
-	rock.add_to_group(&"pickup_stone")
-	rock.add_collision_exception_with(player)
-	player.add_collision_exception_with(rock)
-	_add_object_label(rock, "PIEDRA · TOMAR / LANZAR", 0.55, Color(0.86, 0.9, 0.95))
-	var medium_box := _add_rigid_box(
-		content,
-		"MediumBox",
-		Vector3(4.5, SCALE.MEDIUM_OBJECT_SIZE * 0.5, 3.0),
-		Vector3.ONE * SCALE.MEDIUM_OBJECT_SIZE,
-		4.0,
-		object_material
-	)
-	_add_object_label(medium_box, "CAJA MEDIA · 4 kg", 1.05, Color(1.0, 0.68, 0.22))
-	var large_box := _add_rigid_box(
-		content,
-		"LargeBox",
-		Vector3(7.0, SCALE.LARGE_OBJECT_SIZE * 0.5, 4.0),
-		Vector3.ONE * SCALE.LARGE_OBJECT_SIZE,
-		18.0,
-		object_material
-	)
-	_add_object_label(large_box, "CAJA PESADA · 18 kg", 1.65, Color(1.0, 0.5, 0.16))
-
-
-func _add_grid(parent: Node3D) -> void:
-	var grid_material := _material(Color(0.7, 0.9, 0.84, 0.18), 1.0)
-	grid_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	grid_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	var half := SCALE.ISLAND_SIZE * 0.5
-	for coordinate in range(-60, 61, 5):
-		_add_visual_box(
-			parent,
-			"GridX%d" % coordinate,
-			Vector3(float(coordinate), 0.006, 0.0),
-			Vector3(0.025, 0.012, half * 2.0),
-			grid_material
-		)
-		_add_visual_box(
-			parent,
-			"GridZ%d" % coordinate,
-			Vector3(0.0, 0.007, float(coordinate)),
-			Vector3(half * 2.0, 0.012, 0.025),
-			grid_material
-		)
 
 
 func _add_static_box(
@@ -522,152 +315,6 @@ func _add_static_box(
 	body.add_child(mesh)
 	parent.add_child(body)
 	return body
-
-
-func _add_visual_box(
-	parent: Node3D,
-	node_name: String,
-	position_value: Vector3,
-	size: Vector3,
-	material: StandardMaterial3D
-) -> MeshInstance3D:
-	var mesh := MeshInstance3D.new()
-	mesh.name = node_name
-	mesh.position = position_value
-	var box := BoxMesh.new()
-	box.size = size
-	mesh.mesh = box
-	mesh.material_override = material
-	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(mesh)
-	return mesh
-
-
-func _add_rigid_box(
-	parent: Node3D,
-	node_name: String,
-	position_value: Vector3,
-	size: Vector3,
-	mass_value: float,
-	material: StandardMaterial3D
-) -> RigidBody3D:
-	var body := RigidBody3D.new()
-	body.name = node_name
-	body.position = position_value
-	body.mass = mass_value
-	body.collision_layer = 1
-	body.collision_mask = 3
-	body.add_to_group(&"local_test_object")
-	body.add_to_group(&"interaction_movable")
-	var collision := CollisionShape3D.new()
-	collision.name = "Collision"
-	var shape := BoxShape3D.new()
-	shape.size = size
-	collision.shape = shape
-	body.add_child(collision)
-	var mesh := MeshInstance3D.new()
-	mesh.name = "Mesh"
-	var box := BoxMesh.new()
-	box.size = size
-	mesh.mesh = box
-	mesh.material_override = material
-	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	body.add_child(mesh)
-	parent.add_child(body)
-	body.set_meta(&"initial_transform", body.global_transform)
-	return body
-
-
-func _add_rigid_sphere(
-	parent: Node3D,
-	node_name: String,
-	position_value: Vector3,
-	radius: float,
-	mass_value: float,
-	material: StandardMaterial3D,
-	visual_scale: Vector3
-) -> RigidBody3D:
-	var body := RigidBody3D.new()
-	body.name = node_name
-	body.position = position_value
-	body.mass = mass_value
-	body.collision_layer = 1
-	body.collision_mask = 3
-	body.add_to_group(&"local_test_object")
-	body.add_to_group(&"interaction_movable")
-	var physics_material := PhysicsMaterial.new()
-	physics_material.friction = 0.58 if node_name == "Ball" else 0.82
-	physics_material.bounce = 0.52 if node_name == "Ball" else 0.06
-	body.physics_material_override = physics_material
-	var collision := CollisionShape3D.new()
-	var shape := SphereShape3D.new()
-	shape.radius = radius
-	collision.shape = shape
-	body.add_child(collision)
-	var mesh := MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = radius
-	sphere.height = radius * 2.0
-	sphere.radial_segments = 16
-	sphere.rings = 8
-	mesh.mesh = sphere
-	mesh.scale = visual_scale
-	mesh.material_override = material
-	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	body.add_child(mesh)
-	parent.add_child(body)
-	body.set_meta(&"initial_transform", body.global_transform)
-	return body
-
-
-func _add_moving_platform(
-	parent: Node3D,
-	material: StandardMaterial3D
-) -> AnimatableBody3D:
-	var platform := AnimatableBody3D.new()
-	platform.name = "MovingPlatform"
-	platform.position = Vector3(-2.0, 0.55, 5.5)
-	platform.set_script(load("res://scripts/local/moving_platform.gd"))
-	platform.set("travel", Vector3(4.0, 0.0, 0.0))
-	platform.add_to_group(&"local_moving_platform")
-	platform.add_to_group(&"interaction_mobile")
-	platform.collision_layer = 1
-	var size := Vector3(2.6, 0.3, 2.6)
-	var collision := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = size
-	collision.shape = shape
-	platform.add_child(collision)
-	var mesh := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = size
-	mesh.mesh = box
-	mesh.material_override = material
-	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	platform.add_child(mesh)
-	parent.add_child(platform)
-	return platform
-
-
-func _add_object_label(
-	parent: Node3D,
-	text_value: String,
-	height: float,
-	color: Color
-) -> void:
-	var label := Label3D.new()
-	label.name = "ObjectLabel"
-	label.position.y = height
-	label.text = text_value
-	label.font_size = 28
-	label.pixel_size = 0.009
-	label.modulate = color
-	label.outline_modulate = Color(0.015, 0.025, 0.04, 0.95)
-	label.outline_size = 7
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.render_priority = 2
-	parent.add_child(label)
 
 
 func _add_shore_boundaries(parent: Node3D) -> void:

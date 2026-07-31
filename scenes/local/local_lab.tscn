@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/local/local_lab.gd" id="1_lab"]
 [ext_resource type="PackedScene" path="res://scenes/local/base_character.tscn" id="2_character"]
@@ -7,7 +7,6 @@
 [ext_resource type="Script" path="res://scripts/look_pad.gd" id="5_look"]
 [ext_resource type="Script" path="res://scripts/touch_action_button.gd" id="6_button"]
 [ext_resource type="Script" path="res://scripts/local/local_map_host.gd" id="7_map_host"]
-[ext_resource type="Script" path="res://scripts/local/local_event_host.gd" id="8_event_host"]
 [ext_resource type="Script" path="res://scripts/local/local_round_controller.gd" id="9_round"]
 [ext_resource type="Script" path="res://scripts/local/local_football_host.gd" id="10_football"]
 
@@ -48,17 +47,10 @@ shadow_enabled = false
 
 [node name="PhysicalWorld" type="Node3D" parent="World"]
 
-[node name="ScaleReferences" type="Node3D" parent="World"]
-
-[node name="TestCourse" type="Node3D" parent="World"]
-
 [node name="RoundContent" type="Node3D" parent="World"]
 
 [node name="MapHost" type="Node3D" parent="World/RoundContent"]
 script = ExtResource("7_map_host")
-
-[node name="EventHost" type="Node3D" parent="World/RoundContent"]
-script = ExtResource("8_event_host")
 
 [node name="PlayableArea" type="Node3D" parent="World"]
 script = ExtResource("3_area")
@@ -149,7 +141,7 @@ offset_bottom = 50.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(0.9, 0.94, 1, 0.9)
 theme_override_font_sizes/font_size = 15
-text = "IZQUIERDA mover · DERECHA cámara · MANO · PATEAR · SALTO"
+text = "IZQUIERDA mover · DERECHA cámara · PATEAR · SALTO"
 horizontal_alignment = 2
 
 [node name="RoundBanner" type="PanelContainer" parent="HUD"]
@@ -191,7 +183,7 @@ horizontal_alignment = 1
 layout_mode = 2
 theme_override_colors/font_color = Color(0.38, 0.95, 0.88, 1)
 theme_override_font_sizes/font_size = 14
-text = "BALÓN: PATEAR · PIEDRA: TOMAR/LANZAR"
+text = "FÚTBOL DE REBOTE · DOS ARCOS · PRIMERO A TRES"
 horizontal_alignment = 1
 
 [node name="LookPad" type="Control" parent="HUD"]

@@ -8,8 +8,8 @@ de decidir qué resultados necesitarán autoridad remota.
 
 - `MinigameMapDefinition`: datos inmutables del contenido; no ejecuta física.
 - `LocalMapHost`: monta una construcción para la semilla y la elimina completa.
-- `LocalEventHost`: conserva el evento físico de referencia anterior, aislado
-  y disponible para futuros modos de desastre.
+- `LocalEventHost`: no se monta en la escena oficial de fútbol; queda reservado
+  para un futuro módulo de desastres.
 - `LocalFootballHost`: cuenta goles, restablece el balón y termina la práctica;
   no crea geometría ni reemplaza la física nativa del balón.
 - `LocalRoundController`: único dueño de fases, tiempos, bloqueo de controles y
@@ -27,7 +27,8 @@ El mapa declara:
 
 La semilla sigue formando parte del contrato aunque el primer campo sea
 determinista. `campo_futbol_local` es el primer paquete de minijuego completo:
-escena propia, cinco puntos de aparición, cancha cerrada, portería y balón
+escena propia, cinco puntos de aparición, cancha, dos porterías, paredes de
+rebote y balón
 `RigidBody3D`. `LocalMapHost` instancia `map_scene` y sólo conserva el
 constructor anterior como fallback para definiciones sin escena. No existe
 generación procedural ambiciosa.
@@ -52,7 +53,7 @@ restauran la cámara en tercera persona.
 - gol y resultado compartido: autoridad futura;
 - balón visual, animaciones, audio y mira: local.
 
-Esta clasificación documenta el destino futuro, pero el laboratorio sigue
+Esta clasificación documenta el destino futuro, pero el partido actual sigue
 siendo completamente local hasta su aprobación en el POCO.
 
 La zona de evento no implica una pared. En la isla de referencia, la costa es

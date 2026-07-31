@@ -253,6 +253,22 @@ func is_first_person() -> bool:
 	return _first_person
 
 
+func set_facing_direction(direction: Vector3) -> void:
+	var horizontal := Vector3(direction.x, 0.0, direction.z)
+	if horizontal.length_squared() < 0.001:
+		return
+	horizontal = horizontal.normalized()
+	visual_root.rotation.y = atan2(horizontal.x, horizontal.z)
+
+
+func get_facing_direction() -> Vector3:
+	var direction := visual_root.global_basis.z
+	direction.y = 0.0
+	if direction.length_squared() < 0.001:
+		return Vector3.FORWARD
+	return direction.normalized()
+
+
 func add_touch_look(delta: Vector2) -> void:
 	camera_pivot.rotation.y -= delta.x * 0.0035
 	camera_pivot.rotation.x = clampf(
@@ -375,13 +391,14 @@ func _refresh_interaction_context() -> void:
 
 func _begin_kick() -> bool:
 	_foot_cooldown = 0.52
+	_align_foot_action()
+	interaction_action.force_shapecast_update()
 	_kick_target = _get_nearest_body_in_group(
-		interaction_context,
+		interaction_action,
 		&"kickable_ball"
 	)
 	_kick_pending = true
 	_kick_elapsed = 0.0
-	_face_interaction_direction()
 	visual_root.trigger_kick()
 	return true
 
@@ -393,7 +410,7 @@ func _resolve_kick(delta: float) -> void:
 	if _kick_elapsed < 0.18:
 		return
 	_kick_pending = false
-	_align_interaction_nodes()
+	_align_foot_action()
 	interaction_action.force_shapecast_update()
 	var hit := (
 		is_instance_valid(_kick_target)
@@ -401,7 +418,7 @@ func _resolve_kick(delta: float) -> void:
 		and _kick_target.is_in_group(&"kickable_ball")
 	)
 	if hit:
-		var direction := _get_interaction_direction()
+		var direction := get_facing_direction()
 		_kick_target.sleeping = false
 		_kick_target.apply_central_impulse(
 			direction * 4.4 + Vector3.UP * 0.72
@@ -409,6 +426,11 @@ func _resolve_kick(delta: float) -> void:
 	action_resolved.emit(ACTION_KICK, hit)
 	_kick_target = null
 	_refresh_interaction_context()
+
+
+func _align_foot_action() -> void:
+	# The model's local +Z is its face, while ShapeCast3D points along -Z.
+	interaction_action.rotation.y = visual_root.rotation.y - PI
 
 
 func _take_context_object() -> bool:

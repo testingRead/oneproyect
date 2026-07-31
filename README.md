@@ -13,13 +13,9 @@ siquiera el singleton de red:
 godot --path . -- --local-development
 ```
 
-La isla conserva un mundo físico de 150 × 150 m y cambia el área jugable entre
-30, 60 y 100 m reutilizando las mismas cuatro barreras. Incluye personaje
-estándar, regla vertical, puerta, plataforma, pendiente, plataforma móvil y
-cinco objetos físicos de referencia. La costa es el límite físico natural; los
-tamaños 30/60/100 m delimitan eventos y sólo crean paredes interiores cuando
-un minijuego cerrado lo solicita. Sus medidas, auditoría y estado de
-aprobación están en:
+La isla conserva un mundo físico de 150 × 150 m. La costa es el límite físico
+natural y la escena local ya no contiene patio, cajas, rampas, piedras ni
+referencias de laboratorio. Sus medidas y pruebas están en:
 
 - [contrato de escala](docs/LOCAL_BASE_SCALE.md);
 - [auditoría A/B/C/D](docs/LOCAL_BASE_AUDIT.md);
@@ -28,10 +24,11 @@ aprobación están en:
 
 `ENTER` o **RONDA** ejecuta localmente preparar → reglas → cuenta regresiva →
 actividad → resultado → limpieza. El primer minijuego monta
-`campo_futbol_local`: una cancha cerrada, un balón físico de masa declarada y
-un arco con detector de gol. La ronda usa primera persona y mira central sólo
-durante el juego, termina al marcar tres goles y vuelve al laboratorio en
-tercera persona sin conservar nodos ni señales de la cancha.
+`campo_futbol_local`: una cancha sobre la isla, dos arcos, paredes físicas de
+rebote y un balón que cae al centro en cada saque. La ronda usa primera persona
+y mira central sólo durante el juego, termina al marcar tres goles o al agotarse
+el tiempo, y vuelve a la isla en tercera persona sin conservar nodos ni señales
+de la cancha.
 La escena multijugador previa permanece congelada hasta aprobar esta experiencia
 local y añadir un NPC basado en el mismo personaje.
 
@@ -45,21 +42,13 @@ a Downloads.
 - Escritorio: WASD o flechas para moverse, ratón para cámara, Espacio para
   saltar, `P`/Escape para pausa y `R` para reiniciar.
 - Android: toda la mitad izquierda acepta un joystick flotante y toda la
-  derecha queda para mirar, salvo los botones **SALTO** y **EMPUJAR**.
-  El empujón alcanza solamente a un jugador cercano frente a la cámara.
+  derecha queda para mirar, salvo **SALTO** y **PATEAR**. La patada usa la
+  orientación del personaje, no el último giro independiente de la cámara.
 
-La primera arena, **Plaza Caos**, alterna tres desastres:
-
-- lluvia de meteoritos con marcas, refugios, daño e impulso físico;
-- pulso sísmico, un único anillo reutilizable que debe saltarse o evitarse
-  subiendo a la plataforma central.
-- inundación ascendente, un único plano de agua que obliga a buscar altura.
-
-Los techos bloquean físicamente las explosiones: refugiarse es una mecánica real,
-no solamente decorativa. Ninguno de los dos modos crea nodos durante la ronda.
-El contador superior muestra FPS y tiempo aproximado por frame. El daño tiene
-respuesta visual y vibración breve en Android; una racha de rondas y el récord
-personal guardado dan un objetivo inmediato sin añadir recursos pesados.
+El modo activo es fútbol de rebote. Los goles se clasifican como `TÚ` o
+`RIVAL`; después de cada gol se reposiciona el jugador y el balón vuelve a caer
+desde el centro. Los desastres y mapas anteriores quedan fuera de esta ruta y
+se retomarán como contenido independiente.
 
 El menú guarda nombre, personaje, sonido, vibración, cámara en primera/tercera
 persona, sensibilidad, límite de 30/45/60 FPS y tres perfiles de calidad. Las

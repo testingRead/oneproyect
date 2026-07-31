@@ -17,16 +17,13 @@ func _run() -> void:
 		BOOTSTRAP.is_local_development(["--local-development"]),
 		"LOCAL_DEVELOPMENT must have one explicit command-line switch"
 	)
-	_require(
-		not root.has_node("Network"),
-		"Local base test must start without a Network singleton"
-	)
+	_require(not root.has_node("Network"), "Local base must not create Network")
 	_require(
 		is_equal_approx(SCALE.CHARACTER_HEIGHT, 1.8)
 		and is_equal_approx(SCALE.CHARACTER_MASS, 70.0)
 		and is_equal_approx(SCALE.COLLISION_HEIGHT, 1.72)
 		and is_equal_approx(SCALE.COLLISION_RADIUS, 0.34),
-		"Character scale and reference mass must come from the official contract"
+		"Character scale must come from the official contract"
 	)
 	_require(
 		is_equal_approx(
@@ -47,69 +44,60 @@ func _run() -> void:
 		"Lab must declare its runtime mode"
 	)
 	_require(
-		lab.playable_area.get_wall_count() == 4
-		and not lab.playable_area.are_physical_walls_enabled(),
-		"Event areas must reuse four optional walls but island mode keeps them disabled"
+		lab.get_active_dynamic_object_count() == 0
+		and lab.get_node_or_null("World/ScaleReferences") == null
+		and lab.get_node_or_null("World/TestCourse") == null,
+		"The old laboratory course must not exist in the football scene"
 	)
 	_require(
-		lab.get_active_dynamic_object_count() == 5,
-		"Lab must expose three boxes, one rolling ball and one rock"
+		lab.playable_area.get_wall_count() == 4
+		and not lab.playable_area.are_physical_walls_enabled(),
+		"Island mode keeps optional inner walls disabled"
 	)
 	_require(
 		lab.get_diagnostics().shore_boundaries == 4,
-		"The island shore must be the permanent physical boundary"
-	)
-	var interaction_counts: Dictionary = lab.get_interaction_counts()
-	_require(
-		interaction_counts.static >= 1
-		and interaction_counts.mobile == 1
-		and interaction_counts.movable == 5,
-		"Objects must declare static, programmed-mobile or user-movable ownership"
+		"The island shore must remain the permanent physical boundary"
 	)
 	_require(
 		player.has_node("Collision")
 		and player.has_node("VisualRoot/Model")
-		and player.has_node("CameraPivot")
 		and player.has_node("CameraPivot/SpringArm/Camera")
 		and player.has_node("AnchorPoints/Feet")
 		and player.has_node("AnchorPoints/HeldItem")
-		and player.has_node("VisualRoot/Model/RightArmPivot/ItemSocket")
 		and player.has_node("InteractionContext")
 		and player.has_node("InteractionAction"),
-		"Character must separate collision, visual, camera, anchors and interaction probe"
+		"Character must keep physics, visual, camera and interaction anchors"
 	)
+	_require(player.is_on_floor(), "Character must settle on the island floor")
+	_require(
+		absf(player.get_collision_bottom_height()) < 0.035
+		and absf(player.get_visual_foot_height()) < 0.035,
+		"Visual feet and collision bottom must share the island floor"
+	)
+
 	player.set_first_person(true)
 	_require(
 		player.is_first_person()
 		and not player.visual_root.visible
 		and is_zero_approx(player.spring_arm.spring_length),
-		"First-person mode must hide only the representation and keep the controller"
+		"First person must hide only the representation"
 	)
 	player.set_first_person(false)
 	_require(
 		not player.is_first_person()
 		and player.visual_root.visible
 		and is_equal_approx(player.spring_arm.spring_length, 4.8),
-		"Third-person camera must restore its official distance exactly"
-	)
-	_require(
-		player.is_on_floor(),
-		"Standard character must settle on the reference floor"
-	)
-	_require(
-		absf(player.get_collision_bottom_height()) < 0.035
-		and absf(player.get_visual_foot_height()) < 0.035,
-		"Visual feet and collision bottom must share the floor origin"
+		"Third person must restore its official distance"
 	)
 
 	var baseline_nodes := get_node_count()
 	for index in 12:
-		lab.set_playable_area_index(index % 3)
 		lab.reset_lab()
+		lab.set_playable_area_index(index % 3)
 		await physics_frame
 	_require(
 		get_node_count() == baseline_nodes,
-		"Changing limits and resetting must not create residual nodes"
+		"Resetting the island must not create residual nodes"
 	)
 	for area_index in 3:
 		lab.set_playable_area_index(area_index)
@@ -120,7 +108,7 @@ func _run() -> void:
 		][area_index]
 		_require(
 			is_equal_approx(lab.playable_area.get_area_size(), expected),
-			"Small, medium and large limits must be parameter-only variants"
+			"Area sizes must remain parameter-only variants"
 		)
 
 	lab.set_playable_area_index(0)
@@ -133,7 +121,7 @@ func _run() -> void:
 	player.set_touch_move(Vector2.ZERO)
 	_require(
 		player.global_position.x <= 14.58,
-		"Minigames must be able to opt into a small physical boundary"
+		"A closed minigame must be able to use the optional area boundary"
 	)
 	lab.playable_area.set_physical_walls_enabled(false)
 
@@ -145,7 +133,7 @@ func _run() -> void:
 	player.set_touch_move(Vector2.ZERO)
 	_require(
 		player.global_position.x <= 59.15,
-		"Permanent shore collision must keep the character out of the ocean"
+		"The permanent shore must keep the character out of the ocean"
 	)
 
 	player.reset_to_spawn()
@@ -165,7 +153,7 @@ func _run() -> void:
 		await physics_frame
 	_require(
 		Vector2(player.velocity.x, player.velocity.z).length() < 0.08,
-		"Local deceleration must stop the player without network correction"
+		"Local deceleration must stop without network correction"
 	)
 
 	player.reset_to_spawn()
@@ -181,10 +169,7 @@ func _run() -> void:
 	)
 	for frame in 100:
 		await physics_frame
-	_require(
-		absf(player.velocity.x) < 0.1,
-		"External impulses must decay without accumulating every frame"
-	)
+	_require(absf(player.velocity.x) < 0.1, "External impulses must decay")
 
 	player.reset_to_spawn()
 	for frame in 20:
@@ -201,25 +186,20 @@ func _run() -> void:
 	)
 	_require(
 		player.is_on_floor() and absf(player.get_visual_foot_height()) < 0.04,
-		"Landing must return visual feet to the same floor reference"
+		"Landing must return the feet to the island floor"
 	)
 
 	await _verify_statures()
-	await _verify_slope_contact(lab, player)
-	await _verify_moving_platform(lab, player)
-	await _verify_movable_objects(lab)
-
 	var diagnostics := lab.get_diagnostics()
 	_require(
-		diagnostics.dynamic_objects == diagnostics.initial_dynamic_objects
+		diagnostics.dynamic_objects == 0
 		and diagnostics.boundary_count == 4,
-		"Diagnostics must prove reset completeness"
+		"Diagnostics must prove the clean island baseline"
 	)
 	print(
-		"LOCAL_BASE_OK nodes=%d objects=%d run_speed=%.2f jump_height=%.2f foot=%.3f area=%.0f"
+		"LOCAL_BASE_OK nodes=%d objects=0 run_speed=%.2f jump_height=%.2f foot=%.3f area=%.0f"
 		% [
 			get_node_count(),
-			lab.get_active_dynamic_object_count(),
 			running_speed,
 			jump_apex - jump_origin,
 			player.get_visual_foot_height(),
@@ -247,255 +227,10 @@ func _verify_statures() -> void:
 		_require(
 			is_equal_approx(capsule.height, SCALE.COLLISION_HEIGHT * statures[index])
 			and absf(character.get_collision_bottom_height() - character.global_position.y) < 0.001,
-			"Short, standard and tall silhouettes must preserve the foot origin"
+			"Stature variants must preserve the foot origin"
 		)
 		character.queue_free()
 		await process_frame
-
-
-func _verify_slope_contact(
-	lab: LocalDevelopmentLab,
-	player: LocalBaseCharacter
-) -> void:
-	player.global_position = Vector3(-7.0, 2.2, 3.0)
-	player.velocity = Vector3.ZERO
-	player.set_touch_move(Vector2.ZERO)
-	for frame in 90:
-		await physics_frame
-	_require(player.is_on_floor(), "Character must settle on the reference slope")
-	var query := PhysicsRayQueryParameters3D.create(
-		player.global_position + Vector3.UP * 0.18,
-		player.global_position + Vector3.DOWN * 0.25,
-		1
-	)
-	query.exclude = [player.get_rid()]
-	var hit := lab.get_world_3d().direct_space_state.intersect_ray(query)
-	_require(not hit.is_empty(), "Foot probe must find the slope below the character")
-	_require(
-		absf(float(hit.position.y) - player.get_visual_foot_height()) < 0.14,
-		"Visual foot reference must remain close to sloped contact"
-	)
-
-
-func _verify_moving_platform(
-	lab: LocalDevelopmentLab,
-	player: LocalBaseCharacter
-) -> void:
-	var platform := lab.get_node("World/TestCourse/MovingPlatform") as AnimatableBody3D
-	player.global_position = platform.global_position + Vector3(0.0, 0.75, 0.0)
-	player.velocity = Vector3.ZERO
-	player.set_touch_move(Vector2.ZERO)
-	for frame in 35:
-		await physics_frame
-	var initial_x := player.global_position.x
-	for frame in 90:
-		await physics_frame
-	_require(
-		player.is_on_floor(),
-		"Character must stay grounded on the moving reference platform"
-	)
-	_require(
-		absf(player.global_position.x - initial_x) > 0.35,
-		"Moving platform must carry the local CharacterBody"
-	)
-
-
-func _verify_movable_objects(lab: LocalDevelopmentLab) -> void:
-	var ball := lab.get_node("World/TestCourse/Ball") as RigidBody3D
-	var rock := lab.get_node("World/TestCourse/Rock") as RigidBody3D
-	var medium_box := lab.get_node("World/TestCourse/MediumBox") as RigidBody3D
-	var large_box := lab.get_node("World/TestCourse/LargeBox") as RigidBody3D
-	var player := lab.player
-	var ball_reset: Transform3D = ball.get_meta(&"initial_transform")
-	var rock_reset: Transform3D = rock.get_meta(&"initial_transform")
-	var medium_origin := medium_box.global_position
-	var large_origin := large_box.global_position
-	var ball_shape := (ball.get_child(0) as CollisionShape3D).shape as SphereShape3D
-	var rock_shape := (rock.get_child(0) as CollisionShape3D).shape as SphereShape3D
-	_require(
-		is_equal_approx(ball_shape.radius, 0.22)
-		and is_equal_approx(ball.mass, 0.43)
-		and is_equal_approx(rock_shape.radius, 0.14)
-		and is_equal_approx(rock.mass, 0.32),
-		"Ball and throwable stone must use their approved human-scale dimensions"
-	)
-
-	medium_box.apply_central_impulse(Vector3(0.0, 0.0, 2.2))
-	large_box.apply_central_impulse(Vector3(0.0, 0.0, 2.2))
-	await physics_frame
-	_require(
-		medium_box.linear_velocity.length() > large_box.linear_velocity.length() * 3.0,
-		"Equal impulse must preserve a clear medium/heavy mass difference"
-	)
-	for frame in 45:
-		await physics_frame
-	_require(
-		medium_box.global_position.distance_to(medium_origin)
-		> large_box.global_position.distance_to(large_origin),
-		"Medium box must respond more than the heavy box to equal impulse"
-	)
-	lab.reset_lab()
-	await physics_frame
-	_require(
-		ball.global_position.distance_to(ball_reset.origin) < 0.02
-		and rock.global_position.distance_to(rock_reset.origin) < 0.02,
-		"Movable references must return exactly on laboratory reset"
-	)
-
-	player.global_position = Vector3(
-		ball_reset.origin.x,
-		0.02,
-		ball_reset.origin.z + 1.35
-	)
-	player.velocity = Vector3.ZERO
-	player.set_touch_move(Vector2(0.0, -1.0))
-	for frame in 45:
-		await physics_frame
-	player.set_touch_move(Vector2.ZERO)
-	_require(
-		ball.global_position.distance_to(ball_reset.origin) > 0.08,
-		"Walking into the ball must transfer visible force locally (distance=%.3f)"
-		% ball.global_position.distance_to(ball_reset.origin)
-	)
-
-	lab.reset_lab()
-	await physics_frame
-	player.global_position = Vector3(
-		rock_reset.origin.x,
-		0.02,
-		rock_reset.origin.z + 1.1
-	)
-	player.velocity = Vector3.ZERO
-	player.set_touch_move(Vector2(0.0, -1.0))
-	for frame in 35:
-		await physics_frame
-	player.set_touch_move(Vector2.ZERO)
-	_require(
-		rock.global_position.distance_to(rock_reset.origin) < 0.025
-		and player.global_position.z < rock_reset.origin.z - 0.1,
-		"Walking must pass the small stone without kicking it (stone=%.3f player_z=%.3f)"
-		% [
-			rock.global_position.distance_to(rock_reset.origin),
-			player.global_position.z,
-		]
-	)
-
-	lab.reset_lab()
-	await physics_frame
-	player.global_position = Vector3(
-		ball_reset.origin.x,
-		0.02,
-		ball_reset.origin.z + 1.05
-	)
-	player.velocity = Vector3.ZERO
-	player.camera_pivot.rotation.y = 0.0
-	for frame in 10:
-		await physics_frame
-	_require(
-		player.get_hand_action() == LocalBaseCharacter.ACTION_PUSH
-		and lab.hand_button.label == "EMPUJAR"
-		and lab.foot_button.label == "PATEAR",
-		"Ball must keep independent visible hand and foot actions"
-	)
-	_require(player.request_foot_action(), "Foot kick must start")
-	for frame in 24:
-		await physics_frame
-	_require(
-		ball.global_position.distance_to(ball_reset.origin) > 0.35,
-		"Kick contact window must move the ball"
-	)
-
-	lab.reset_lab()
-	await physics_frame
-	player.global_position = Vector3(
-		ball_reset.origin.x,
-		0.02,
-		ball_reset.origin.z + 1.05
-	)
-	player.camera_pivot.rotation.y = 0.0
-	for frame in 10:
-		await physics_frame
-	_require(player.request_foot_action(), "Miss probe must begin a kick")
-	player.camera_pivot.rotation.y = PI * 0.5
-	for frame in 24:
-		await physics_frame
-	_require(
-		ball.global_position.distance_to(ball_reset.origin) < 0.05,
-		"Kick must miss when the ball is no longer inside the foot contact probe"
-	)
-
-	lab.reset_lab()
-	await physics_frame
-	player.global_position = Vector3(
-		rock_reset.origin.x,
-		0.02,
-		rock_reset.origin.z + 1.0
-	)
-	player.camera_pivot.rotation.y = 0.0
-	for frame in 10:
-		await physics_frame
-	_require(
-		player.get_hand_action() == LocalBaseCharacter.ACTION_TAKE
-		and lab.hand_button.label == "TOMAR",
-		"Small stone in front must expose TAKE and visible TOMAR"
-	)
-	_require(player.request_hand_action(), "TAKE animation must start")
-	for frame in 8:
-		await physics_frame
-	_require(
-		absf(player.visual_root.right_arm.rotation.x) > 0.25
-		and player.get_held_object() == null,
-		"TAKE must visibly reach before attaching the stone"
-	)
-	for frame in 14:
-		await physics_frame
-	_require(
-		player.get_held_object() == rock
-		and player.get_hand_action() == LocalBaseCharacter.ACTION_THROW
-		and lab.hand_button.label == "LANZAR"
-		and rock.get_parent() == player.held_item_anchor
-		and rock.global_position.distance_to(
-			player.visual_item_socket.global_position
-		) < 0.035,
-		"TAKE must attach the stone exactly to the animated hand socket"
-	)
-
-	player.global_position = Vector3(
-		ball_reset.origin.x,
-		0.02,
-		ball_reset.origin.z + 1.05
-	)
-	player.camera_pivot.rotation.y = 0.0
-	for frame in 10:
-		await physics_frame
-	_require(
-		player.request_foot_action(),
-		"Holding a stone must not block the independent foot action"
-	)
-	for frame in 24:
-		await physics_frame
-	_require(
-		player.get_held_object() == rock
-		and ball.global_position.distance_to(ball_reset.origin) > 0.35,
-		"Character must kick the ball while keeping the stone equipped"
-	)
-	for frame in 18:
-		await physics_frame
-	_require(player.request_hand_action(), "Equipped stone must be throwable")
-	for frame in 10:
-		await physics_frame
-	_require(
-		player.get_held_object() == rock,
-		"THROW must keep the stone in hand until the release frame"
-	)
-	for frame in 12:
-		await physics_frame
-	_require(
-		player.get_held_object() == null and rock.linear_velocity.length() > 0.4,
-		"THROW must release the stone with a physical impulse"
-	)
-	lab.reset_lab()
-	await physics_frame
 
 
 func _require(condition: bool, message: String) -> void:

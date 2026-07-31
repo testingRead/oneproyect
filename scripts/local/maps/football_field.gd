@@ -1,7 +1,10 @@
 class_name LocalFootballField
 extends Node3D
 
-const BALL_SPAWN := Vector3(0.0, 0.23, -13.0)
+const FIELD_CENTRE_Z := -20.0
+const BALL_SPAWN := Vector3(0.0, 2.0, FIELD_CENTRE_Z)
+const NORTH_GOAL_CENTRE := Vector3(0.0, 1.18, -35.45)
+const SOUTH_GOAL_CENTRE := Vector3(0.0, 1.18, -4.55)
 
 var _grass: StandardMaterial3D
 var _border: StandardMaterial3D
@@ -12,15 +15,15 @@ var _ball_material: StandardMaterial3D
 
 func _ready() -> void:
 	_grass = _material(Color(0.12, 0.38, 0.16), 0.96)
-	_border = _material(Color(0.18, 0.24, 0.28), 0.9)
-	_line = _material(Color(0.92, 0.95, 0.9), 0.8, true)
-	_goal = _material(Color(0.92, 0.92, 0.86), 0.72)
-	_ball_material = _material(Color(0.95, 0.94, 0.84), 0.64)
+	_border = _material(Color(0.12, 0.19, 0.24), 0.86)
+	_line = _material(Color(0.94, 0.96, 0.92), 0.8, true)
+	_goal = _material(Color(0.94, 0.94, 0.88), 0.7)
+	_ball_material = _material(Color(0.96, 0.94, 0.82), 0.64)
 	_build_field()
 
 
 func configure_variation(_signature: PackedByteArray) -> void:
-	# The first football validation has one deterministic layout.
+	# The first football map is deliberately deterministic.
 	pass
 
 
@@ -29,40 +32,160 @@ func get_ball_spawn_transform() -> Transform3D:
 
 
 func _build_field() -> void:
-	_add_static_box("Pitch", Vector3(0.0, -0.12, -20.0), Vector3(20.0, 0.24, 30.0), _grass)
-	_add_static_box("LeftFence", Vector3(-10.2, 0.65, -20.0), Vector3(0.4, 1.3, 30.4), _border)
-	_add_static_box("RightFence", Vector3(10.2, 0.65, -20.0), Vector3(0.4, 1.3, 30.4), _border)
-	_add_static_box("SouthFence", Vector3(0.0, 0.65, -4.8), Vector3(20.4, 1.3, 0.4), _border)
-	_add_static_box("NorthFenceLeft", Vector3(-6.7, 0.65, -35.2), Vector3(7.0, 1.3, 0.4), _border)
-	_add_static_box("NorthFenceRight", Vector3(6.7, 0.65, -35.2), Vector3(7.0, 1.3, 0.4), _border)
-
-	_add_visual_box("HalfLine", Vector3(0.0, 0.015, -20.0), Vector3(20.0, 0.025, 0.09), _line)
-	_add_visual_box("LeftLine", Vector3(-9.75, 0.016, -20.0), Vector3(0.09, 0.025, 29.4), _line)
-	_add_visual_box("RightLine", Vector3(9.75, 0.016, -20.0), Vector3(0.09, 0.025, 29.4), _line)
-	_add_visual_box("SouthLine", Vector3(0.0, 0.017, -5.3), Vector3(19.5, 0.025, 0.09), _line)
-	_add_visual_box("NorthLine", Vector3(0.0, 0.017, -34.7), Vector3(19.5, 0.025, 0.09), _line)
-	_add_visual_box("PenaltyFront", Vector3(0.0, 0.018, -28.5), Vector3(10.0, 0.025, 0.09), _line)
-	_add_visual_box("PenaltyLeft", Vector3(-5.0, 0.018, -31.6), Vector3(0.09, 0.025, 6.2), _line)
-	_add_visual_box("PenaltyRight", Vector3(5.0, 0.018, -31.6), Vector3(0.09, 0.025, 6.2), _line)
-
-	_add_static_box("GoalLeftPost", Vector3(-3.0, 1.3, -34.7), Vector3(0.18, 2.6, 0.18), _goal)
-	_add_static_box("GoalRightPost", Vector3(3.0, 1.3, -34.7), Vector3(0.18, 2.6, 0.18), _goal)
-	_add_static_box("GoalCrossbar", Vector3(0.0, 2.6, -34.7), Vector3(6.18, 0.18, 0.18), _goal)
-	_add_static_box("GoalBack", Vector3(0.0, 1.3, -36.5), Vector3(6.2, 2.6, 0.15), _border)
-	_add_static_box("GoalLeftSide", Vector3(-3.1, 1.3, -35.6), Vector3(0.15, 2.6, 1.8), _border)
-	_add_static_box("GoalRightSide", Vector3(3.1, 1.3, -35.6), Vector3(0.15, 2.6, 1.8), _border)
-	_add_goal_area()
+	# The island remains the physical floor. This thin mesh only identifies
+	# the pitch and avoids a second overlapping collision plane.
+	_add_visual_box(
+		"Pitch",
+		Vector3(0.0, 0.007, FIELD_CENTRE_Z),
+		Vector3(20.0, 0.014, 30.0),
+		_grass
+	)
+	_add_perimeter()
+	_add_field_markings()
+	_add_goal(&"north", -34.7, -36.5, -35.6, NORTH_GOAL_CENTRE)
+	_add_goal(&"south", -5.3, -3.5, -4.4, SOUTH_GOAL_CENTRE)
 	_add_ball()
 
 
-func _add_goal_area() -> void:
+func _add_perimeter() -> void:
+	_add_static_box(
+		"LeftReboundWall",
+		Vector3(-10.2, 0.7, FIELD_CENTRE_Z),
+		Vector3(0.4, 1.4, 30.4),
+		_border
+	)
+	_add_static_box(
+		"RightReboundWall",
+		Vector3(10.2, 0.7, FIELD_CENTRE_Z),
+		Vector3(0.4, 1.4, 30.4),
+		_border
+	)
+	for end in [
+		{"prefix": "North", "z": -35.2},
+		{"prefix": "South", "z": -4.8},
+	]:
+		_add_static_box(
+			"%sLeftWall" % end.prefix,
+			Vector3(-6.65, 0.7, end.z),
+			Vector3(7.1, 1.4, 0.4),
+			_border
+		)
+		_add_static_box(
+			"%sRightWall" % end.prefix,
+			Vector3(6.65, 0.7, end.z),
+			Vector3(7.1, 1.4, 0.4),
+			_border
+		)
+
+
+func _add_field_markings() -> void:
+	_add_visual_box(
+		"HalfLine",
+		Vector3(0.0, 0.022, FIELD_CENTRE_Z),
+		Vector3(20.0, 0.025, 0.09),
+		_line
+	)
+	_add_visual_box(
+		"LeftLine",
+		Vector3(-9.75, 0.023, FIELD_CENTRE_Z),
+		Vector3(0.09, 0.025, 29.4),
+		_line
+	)
+	_add_visual_box(
+		"RightLine",
+		Vector3(9.75, 0.023, FIELD_CENTRE_Z),
+		Vector3(0.09, 0.025, 29.4),
+		_line
+	)
+	_add_visual_box(
+		"SouthLine",
+		Vector3(0.0, 0.024, -5.3),
+		Vector3(19.5, 0.025, 0.09),
+		_line
+	)
+	_add_visual_box(
+		"NorthLine",
+		Vector3(0.0, 0.024, -34.7),
+		Vector3(19.5, 0.025, 0.09),
+		_line
+	)
+	for side in [-1.0, 1.0]:
+		var penalty_z: float = FIELD_CENTRE_Z + side * 11.6
+		_add_visual_box(
+			"PenaltyFront%s" % ("South" if side > 0.0 else "North"),
+			Vector3(0.0, 0.025, penalty_z),
+			Vector3(10.0, 0.025, 0.09),
+			_line
+		)
+		_add_visual_box(
+			"PenaltyLeft%s" % ("South" if side > 0.0 else "North"),
+			Vector3(-5.0, 0.025, FIELD_CENTRE_Z + side * 13.15),
+			Vector3(0.09, 0.025, 3.1),
+			_line
+		)
+		_add_visual_box(
+			"PenaltyRight%s" % ("South" if side > 0.0 else "North"),
+			Vector3(5.0, 0.025, FIELD_CENTRE_Z + side * 13.15),
+			Vector3(0.09, 0.025, 3.1),
+			_line
+		)
+
+
+func _add_goal(
+	side: StringName,
+	front_z: float,
+	back_z: float,
+	side_z: float,
+	area_position: Vector3
+) -> void:
+	var prefix := "North" if side == &"north" else "South"
+	_add_static_box(
+		prefix + "GoalLeftPost",
+		Vector3(-3.0, 1.3, front_z),
+		Vector3(0.18, 2.6, 0.18),
+		_goal
+	)
+	_add_static_box(
+		prefix + "GoalRightPost",
+		Vector3(3.0, 1.3, front_z),
+		Vector3(0.18, 2.6, 0.18),
+		_goal
+	)
+	_add_static_box(
+		prefix + "GoalCrossbar",
+		Vector3(0.0, 2.6, front_z),
+		Vector3(6.18, 0.18, 0.18),
+		_goal
+	)
+	_add_static_box(
+		prefix + "GoalBack",
+		Vector3(0.0, 1.3, back_z),
+		Vector3(6.2, 2.6, 0.15),
+		_border
+	)
+	_add_static_box(
+		prefix + "GoalLeftSide",
+		Vector3(-3.1, 1.3, side_z),
+		Vector3(0.15, 2.6, 1.8),
+		_border
+	)
+	_add_static_box(
+		prefix + "GoalRightSide",
+		Vector3(3.1, 1.3, side_z),
+		Vector3(0.15, 2.6, 1.8),
+		_border
+	)
 	var goal_area := Area3D.new()
-	goal_area.name = "TargetGoal"
-	goal_area.position = Vector3(0.0, 1.18, -35.45)
+	goal_area.name = prefix + "GoalArea"
+	goal_area.position = area_position
 	goal_area.collision_layer = 0
 	goal_area.collision_mask = 1
 	goal_area.monitoring = true
 	goal_area.add_to_group(&"football_goal")
+	goal_area.set_meta(
+		&"scores_for",
+		&"home" if side == &"north" else &"away"
+	)
 	var collision := CollisionShape3D.new()
 	collision.name = "Collision"
 	var shape := BoxShape3D.new()
@@ -80,12 +203,14 @@ func _add_ball() -> void:
 	ball.collision_layer = 1
 	ball.collision_mask = 1
 	ball.continuous_cd = true
+	ball.linear_damp = 0.28
+	ball.angular_damp = 0.2
 	ball.add_to_group(&"football_ball")
 	ball.add_to_group(&"kickable_ball")
 	ball.add_to_group(&"local_round_object")
 	var physics_material := PhysicsMaterial.new()
-	physics_material.friction = 0.58
-	physics_material.bounce = 0.52
+	physics_material.friction = 0.48
+	physics_material.bounce = 0.62
 	ball.physics_material_override = physics_material
 	var collision := CollisionShape3D.new()
 	collision.name = "Collision"
@@ -117,6 +242,10 @@ func _add_static_box(
 	body.name = node_name
 	body.position = position_value
 	body.collision_layer = 1
+	var physics_material := PhysicsMaterial.new()
+	physics_material.friction = 0.38
+	physics_material.bounce = 0.72
+	body.physics_material_override = physics_material
 	var collision := CollisionShape3D.new()
 	collision.name = "Collision"
 	var shape := BoxShape3D.new()
