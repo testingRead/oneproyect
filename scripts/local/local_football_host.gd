@@ -21,6 +21,7 @@ var _ball: RigidBody3D
 var _ball_spawn := Transform3D.IDENTITY
 var _goalkeeper
 var _goalkeeper_zone := &""
+var _player_team: StringName = &"home"
 
 
 func start_match(map_root: Node3D, time_scale := 1.0, goalkeeper_value = null) -> bool:
@@ -32,6 +33,9 @@ func start_match(map_root: Node3D, time_scale := 1.0, goalkeeper_value = null) -
 		return false
 	_ball_spawn = _ball.global_transform
 	_goalkeeper = goalkeeper_value
+	_player_team = &"home"
+	if is_instance_valid(_goalkeeper) and _goalkeeper.has_meta(&"football_team"):
+		_player_team = StringName(_goalkeeper.get_meta(&"football_team"))
 	_goalkeeper_zone = &""
 	for goal in get_tree().get_nodes_in_group(&"football_goal"):
 		if map_root.is_ancestor_of(goal) and goal is Area3D:
@@ -63,6 +67,7 @@ func stop_and_clean() -> void:
 	_ball = null
 	_goalkeeper = null
 	_goalkeeper_zone = &""
+	_player_team = &"home"
 
 
 func finish_match() -> void:
@@ -91,6 +96,17 @@ func is_goalkeeper_in_zone() -> bool:
 
 func get_goalkeeper_zone_side() -> StringName:
 	return _goalkeeper_zone
+
+
+func get_player_team() -> StringName:
+	return _player_team
+
+
+func set_player_team(team: StringName) -> void:
+	_player_team = &"away" if team == &"away" else &"home"
+	if _goalkeeper_zone != &"" and _goalkeeper_zone != _player_team:
+		_goalkeeper_zone = &""
+		goalkeeper_zone_changed.emit(false, team)
 
 
 func get_winner() -> int:
@@ -158,7 +174,12 @@ func _try_goalkeeper_save(goal: Area3D) -> bool:
 func _on_goalkeeper_entered(body: Node3D, zone: Area3D) -> void:
 	if body != _goalkeeper:
 		return
-	_goalkeeper_zone = zone.get_meta(&"goal_side", &"")
+	var side: StringName = zone.get_meta(&"goal_side", &"")
+	if side != _player_team:
+		# Players may cross the opponent's goal area, but never receive
+		# goalkeeper controls there.
+		return
+	_goalkeeper_zone = side
 	goalkeeper_zone_changed.emit(true, _goalkeeper_zone)
 
 

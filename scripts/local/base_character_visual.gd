@@ -145,21 +145,26 @@ func update_motion(
 	if _goalkeeper_remaining > 0.0:
 		_goalkeeper_remaining = maxf(0.0, _goalkeeper_remaining - delta)
 		var dive_weight := sin((_goalkeeper_remaining / 0.72) * PI)
-		left_arm.rotation.x = lerpf(left_arm.rotation.x, -1.42, dive_weight)
-		right_arm.rotation.x = lerpf(right_arm.rotation.x, -1.42, dive_weight)
+		left_arm.rotation.x = lerpf(left_arm.rotation.x, -1.62, dive_weight)
+		right_arm.rotation.x = lerpf(right_arm.rotation.x, -1.62, dive_weight)
 		left_arm.rotation.z = lerpf(
 			left_arm.rotation.z,
-			float(_goalkeeper_side) * -0.62,
+			float(_goalkeeper_side) * -0.95,
 			dive_weight
 		)
 		right_arm.rotation.z = lerpf(
 			right_arm.rotation.z,
-			float(_goalkeeper_side) * -0.62,
+			float(_goalkeeper_side) * -0.95,
 			dive_weight
 		)
 		torso.rotation.z = lerpf(
 			torso.rotation.z,
-			float(_goalkeeper_side) * 0.22,
+			float(_goalkeeper_side) * 0.58,
+			dive_weight
+		)
+		torso.position.x = lerpf(
+			torso.position.x,
+			float(_goalkeeper_side) * 0.28,
 			dive_weight
 		)
 		torso.rotation.x = lerpf(

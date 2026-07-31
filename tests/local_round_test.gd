@@ -21,8 +21,8 @@ func _run() -> void:
 	_require(
 		LAB_MAP.map_scene != null
 		and LAB_MAP.footprint == Vector2(26.0, 40.0)
-		and LAB_MAP.spawn_points.size() == 5,
-		"Football map must package one scene and five spawn points"
+		and LAB_MAP.spawn_points.size() == 8,
+		"Football map must package one scene and eight spawn points (4v4)"
 	)
 	_require(
 		LAB_MAP.available_objects == PackedStringArray(
@@ -86,8 +86,8 @@ func _run() -> void:
 			"Football must use one native rigid body"
 		)
 		if round_index == 0:
-			# A player inside the south goal can attempt a real goalkeeper save.
-			lab.player.global_position = Vector3(0.0, 0.02, -2.0)
+			# The local player belongs to home: only the north goal is his area.
+			lab.player.global_position = Vector3(0.0, 0.02, -38.0)
 			for frame in 4:
 				await physics_frame
 			_require(
@@ -97,7 +97,7 @@ func _run() -> void:
 				"Goalkeeper controls must appear inside the goal area"
 			)
 			ball.freeze = true
-			ball.global_position = Vector3(0.0, 1.1, -1.55)
+			ball.global_position = Vector3(0.0, 1.1, -38.45)
 			ball.freeze = false
 			ball.sleeping = false
 			_require(
@@ -110,6 +110,14 @@ func _run() -> void:
 				lab.football_host.score == 0
 				and lab.football_host.opponent_score == 0,
 				"A correctly timed goalkeeper dive must stop the goal"
+			)
+			lab.player.global_position = Vector3(0.0, 0.02, -2.0)
+			for frame in 8:
+				await physics_frame
+			_require(
+				not lab.football_host.is_goalkeeper_in_zone()
+				and not lab.goalkeeper_left_mid.visible,
+				"Opponent goal must not expose goalkeeper controls"
 			)
 			lab.player.global_position = Vector3(0.0, 0.02, -12.0)
 			for frame in 8:

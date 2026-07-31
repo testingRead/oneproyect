@@ -244,6 +244,7 @@ func _on_goalkeeper_dive(side: int, level: int) -> void:
 
 
 func _on_goalkeeper_zone_changed(active: bool, _side: StringName) -> void:
+	active = active and _side == football_host.get_player_team()
 	for button in [
 		goalkeeper_left_high,
 		goalkeeper_left_mid,
