@@ -189,6 +189,23 @@ func _run() -> void:
 		"Landing must return the feet to the island floor"
 	)
 
+	player.set_view_direction(Vector3(0.0, 0.0, 1.0))
+	var camera_forward := -player.camera_pivot.global_basis.z
+	camera_forward.y = 0.0
+	camera_forward = camera_forward.normalized()
+	_require(
+		camera_forward.dot(Vector3(0.0, 0.0, 1.0)) > 0.99,
+		"Away view must face the centre instead of its own goal"
+	)
+	player.set_top_down_mode(true)
+	player.set_top_down_aim(Vector2(0.0, -1.0), true)
+	_require(
+		player.get_top_down_aim_direction().dot(Vector3(0.0, 0.0, 1.0)) > 0.99,
+		"Top-down screen-up aim must respect the team camera yaw"
+	)
+	player.set_top_down_mode(false)
+	player.set_view_direction(Vector3(0.0, 0.0, -1.0))
+
 	await _verify_statures()
 	var diagnostics := lab.get_diagnostics()
 	_require(

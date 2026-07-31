@@ -1,5 +1,8 @@
 # Base modular de OneProyect
 
+La auditoría concreta de la ruta Local/LAN y su plan de consolidación se
+mantiene en [`LOCAL_LAN_AUDIT.md`](LOCAL_LAN_AUDIT.md).
+
 OneProyect separa el juego persistente de la experiencia que cambia en cada
 ronda. Jugador, cámara, controles, HUD, perfil y conexión sobreviven. Un plan
 pequeño selecciona las reglas, el mapa y las extensiones de la siguiente ronda.

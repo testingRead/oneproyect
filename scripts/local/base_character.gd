@@ -290,7 +290,7 @@ func set_top_down_mode(enabled: bool) -> void:
 		_saved_spring_length = spring_arm.spring_length
 		# Arena view: elevated and oblique, preserving silhouettes and depth.
 		camera_pivot.position = Vector3(0.0, 3.15, 0.0)
-		camera_pivot.rotation = Vector3(-0.88, 0.0, 0.0)
+		camera_pivot.rotation = Vector3(-0.88, camera_pivot.rotation.y, 0.0)
 		spring_arm.spring_length = 8.4
 		visual_root.visible = true
 	else:
@@ -305,7 +305,10 @@ func set_top_down_aim(value: Vector2, active: bool) -> void:
 	_top_down_aim_active = active and value.length_squared() > 0.02
 	if value.length_squared() <= 0.02:
 		return
-	_top_down_aim_direction = Vector3(value.x, 0.0, value.y).normalized()
+	_top_down_aim_direction = (
+		Basis(Vector3.UP, camera_pivot.rotation.y)
+		* Vector3(value.x, 0.0, value.y)
+	).normalized()
 	set_facing_direction(_top_down_aim_direction)
 
 
@@ -406,6 +409,16 @@ func set_facing_direction(direction: Vector3) -> void:
 		return
 	horizontal = horizontal.normalized()
 	visual_root.rotation.y = atan2(horizontal.x, horizontal.z)
+
+
+func set_view_direction(direction: Vector3) -> void:
+	var horizontal := Vector3(direction.x, 0.0, direction.z)
+	if horizontal.length_squared() < 0.001:
+		return
+	horizontal = horizontal.normalized()
+	# Camera3D looks along local -Z. Movement uses the same pivot yaw, so this
+	# aligns what the player sees, joystick-forward and interaction casts.
+	camera_pivot.rotation.y = atan2(-horizontal.x, -horizontal.z)
 
 
 func get_facing_direction() -> Vector3:

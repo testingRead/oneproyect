@@ -1,6 +1,7 @@
 extends SceneTree
 
 const LAN_SCRIPT := preload("res://scripts/network/lan_session.gd")
+const LAN_EVENT := preload("res://shared/lan_round_event.gd")
 
 var _lan
 var _got_client_state := false
@@ -32,6 +33,7 @@ func _run() -> void:
 		push_error("LAN_HOST_FAIL: cannot host")
 		quit(1)
 		return
+	_lan.set_round_context(7701)
 	_lan.set_minigame("res://data/minigames/tornado_supervivencia.tres")
 	_lan.set_ready(true)
 	for frame in 600:
@@ -43,6 +45,11 @@ func _run() -> void:
 		_lan.send_physics_state(PackedStringArray(["Ball"]), PackedVector3Array([Vector3(1.0, 0.5, -20.0)]), PackedVector3Array([Vector3.ZERO]), PackedVector3Array([Vector3(2.0, 0.0, 0.0)]))
 		_lan.broadcast_bateball_holder(1)
 		_lan.broadcast_bateball_score(1, 0, false)
+		_lan.broadcast_round_event(
+			LAN_EVENT.Kind.HOLDER_CHANGED,
+			LAN_EVENT.Subject.CROWN,
+			1
+		)
 		if _got_client_state and _got_start and _got_impulse and _got_bateball_shot:
 			for settle_frame in 90:
 				await process_frame

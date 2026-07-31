@@ -3,12 +3,15 @@ extends Node
 
 signal crown_holder_changed(holder_name: String)
 signal match_completed(holder_name: String)
+signal crown_holder_peer_changed(peer_id: int)
 
 var _active := false
 var _crown: Area3D
 var _holder: Node3D
 var _generation := 0
 var _crown_parent: Node
+var _local_player: LocalBaseCharacter
+var _session_authority := true
 
 
 func start_match(map_root: Node3D, player: LocalBaseCharacter) -> bool:
@@ -18,14 +21,17 @@ func start_match(map_root: Node3D, player: LocalBaseCharacter) -> bool:
 	if _crown == null:
 		return false
 	_crown_parent = _crown.get_parent()
+	_local_player = player
 	_crown.body_entered.connect(_on_crown_body_entered)
 	_active = true
 	crown_holder_changed.emit("NADIE")
+	if _session_authority:
+		crown_holder_peer_changed.emit(0)
 	return true
 
 
 func _physics_process(_delta: float) -> void:
-	if not _active or not is_instance_valid(_holder):
+	if not _active or not _session_authority or not is_instance_valid(_holder):
 		return
 	for candidate in get_tree().get_nodes_in_group(&"local_base_character"):
 		if candidate != _holder and candidate is Node3D:
@@ -42,11 +48,26 @@ func finish_match() -> void:
 
 
 func get_winner() -> int:
-	return 1 if is_instance_valid(_holder) else -1
+	return 1 if is_instance_valid(_holder) and _holder == _local_player else -1
+
+
+func is_active() -> bool:
+	return _active and is_instance_valid(_crown)
 
 
 func get_holder_name() -> String:
 	return str(_holder.get_meta(&"display_name", _holder.name)) if is_instance_valid(_holder) else "NADIE"
+
+
+func set_session_authority(enabled: bool) -> void:
+	_session_authority = enabled
+
+
+func apply_authoritative_holder(next_holder: Node3D) -> void:
+	if is_instance_valid(next_holder):
+		_assign_holder(next_holder, false)
+	else:
+		_clear_holder(false)
 
 
 func stop_and_clean() -> void:
@@ -55,16 +76,17 @@ func stop_and_clean() -> void:
 	if is_instance_valid(_crown) and is_instance_valid(_crown_parent):
 		_crown.reparent(_crown_parent, true)
 	_holder = null
+	_local_player = null
 	_crown = null
 	_crown_parent = null
 
 
 func _on_crown_body_entered(body: Node3D) -> void:
-	if _active and body.is_in_group(&"local_base_character"):
+	if _active and _session_authority and body.is_in_group(&"local_base_character"):
 		call_deferred("_assign_holder", body)
 
 
-func _assign_holder(next_holder: Node3D) -> void:
+func _assign_holder(next_holder: Node3D, announce := true) -> void:
 	if next_holder == _holder or not is_instance_valid(_crown):
 		return
 	_holder = next_holder
@@ -75,6 +97,18 @@ func _assign_holder(next_holder: Node3D) -> void:
 		_crown.rotation = Vector3.ZERO
 	_crown.monitoring = false
 	crown_holder_changed.emit(str(next_holder.get_meta(&"display_name", next_holder.name)))
+	if announce:
+		crown_holder_peer_changed.emit(int(next_holder.get_meta(&"lan_peer_id", 1)))
+
+
+func _clear_holder(announce := true) -> void:
+	if is_instance_valid(_crown) and is_instance_valid(_crown_parent):
+		_crown.reparent(_crown_parent, true)
+		_crown.monitoring = _session_authority
+	_holder = null
+	crown_holder_changed.emit("NADIE")
+	if announce:
+		crown_holder_peer_changed.emit(0)
 
 
 func _find_descendant(root: Node, group: StringName) -> Node:

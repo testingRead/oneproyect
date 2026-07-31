@@ -109,6 +109,7 @@ func _run_round(generation: int) -> void:
 		player.set_meta(&"football_team", team)
 	player.set_spawn_transform(player_spawn)
 	player.set_facing_direction(initial_facing)
+	player.set_view_direction(initial_facing)
 	player.set_first_person(minigame_id != &"bateball_arena")
 	player.set_top_down_mode(minigame_id == &"bateball_arena")
 	if not await _wait_phase(0.4, generation):

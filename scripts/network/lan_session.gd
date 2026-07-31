@@ -11,6 +11,7 @@ signal bat_swing_received(peer_id: int, facing: Vector3, charged: bool)
 signal bateball_shot_received(peer_id: int, direction: Vector3)
 signal bateball_holder_received(peer_id: int)
 signal bateball_score_received(home_score: int, away_score: int, complete: bool)
+signal round_event_received(round_id: int, revision: int, kind: int, subject: int, actor_peer_id: int, integer_values: PackedInt32Array, vector_values: PackedVector3Array)
 
 const LAN_PORT := 9998
 const DISCOVERY_PORT := 9997
@@ -27,6 +28,8 @@ var _discovery: PacketPeerUDP
 var _beacon: PacketPeerUDP
 var _beacon_elapsed := 0.0
 var _state_sequence := 0
+var _round_id := 0
+var _round_revision := 0
 
 
 func _ready() -> void:
@@ -173,6 +176,34 @@ func start_game() -> bool:
 	return true
 
 
+func set_round_context(round_id: int) -> void:
+	if _round_id == round_id:
+		return
+	_round_id = round_id
+	_round_revision = 0
+
+
+func broadcast_round_event(
+	kind: int,
+	subject: int,
+	actor_peer_id: int,
+	integer_values := PackedInt32Array(),
+	vector_values := PackedVector3Array()
+) -> void:
+	if not is_host or not is_active() or _round_id == 0:
+		return
+	_round_revision += 1
+	_rpc_round_event.rpc(
+		_round_id,
+		_round_revision,
+		kind,
+		subject,
+		actor_peer_id,
+		integer_values,
+		vector_values
+	)
+
+
 func send_player_state(position: Vector3, velocity: Vector3, facing_yaw: float, health: int) -> void:
 	if not is_active():
 		return
@@ -310,6 +341,30 @@ func _rpc_bateball_holder(peer_id: int) -> void:
 @rpc("authority", "call_remote", "reliable", 2)
 func _rpc_bateball_score(home_score: int, away_score: int, complete: bool) -> void:
 	bateball_score_received.emit(home_score, away_score, complete)
+
+
+@rpc("authority", "call_remote", "reliable", 2)
+func _rpc_round_event(
+	round_id: int,
+	revision: int,
+	kind: int,
+	subject: int,
+	actor_peer_id: int,
+	integer_values: PackedInt32Array,
+	vector_values: PackedVector3Array
+) -> void:
+	if round_id != _round_id or revision <= _round_revision:
+		return
+	_round_revision = revision
+	round_event_received.emit(
+		round_id,
+		revision,
+		kind,
+		subject,
+		actor_peer_id,
+		integer_values,
+		vector_values
+	)
 
 
 func _set_profile_ready(peer_id: int, ready: bool) -> void:

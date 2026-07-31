@@ -9,6 +9,7 @@ const BOMB_HOST_SCRIPT := preload("res://scripts/local/local_bomb_host.gd")
 const TORNADO_HOST_SCRIPT := preload("res://scripts/local/local_tornado_host.gd")
 const BATEBALL_HOST_SCRIPT := preload("res://scripts/local/local_bateball_host.gd")
 const BASE_CHARACTER_SCENE := preload("res://scenes/local/base_character.tscn")
+const LAN_EVENT := preload("res://shared/lan_round_event.gd")
 
 @onready var player: LocalBaseCharacter = $World/CharacterRoot
 @onready var playable_area: LocalPlayableArea = $World/PlayableArea
@@ -49,6 +50,7 @@ var _aim_value := Vector2(0.0, -1.0)
 var _aim_active := false
 var _aim_line: Line2D
 var _aim_fill: Polygon2D
+var _pending_crown_holder_peer := -1
 
 
 func _ready() -> void:
@@ -108,6 +110,7 @@ func _ready() -> void:
 	football_host.penalty_cinematic.connect(_on_penalty_cinematic)
 	football_host.penalty_score_changed.connect(_on_penalty_score_changed)
 	crown_host.crown_holder_changed.connect(_on_crown_holder_changed)
+	crown_host.crown_holder_peer_changed.connect(_on_local_crown_holder_peer_changed)
 	crown_host.match_completed.connect(_on_crown_match_completed)
 	bomb_host.bomb_holder_changed.connect(_on_bomb_holder_changed)
 	bomb_host.bomb_timer_changed.connect(_on_bomb_timer_changed)
@@ -142,6 +145,8 @@ func _process(_delta: float) -> void:
 
 func _start_session_round() -> void:
 	var seed := int(ProjectSettings.get_setting("oneproyect/session_round_seed", 0))
+	if lan_session != null and lan_session.is_active():
+		lan_session.set_round_context(seed)
 	start_reference_round(seed)
 
 
@@ -198,7 +203,9 @@ func _setup_lan_session() -> void:
 	lan_session.bateball_shot_received.connect(_on_lan_bateball_shot)
 	lan_session.bateball_holder_received.connect(_on_lan_bateball_holder)
 	lan_session.bateball_score_received.connect(_on_lan_bateball_score)
+	lan_session.round_event_received.connect(_on_lan_round_event)
 	bateball_host.set_session_authority(lan_session.is_host)
+	crown_host.set_session_authority(lan_session.is_host)
 	lan_session.lobby_changed.connect(_sync_lan_players)
 	_sync_lan_players()
 
@@ -325,6 +332,47 @@ func _on_lan_bateball_holder(peer_id: int) -> void:
 func _on_lan_bateball_score(home_score: int, away_score: int, complete: bool) -> void:
 	if lan_session != null and not lan_session.is_host:
 		bateball_host.apply_authoritative_score(home_score, away_score, complete)
+
+
+func _on_local_crown_holder_peer_changed(peer_id: int) -> void:
+	if lan_session != null and lan_session.is_active() and lan_session.is_host:
+		lan_session.broadcast_round_event(
+			LAN_EVENT.Kind.HOLDER_CHANGED,
+			LAN_EVENT.Subject.CROWN,
+			peer_id
+		)
+
+
+func _on_lan_round_event(
+	round_id: int,
+	_revision: int,
+	kind: int,
+	subject: int,
+	actor_peer_id: int,
+	_integer_values: PackedInt32Array,
+	_vector_values: PackedVector3Array
+) -> void:
+	if round_id != round_controller.round_seed or lan_session == null or lan_session.is_host:
+		return
+	if kind == LAN_EVENT.Kind.HOLDER_CHANGED and subject == LAN_EVENT.Subject.CROWN:
+		_pending_crown_holder_peer = actor_peer_id
+		_apply_pending_round_state()
+
+
+func _apply_pending_round_state() -> void:
+	if _pending_crown_holder_peer < 0 or not crown_host.is_active():
+		return
+	var holder := _get_lan_character(_pending_crown_holder_peer)
+	crown_host.apply_authoritative_holder(holder)
+	_pending_crown_holder_peer = -1
+
+
+func _get_lan_character(peer_id: int) -> LocalBaseCharacter:
+	if peer_id == 0:
+		return null
+	if lan_session != null and peer_id == lan_session.get_local_peer_id():
+		return player
+	return _lan_remotes.get(peer_id) as LocalBaseCharacter
 
 
 func _find_round_body(object_name: String) -> RigidBody3D:
@@ -467,6 +515,7 @@ func _on_round_phase_changed(
 			banner_detail.text = "Corre hacia el círculo central" if _is_crown_game() else "Sujeta la bomba con las dos manos" if _is_bomb_game() else "Los objetos empezarán a volar" if _is_tornado_game() else "El balón aparece en el centro" if _is_bateball_game() else "Muévete para colocarte detrás del balón"
 			banner_progress.text = "La corona aparece al centro" if _is_crown_game() else "No dejes que termine la mecha" if _is_bomb_game() else "Sobrevive con vida" if _is_tornado_game() else "El BATE se carga tras cada golpe" if _is_bateball_game() else "La mira es orientativa; el pie usa tu orientación"
 		LocalRoundController.Phase.ACTIVE:
+			call_deferred("_apply_pending_round_state")
 			banner_title.text = "¡CORONA!" if _is_crown_game() else "¡BOMBA!" if _is_bomb_game() else "¡TORNADO!" if _is_tornado_game() else "¡BATEBALL!" if _is_bateball_game() else "¡JUGAR!"
 			banner_detail.text = "Consigue la corona" if _is_crown_game() else "Pásala al tocar a otro jugador" if _is_bomb_game() else "Evita el embudo y los objetos proyectados" if _is_tornado_game() else "Recoge, apunta y dispara al arco rival" if _is_bateball_game() else "PATEA al arco rival · protege el tuyo"
 			banner_progress.text = "CORONA: %s" % crown_host.get_holder_name() if _is_crown_game() else "BOMBA: %.1f s" % bomb_host.get_remaining() if _is_bomb_game() else "VIDA %d/100 · %.1f s" % [player.get_local_health(), tornado_host.get_remaining()] if _is_tornado_game() else _bateball_score_text() if _is_bateball_game() else _score_text()
@@ -518,7 +567,9 @@ func _on_kickoff_ready() -> void:
 	if round_controller.phase != LocalRoundController.Phase.ACTIVE:
 		return
 	player.set_spawn_transform(map_host.get_spawn_transform(round_controller.player_slot))
-	player.set_facing_direction(map_host.get_team_facing_for_slot(round_controller.player_slot))
+	var facing := map_host.get_team_facing_for_slot(round_controller.player_slot)
+	player.set_facing_direction(facing)
+	player.set_view_direction(facing)
 	banner_detail.text = "Saque desde el centro"
 
 
@@ -530,6 +581,7 @@ func _position_lan_teams() -> void:
 	player.set_meta(&"football_team", local_team)
 	player.set_meta(&"bateball_team", local_team)
 	player.set_team(local_team)
+	player.set_view_direction(map_host.get_team_facing_for_slot(local_slot))
 	for peer_id: Variant in _lan_remotes:
 		var remote: LocalBaseCharacter = _lan_remotes[peer_id]
 		if not is_instance_valid(remote):
@@ -590,7 +642,8 @@ func _on_aim_changed(value: Vector2, active: bool) -> void:
 func _on_aim_released(value: Vector2) -> void:
 	if not _is_bateball_game() or round_controller.phase != LocalRoundController.Phase.ACTIVE:
 		return
-	var direction := Vector3(value.x, 0.0, value.y).normalized()
+	player.set_top_down_aim(value, false)
+	var direction := player.get_top_down_aim_direction()
 	player.set_facing_direction(direction)
 	if bateball_host.is_holder(player):
 		if bateball_host.request_ball_shot(player, direction):
