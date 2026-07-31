@@ -12,6 +12,7 @@ const PROFILE_PATH := "user://profile.cfg"
 
 var _main_screen: VBoxContainer
 var _lan_screen: VBoxContainer
+var _lan_room_screen: VBoxContainer
 var _lobby_screen: VBoxContainer
 var _waiting_screen: VBoxContainer
 var _name_input: LineEdit
@@ -44,6 +45,14 @@ var _multiplayer_survivals := 0
 var _lan_mode_button: OptionButton
 var _lan_status: Label
 var _lan_start_button: Button
+var _lan_room_title: Label
+var _lan_room_detail: Label
+var _lan_room_character: OptionButton
+var _lan_room_mode: OptionButton
+var _lan_room_ready: Button
+var _lan_room_start: Button
+var _lan_room_is_local := false
+var _lan_room_ready_state := false
 
 
 func _ready() -> void:
@@ -103,6 +112,7 @@ func _build_interface() -> void:
 	_lobby_screen = _build_lobby_screen(screens)
 	_waiting_screen = _build_waiting_screen(screens)
 	_lan_screen = _build_lan_screen(screens)
+	_lan_room_screen = _build_lan_room_screen(screens)
 
 
 func _build_main_screen(parent: Control) -> VBoxContainer:
@@ -129,7 +139,7 @@ func _build_main_screen(parent: Control) -> VBoxContainer:
 	screen.add_child(_name_input)
 	screen.add_child(_spacer(10.0))
 	var local_button := _button("JUGAR LOCAL", "PlayLocal")
-	local_button.pressed.connect(_play_local)
+	local_button.pressed.connect(_open_local_room)
 	screen.add_child(local_button)
 	var lan_button := _button("JUGAR EN LAN", "PlayLan")
 	lan_button.pressed.connect(_open_lan)
@@ -151,31 +161,61 @@ func _build_lan_screen(parent: Control) -> VBoxContainer:
 	var screen := _new_screen("Lan")
 	parent.add_child(screen)
 	screen.add_child(_title("SALA LAN", 32, Color(0.42, 0.9, 0.52)))
-	var detail := _label(
-		"El anfitrión elige el minijuego. Todos entran, marcan LISTO y juegan.",
-		17
-	)
+	var detail := _label("Crea una sala o únete a la de un amigo.", 17)
 	detail.modulate = Color(0.76, 0.86, 1.0)
 	screen.add_child(detail)
-	_lan_mode_button = OptionButton.new()
-	_lan_mode_button.name = "LanMinigame"
-	_lan_mode_button.custom_minimum_size = Vector2(0.0, 54.0)
-	_lan_mode_button.add_theme_font_size_override("font_size", 19)
-	_lan_mode_button.add_item("MINIJUEGO: FÚTBOL DE REBOTE", 0)
-	_lan_mode_button.disabled = false
-	screen.add_child(_lan_mode_button)
 	_lan_status = _label(
-		"LAN local: el transporte ENet se añadirá sin depender del VPS.",
+		"Las salas LAN usarán ENet local, sin VPS.",
 		16
 	)
 	_lan_status.modulate = Color(0.68, 0.8, 0.9)
 	screen.add_child(_lan_status)
-	_lan_start_button = _button("PROBAR COMO ANFITRIÓN LOCAL", "LanHostLocal")
-	_lan_start_button.pressed.connect(_play_lan_host_local)
+	_lan_start_button = _button("CREAR SALA LAN", "LanCreateRoom")
+	_lan_start_button.pressed.connect(_create_lan_room)
 	screen.add_child(_lan_start_button)
+	var join := _button("UNIRSE A SALA LAN", "LanJoinRoom")
+	join.pressed.connect(_join_lan_room)
+	screen.add_child(join)
 	var back := _button("VOLVER", "LanBack")
 	back.pressed.connect(func() -> void: _show_screen(_main_screen))
 	screen.add_child(back)
+	return screen
+
+
+func _build_lan_room_screen(parent: Control) -> VBoxContainer:
+	var screen := _new_screen("LanRoom")
+	parent.add_child(screen)
+	_lan_room_title = _title("SALA", 32, Color(0.42, 0.9, 0.52))
+	screen.add_child(_lan_room_title)
+	_lan_room_detail = _label("1/8 JUGADORES · ANFITRIÓN", 17)
+	screen.add_child(_lan_room_detail)
+	_lan_room_mode = OptionButton.new()
+	_lan_room_mode.name = "SelectedMinigame"
+	_lan_room_mode.custom_minimum_size = Vector2(0.0, 54.0)
+	_lan_room_mode.add_theme_font_size_override("font_size", 19)
+	_lan_room_mode.add_item("MINIJUEGO: FÚTBOL DE REBOTE", 0)
+	screen.add_child(_lan_room_mode)
+	_lan_room_character = OptionButton.new()
+	_lan_room_character.name = "SelectedCharacter"
+	_lan_room_character.custom_minimum_size = Vector2(0.0, 54.0)
+	_lan_room_character.add_theme_font_size_override("font_size", 19)
+	for index in CHARACTER_CATALOG.NAMES.size():
+		_lan_room_character.add_item(CHARACTER_CATALOG.NAMES[index], index)
+	_lan_room_character.item_selected.connect(_on_lan_character_selected)
+	screen.add_child(_lan_room_character)
+	var note := _label("El anfitrión elige el minijuego; todos deben marcar LISTO.", 15)
+	note.modulate = Color(0.72, 0.82, 0.94)
+	screen.add_child(note)
+	_lan_room_ready = _button("MARCAR LISTO", "LanReady")
+	_lan_room_ready.pressed.connect(_toggle_lan_ready)
+	screen.add_child(_lan_room_ready)
+	_lan_room_start = _button("INICIAR MINIJUEGO", "LanStart")
+	_lan_room_start.disabled = true
+	_lan_room_start.pressed.connect(_start_lan_room)
+	screen.add_child(_lan_room_start)
+	var leave := _button("SALIR DE LA SALA", "LanLeave")
+	leave.pressed.connect(func() -> void: _show_screen(_main_screen))
+	screen.add_child(leave)
 	return screen
 
 
@@ -304,23 +344,61 @@ func _connect_network() -> void:
 	network.returned_to_lobby.connect(_on_returned_to_lobby)
 
 
-func _play_local() -> void:
+func _open_local_room() -> void:
 	_save_name()
 	network.disconnect_session()
-	_loading_game = true
-	_show_loading(LOCAL_LAB_SCENE, "PREPARANDO BASE LOCAL")
+	_enter_lan_room(true)
 
 
 func _open_lan() -> void:
 	_save_name()
 	network.disconnect_session()
-	_lan_status.text = "Anfitrión: selecciona FÚTBOL DE REBOTE y prepara la sala LAN."
+	_lan_status.text = "Crea una sala o únete a una sala de tu Wi-Fi."
 	_show_screen(_lan_screen)
 
 
-func _play_lan_host_local() -> void:
+func _create_lan_room() -> void:
+	_enter_lan_room(false)
+
+
+func _join_lan_room() -> void:
+	_lan_status.text = "El descubrimiento de salas ENet LAN se integrará antes de activar UNIRSE."
+
+
+func _enter_lan_room(local_only: bool) -> void:
+	_lan_room_is_local = local_only
+	_lan_room_ready_state = false
+	_lan_room_title.text = "SALA LOCAL" if local_only else "SALA LAN · ANFITRIÓN"
+	_lan_room_detail.text = "1/1 JUGADOR · SIN RED" if local_only else "1/8 JUGADORES · ANFITRIÓN"
+	_lan_room_character.select(CHARACTER_CATALOG.sanitize_index(network.color_index))
+	_lan_room_character.disabled = false
+	_lan_room_mode.disabled = false
+	_lan_room_ready.text = "MARCAR LISTO"
+	_lan_room_start.disabled = true
+	_show_screen(_lan_room_screen)
+
+
+func _toggle_lan_ready() -> void:
+	_lan_room_ready_state = not _lan_room_ready_state
+	_lan_room_character.disabled = _lan_room_ready_state
+	_lan_room_mode.disabled = _lan_room_ready_state
+	_lan_room_ready.text = "CANCELAR LISTO" if _lan_room_ready_state else "MARCAR LISTO"
+	_lan_room_start.disabled = not _lan_room_ready_state
+
+
+func _on_lan_character_selected(index: int) -> void:
+	network.color_index = CHARACTER_CATALOG.sanitize_index(index)
+	_save_character()
+
+
+func _start_lan_room() -> void:
+	if not _lan_room_ready_state:
+		return
 	_loading_game = true
-	_show_loading(LOCAL_LAB_SCENE, "PREPARANDO SALA LAN LOCAL")
+	_show_loading(
+		LOCAL_LAB_SCENE,
+		"PREPARANDO PARTIDA LOCAL" if _lan_room_is_local else "PREPARANDO SALA LAN"
+	)
 
 
 func _open_multiplayer() -> void:
@@ -503,6 +581,7 @@ func _on_returned_to_lobby() -> void:
 func _show_screen(screen: Control) -> void:
 	_main_screen.visible = screen == _main_screen
 	_lan_screen.visible = screen == _lan_screen
+	_lan_room_screen.visible = screen == _lan_room_screen
 	_lobby_screen.visible = screen == _lobby_screen
 	_waiting_screen.visible = screen == _waiting_screen
 
