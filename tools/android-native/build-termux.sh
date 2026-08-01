@@ -41,7 +41,7 @@ export ANDROID_SDK_ROOT="$ANDROID_SDK_DIR"
 
 cd "$WRAPPER_DIR"
 "$GRADLE_CMD" \
-	--no-daemon \
+	--daemon \
 	--parallel \
 	--max-workers="$GRADLE_WORKERS" \
 	-Pandroid.aapt2FromMavenOverride="$BUILD_TOOLS_35/aapt2" \

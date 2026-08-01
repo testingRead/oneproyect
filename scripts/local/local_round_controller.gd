@@ -26,6 +26,7 @@ var crown_host
 var bomb_host
 var tornado_host
 var bateball_host
+var shooter_host
 var player: LocalBaseCharacter
 var playable_area: LocalPlayableArea
 var minigame_id: StringName = &"futbol_rebote"
@@ -41,6 +42,7 @@ func configure(
 	bomb_host_value,
 	tornado_host_value,
 	bateball_host_value,
+	shooter_host_value,
 	minigame_id_value: StringName,
 	player_value: LocalBaseCharacter,
 	playable_area_value: LocalPlayableArea
@@ -52,6 +54,7 @@ func configure(
 	bomb_host = bomb_host_value
 	tornado_host = tornado_host_value
 	bateball_host = bateball_host_value
+	shooter_host = shooter_host_value
 	minigame_id = minigame_id_value
 	player = player_value
 	playable_area = playable_area_value
@@ -78,6 +81,8 @@ func stop_and_clean() -> void:
 		tornado_host.stop_and_clean()
 	if bateball_host != null:
 		bateball_host.stop_and_clean()
+	if shooter_host != null:
+		shooter_host.stop_and_clean()
 	if map_host != null:
 		map_host.unmount_map()
 	if player != null:
@@ -114,7 +119,7 @@ func _run_round(generation: int) -> void:
 	# Camera is a minigame profile, not a global side effect of starting a round.
 	# Football needs precise body-aligned kicks, Bateball has its own overhead aim,
 	# and the survival/tag modes retain the reusable third-person controller.
-	player.set_first_person(minigame_id == &"futbol_rebote")
+	player.set_first_person(minigame_id in [&"futbol_rebote", &"shooter_local"])
 	player.set_top_down_mode(minigame_id == &"bateball_arena")
 	if not await _wait_phase(0.4, generation):
 		return
@@ -132,6 +137,8 @@ func _run_round(generation: int) -> void:
 		active_duration = 48.0
 	elif minigame_id == &"bateball_arena":
 		active_duration = 90.0
+	elif minigame_id == &"shooter_local":
+		active_duration = 60.0
 	_transition(Phase.ACTIVE, active_duration)
 	mounted_map = map_host.get_node_or_null("MountedMap") as Node3D
 	var started := false
@@ -147,6 +154,8 @@ func _run_round(generation: int) -> void:
 		started = tornado_host.start_match(mounted_map, player)
 	elif minigame_id == &"bateball_arena":
 		started = bateball_host.start_match(mounted_map, player)
+	elif minigame_id == &"shooter_local":
+		started = shooter_host.start_match(mounted_map, player, round_seed)
 	if not started:
 		stop_and_clean()
 		return
@@ -168,6 +177,8 @@ func _run_round(generation: int) -> void:
 		tornado_host.finish_match()
 	elif minigame_id == &"bateball_arena":
 		bateball_host.finish_match()
+	elif minigame_id == &"shooter_local":
+		shooter_host.finish_match()
 	_transition(Phase.RESULT, 1.5)
 	if not await _wait_phase(1.5, generation):
 		return
@@ -177,6 +188,7 @@ func _run_round(generation: int) -> void:
 	bomb_host.stop_and_clean()
 	tornado_host.stop_and_clean()
 	bateball_host.stop_and_clean()
+	shooter_host.stop_and_clean()
 	map_host.unmount_map()
 	playable_area.set_physical_walls_enabled(false)
 	player.set_first_person(false)
@@ -216,6 +228,8 @@ func _wait_active(seconds: float, generation: int) -> bool:
 		if minigame_id == &"tornado_supervivencia" and tornado_host != null and tornado_host.is_complete():
 			return true
 		if minigame_id == &"bateball_arena" and bateball_host != null and bateball_host.is_complete():
+			return true
+		if minigame_id == &"shooter_local" and shooter_host != null and shooter_host.is_complete():
 			return true
 		await get_tree().physics_frame
 	return generation == _generation

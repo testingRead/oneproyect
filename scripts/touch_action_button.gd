@@ -2,6 +2,7 @@ class_name TouchActionButton
 extends Control
 
 signal action_pressed
+signal action_released
 
 @export var label := "SALTO"
 @export var accent := Color(0.97, 0.63, 0.17, 0.88)
@@ -57,6 +58,9 @@ func _notification(what: int) -> void:
 
 
 func _release() -> void:
+	var was_pressed := _pressed
 	_finger_id = -1
 	_pressed = false
+	if was_pressed:
+		action_released.emit()
 	queue_redraw()

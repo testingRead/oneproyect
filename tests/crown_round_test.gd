@@ -31,8 +31,16 @@ func _run() -> void:
 	var baseline_nodes := get_node_count()
 	_require(lab.start_reference_round(4401), "Crown match must start from the room definition")
 	_require(await _wait_for_phase(lab, LocalRoundController.Phase.ACTIVE, 180), "Crown match must reach active")
+	_require(
+		not lab.player.is_first_person()
+		and not lab.player.is_top_down_mode()
+		and not lab.foot_button.visible
+		and not lab.crosshair.visible,
+		"Crown must keep third-person movement without football controls"
+	)
 	var mounted := lab.map_host.get_node_or_null("MountedMap")
 	_require(mounted != null and mounted.has_node("Crown"), "Crown arena must mount the central crown")
+	_require(lab.banner_progress.text == "CORONA LIBRE", "HUD must describe an unclaimed crown naturally")
 	lab.player.global_position = Vector3(0.0, 0.02, -20.0)
 	for frame in 12:
 		await physics_frame

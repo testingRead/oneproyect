@@ -21,6 +21,13 @@ func _run() -> void:
 	var baseline_nodes := get_node_count()
 	_require(lab.start_reference_round(5501), "Bomb match must start from the room definition")
 	_require(await _wait_for_phase(lab, LocalRoundController.Phase.ACTIVE, 180), "Bomb match must reach active")
+	_require(
+		not lab.player.is_first_person()
+		and not lab.player.is_top_down_mode()
+		and not lab.foot_button.visible
+		and not lab.crosshair.visible,
+		"Bomb must keep third-person movement without football controls"
+	)
 	var mounted := lab.map_host.get_node_or_null("MountedMap")
 	_require(
 		mounted != null and get_nodes_in_group(&"bomb_collectible").size() == 1,

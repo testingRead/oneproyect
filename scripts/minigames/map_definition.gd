@@ -65,7 +65,20 @@ func get_spawn_for_slot(slot: int) -> Vector3:
 
 func get_team_facing_for_slot(slot: int) -> Vector3:
 	if not has_team_layout():
-		return Vector3(0.0, 0.0, -1.0)
+		if spawn_points.size() <= 1:
+			return Vector3(0.0, 0.0, -1.0)
+		var spawn := get_spawn_for_slot(slot)
+		var spawn_centre := Vector3.ZERO
+		for point in spawn_points:
+			spawn_centre += point
+		spawn_centre /= float(spawn_points.size())
+		var centre_facing := spawn_centre - spawn
+		centre_facing.y = 0.0
+		return (
+			centre_facing.normalized()
+			if centre_facing.length_squared() > 0.01
+			else Vector3(0.0, 0.0, -1.0)
+		)
 	var spawn := get_spawn_for_slot(slot)
 	var centre := Vector3.ZERO
 	var count := 0

@@ -90,6 +90,18 @@ text = "+"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="DamageFlash" type="ColorRect" parent="HUD"]
+visible = false
+z_index = 50
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.82, 0.035, 0.015, 0)
+
 [node name="DiagnosticsPanel" type="PanelContainer" parent="HUD"]
 offset_left = 18.0
 offset_top = 16.0
@@ -257,116 +269,43 @@ script = ExtResource("6_button")
 label = "PATEAR"
 accent = Color(0.34, 0.66, 0.18, 0.9)
 
-[node name="GoalkeeperLeftHigh" type="Control" parent="HUD"]
+[node name="Shoot" type="Control" parent="HUD"]
 visible = false
-z_index = 30
+z_index = 25
 layout_mode = 3
 anchors_preset = 3
+anchor_left = 1.0
 anchor_top = 1.0
+anchor_right = 1.0
 anchor_bottom = 1.0
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -350.0
-offset_top = -145.0
-offset_right = -245.0
-offset_bottom = -40.0
-grow_vertical = 0
-script = ExtResource("6_button")
-label = "IZQ ↑"
-accent = Color(0.78, 0.42, 0.16, 0.9)
-
-[node name="GoalkeeperLeftMid" type="Control" parent="HUD"]
-visible = false
-z_index = 30
-layout_mode = 3
-anchors_preset = 3
-anchor_top = 1.0
-anchor_bottom = 1.0
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -235.0
-offset_top = -145.0
-offset_right = -130.0
-offset_bottom = -40.0
-grow_vertical = 0
-script = ExtResource("6_button")
-label = "IZQ ·"
-accent = Color(0.72, 0.48, 0.16, 0.9)
-
-[node name="GoalkeeperLeftLow" type="Control" parent="HUD"]
-visible = false
-z_index = 30
-layout_mode = 3
-anchors_preset = 3
-anchor_top = 1.0
-anchor_bottom = 1.0
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -120.0
-offset_top = -145.0
-offset_right = -15.0
-offset_bottom = -40.0
-grow_vertical = 0
-script = ExtResource("6_button")
-label = "IZQ ↓"
-accent = Color(0.66, 0.52, 0.16, 0.9)
-
-[node name="GoalkeeperRightHigh" type="Control" parent="HUD"]
-visible = false
-z_index = 30
-layout_mode = 3
-anchors_preset = 3
-anchor_top = 1.0
-anchor_bottom = 1.0
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = 15.0
-offset_top = -145.0
-offset_right = 120.0
-offset_bottom = -40.0
+offset_left = -335.0
+offset_top = -290.0
+offset_right = -195.0
+offset_bottom = -150.0
 grow_horizontal = 0
 grow_vertical = 0
 script = ExtResource("6_button")
-label = "DER ↑"
-accent = Color(0.78, 0.42, 0.16, 0.9)
+label = "DISPARAR"
+accent = Color(0.9, 0.22, 0.08, 0.94)
 
-[node name="GoalkeeperRightMid" type="Control" parent="HUD"]
+[node name="Reload" type="Control" parent="HUD"]
 visible = false
-z_index = 30
+z_index = 25
 layout_mode = 3
 anchors_preset = 3
+anchor_left = 1.0
 anchor_top = 1.0
+anchor_right = 1.0
 anchor_bottom = 1.0
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = 130.0
-offset_top = -145.0
-offset_right = 235.0
-offset_bottom = -40.0
+offset_left = -470.0
+offset_top = -160.0
+offset_right = -340.0
+offset_bottom = -30.0
 grow_horizontal = 0
 grow_vertical = 0
 script = ExtResource("6_button")
-label = "DER ·"
-accent = Color(0.72, 0.48, 0.16, 0.9)
-
-[node name="GoalkeeperRightLow" type="Control" parent="HUD"]
-visible = false
-z_index = 30
-layout_mode = 3
-anchors_preset = 3
-anchor_top = 1.0
-anchor_bottom = 1.0
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = 245.0
-offset_top = -145.0
-offset_right = 350.0
-offset_bottom = -40.0
-grow_horizontal = 0
-grow_vertical = 0
-script = ExtResource("6_button")
-label = "DER ↓"
-accent = Color(0.66, 0.52, 0.16, 0.9)
+label = "RECARGAR"
+accent = Color(0.12, 0.5, 0.72, 0.94)
 
 [node name="Round" type="Control" parent="HUD"]
 layout_mode = 3

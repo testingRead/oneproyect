@@ -7,10 +7,17 @@ signal goal_scored(scoring_side: StringName)
 signal match_completed(home_score: int, away_score: int)
 signal ball_holder_peer_changed(peer_id: int)
 signal character_health_authorized(peer_id: int, health: int, respawned: bool, position: Vector3)
+signal bat_impact_authorized(attacker_peer_id: int, target_peer_id: int, direction: Vector3)
 
 const TARGET_SCORE := 2
-const BALL_MIN := Vector3(-14.35, 0.2, -39.35)
-const BALL_MAX := Vector3(14.35, 4.8, -0.65)
+const DEFAULT_BALL_BOUNDS := AABB(
+	Vector3(-14.35, 0.2, -39.35),
+	Vector3(28.7, 4.6, 38.7)
+)
+const SHOT_PICKUP_COOLDOWN := 0.32
+const FORCED_DROP_SETTLE_TIME := 0.16
+const FORCED_DROP_HOLDER_LOCKOUT := 0.7
+const FORCED_DROP_IMPULSE := 0.9
 
 var score := 0
 var opponent_score := 0
@@ -19,14 +26,18 @@ var _complete := false
 var _ball: RigidBody3D
 var _ball_parent: Node
 var _ball_spawn := Transform3D.IDENTITY
+var _ball_bounds := DEFAULT_BALL_BOUNDS
 var _holder: LocalBaseCharacter
 var _map_root: Node3D
 var _generation := 0
 var _connected_bat_characters: Dictionary = {}
 var _pickup_cooldown := 0.0
+var _pickup_blocked_holder: LocalBaseCharacter
+var _pickup_blocked_time := 0.0
 var _local_team: StringName = &"home"
 var _session_authority := true
 var _local_player: LocalBaseCharacter
+var _respawning: Dictionary = {}
 
 
 func start_match(map_root: Node3D, player: LocalBaseCharacter) -> bool:
@@ -39,6 +50,11 @@ func start_match(map_root: Node3D, player: LocalBaseCharacter) -> bool:
 	_local_player = player
 	_ball_parent = _ball.get_parent()
 	_ball_spawn = _ball.global_transform
+	_ball_bounds = (
+		map_root.call("get_ball_bounds")
+		if map_root.has_method("get_ball_bounds")
+		else DEFAULT_BALL_BOUNDS
+	)
 	_connect_bat_character(player)
 	_local_team = StringName(player.get_meta(&"bateball_team", &"home"))
 	for goal in get_tree().get_nodes_in_group(&"bateball_goal"):
@@ -49,6 +65,8 @@ func start_match(map_root: Node3D, player: LocalBaseCharacter) -> bool:
 	_complete = false
 	_active = true
 	_pickup_cooldown = 0.0
+	_pickup_blocked_holder = null
+	_pickup_blocked_time = 0.0
 	score_changed.emit(score, opponent_score, TARGET_SCORE)
 	ball_holder_changed.emit("NADIE")
 	return true
@@ -58,6 +76,9 @@ func _physics_process(delta: float) -> void:
 	if not _active or not is_instance_valid(_ball):
 		return
 	_pickup_cooldown = maxf(0.0, _pickup_cooldown - delta)
+	_pickup_blocked_time = maxf(0.0, _pickup_blocked_time - delta)
+	if _pickup_blocked_time <= 0.0:
+		_pickup_blocked_holder = null
 	for candidate in get_tree().get_nodes_in_group(&"local_base_character"):
 		if candidate is LocalBaseCharacter:
 			_connect_bat_character(candidate as LocalBaseCharacter)
@@ -74,7 +95,9 @@ func _physics_process(delta: float) -> void:
 	for candidate in get_tree().get_nodes_in_group(&"local_base_character"):
 		if candidate is LocalBaseCharacter:
 			var character := candidate as LocalBaseCharacter
-			if character.global_position.distance_to(_ball.global_position) < 0.82:
+			if character == _pickup_blocked_holder:
+				continue
+			if _can_collect_ball(character):
 				_assign_holder(character)
 				return
 
@@ -111,6 +134,11 @@ func apply_authoritative_score(home_score: int, away_score: int, complete: bool)
 	score = maxi(0, home_score)
 	opponent_score = maxi(0, away_score)
 	_complete = complete
+	if _complete and is_instance_valid(_ball):
+		_active = false
+		_ball.freeze = true
+		_ball.linear_velocity = Vector3.ZERO
+		_ball.angular_velocity = Vector3.ZERO
 	score_changed.emit(score, opponent_score, TARGET_SCORE)
 
 
@@ -118,6 +146,10 @@ func finish_match() -> void:
 	if not _active:
 		return
 	_active = false
+	if is_instance_valid(_ball):
+		_ball.freeze = true
+		_ball.linear_velocity = Vector3.ZERO
+		_ball.angular_velocity = Vector3.ZERO
 	match_completed.emit(score, opponent_score)
 
 
@@ -136,9 +168,13 @@ func stop_and_clean() -> void:
 	_holder = null
 	_ball = null
 	_ball_parent = null
+	_ball_bounds = DEFAULT_BALL_BOUNDS
 	_map_root = null
 	_local_player = null
 	_connected_bat_characters.clear()
+	_respawning.clear()
+	_pickup_blocked_holder = null
+	_pickup_blocked_time = 0.0
 
 
 func is_complete() -> bool:
@@ -182,6 +218,8 @@ func _assign_holder(next_holder: LocalBaseCharacter, announce := true) -> void:
 	if next_holder == _holder or not is_instance_valid(_ball):
 		return
 	_holder = next_holder
+	_pickup_blocked_holder = null
+	_pickup_blocked_time = 0.0
 	_ball.freeze = true
 	_ball.linear_velocity = Vector3.ZERO
 	_ball.angular_velocity = Vector3.ZERO
@@ -197,7 +235,11 @@ func _assign_holder(next_holder: LocalBaseCharacter, announce := true) -> void:
 		ball_holder_peer_changed.emit(int(next_holder.get_meta(&"lan_peer_id", 1)))
 
 
-func _release_ball(impulse: Vector3, release_direction := Vector3.ZERO) -> void:
+func _release_ball(
+	impulse: Vector3,
+	release_direction := Vector3.ZERO,
+	drop_beside_carrier := false
+) -> void:
 	if not is_instance_valid(_ball) or not is_instance_valid(_ball_parent):
 		return
 	var release_position := _ball.global_position
@@ -205,7 +247,28 @@ func _release_ball(impulse: Vector3, release_direction := Vector3.ZERO) -> void:
 		var direction := Vector3(release_direction.x, 0.0, release_direction.z)
 		if direction.length_squared() < 0.01:
 			direction = _holder.get_facing_direction()
-		release_position = _holder.global_position + direction.normalized() * 0.92 + Vector3.UP * 0.3
+		direction = direction.normalized()
+		if drop_beside_carrier:
+			# A dislodged ball must not be placed in the carrier's horizontal
+			# push path. A CharacterBody trying to slide across the newly-solid
+			# sphere can otherwise climb it and appear to be launched vertically.
+			# Evaluate both lateral sides after clamping so drops next to a wall
+			# still choose the side with actual clearance.
+			var lateral := Vector3(-direction.z, 0.0, direction.x)
+			var side_a := _clamp_ball_position(
+				_holder.global_position + lateral * 0.86 + Vector3.UP * 0.3
+			)
+			var side_b := _clamp_ball_position(
+				_holder.global_position - lateral * 0.86 + Vector3.UP * 0.3
+			)
+			release_position = (
+				side_a
+				if side_a.distance_squared_to(_holder.global_position)
+				>= side_b.distance_squared_to(_holder.global_position)
+				else side_b
+			)
+		else:
+			release_position = _holder.global_position + direction * 0.92 + Vector3.UP * 0.3
 	_ball.global_position = _clamp_ball_position(release_position)
 	_ball.freeze = false
 	_ball.collision_layer = 1
@@ -213,9 +276,32 @@ func _release_ball(impulse: Vector3, release_direction := Vector3.ZERO) -> void:
 	_ball.sleeping = false
 	_ball.apply_central_impulse(impulse)
 	_holder = null
-	_pickup_cooldown = 0.32
+	_pickup_blocked_holder = null
+	_pickup_blocked_time = 0.0
+	_pickup_cooldown = SHOT_PICKUP_COOLDOWN
 	ball_holder_changed.emit("NADIE")
 	ball_holder_peer_changed.emit(0)
+
+
+func _drop_ball_from_bat(attacker_direction: Vector3) -> void:
+	if not is_instance_valid(_holder):
+		return
+	var previous_holder := _holder
+	var direction := Vector3(attacker_direction.x, 0.0, attacker_direction.z)
+	if direction.length_squared() < 0.01:
+		direction = previous_holder.get_facing_direction()
+	direction = direction.normalized()
+	_release_ball(
+		direction * FORCED_DROP_IMPULSE + Vector3.UP * 0.08,
+		direction,
+		true
+	)
+	# Let everyone contest the loose ball quickly, except the player who just
+	# lost it. Without this short personal lockout the carrier overlaps the ball
+	# and often reacquires it before opponents can react.
+	_pickup_cooldown = FORCED_DROP_SETTLE_TIME
+	_pickup_blocked_holder = previous_holder
+	_pickup_blocked_time = FORCED_DROP_HOLDER_LOCKOUT
 
 
 func _clear_holder_without_impulse(announce := true) -> void:
@@ -225,7 +311,7 @@ func _clear_holder_without_impulse(announce := true) -> void:
 	_ball.collision_layer = 1
 	_ball.collision_mask = 1
 	_holder = null
-	_pickup_cooldown = 0.32
+	_pickup_cooldown = SHOT_PICKUP_COOLDOWN
 	ball_holder_changed.emit("NADIE")
 	if announce:
 		ball_holder_peer_changed.emit(0)
@@ -234,11 +320,19 @@ func _clear_holder_without_impulse(announce := true) -> void:
 func _on_bat_hit(target: Node3D, charged: bool, attacker: LocalBaseCharacter) -> void:
 	if charged and target == _holder:
 		var direction := attacker.get_facing_direction()
-		_release_ball(direction.normalized() * 4.0 + Vector3.UP * 0.35, direction)
+		_drop_ball_from_bat(direction)
 	if _session_authority and target is LocalBaseCharacter:
 		var character := target as LocalBaseCharacter
+		if charged:
+			bat_impact_authorized.emit(
+				int(attacker.get_meta(&"lan_peer_id", 1)),
+				int(character.get_meta(&"lan_peer_id", 1)),
+				attacker.get_facing_direction()
+			)
 		_emit_character_health(character, false)
 		if character.get_local_health() <= 0:
+			if character == _holder:
+				_drop_ball_from_bat(attacker.get_facing_direction())
 			_respawn_character(character, _generation)
 
 
@@ -254,14 +348,20 @@ func _connect_bat_character(character: LocalBaseCharacter) -> void:
 
 
 func _respawn_character(character: LocalBaseCharacter, generation: int) -> void:
+	var key := character.get_instance_id()
+	if _respawning.has(key):
+		return
+	_respawning[key] = true
 	character.controls_enabled = false
 	await get_tree().create_timer(2.0).timeout
 	if generation != _generation or not _active or not is_instance_valid(character):
+		_respawning.erase(key)
 		return
 	character.reset_local_health()
 	_configure_character(character)
 	character.controls_enabled = character == _local_player
 	_emit_character_health(character, true)
+	_respawning.erase(key)
 
 
 func _emit_character_health(character: LocalBaseCharacter, respawned: bool) -> void:
@@ -277,15 +377,20 @@ func _configure_character(character: LocalBaseCharacter) -> void:
 	var slot := int(character.get_meta(&"lan_slot", 0))
 	var team: StringName = &"home" if posmod(slot, 2) == 0 else &"away"
 	var spawn := character.global_transform
-	if is_instance_valid(_map_root) and _map_root.has_method("get_team_for_slot"):
-		team = StringName(_map_root.call("get_team_for_slot", slot))
-	if is_instance_valid(_map_root) and _map_root.has_method("get_spawn_for_slot"):
-		spawn = _map_root.call("get_spawn_for_slot", slot)
+	# Spawn/team data belongs to the map definition exposed by LocalMapHost.
+	# The visual map scene only declares geometry-specific data such as ball
+	# bounds, avoiding a second competing roster definition.
+	var map_contract: Node = _map_root.get_parent() if is_instance_valid(_map_root) else null
+	if is_instance_valid(map_contract) and map_contract.has_method("get_team_for_slot"):
+		team = StringName(map_contract.call("get_team_for_slot", slot))
+	var facing := Vector3(0.0, 0.0, -1.0) if team == &"home" else Vector3(0.0, 0.0, 1.0)
+	if is_instance_valid(map_contract) and map_contract.has_method("get_spawn_transform"):
+		spawn = map_contract.call("get_spawn_transform", slot)
+	if is_instance_valid(map_contract) and map_contract.has_method("get_team_facing_for_slot"):
+		facing = map_contract.call("get_team_facing_for_slot", slot)
 	character.set_bateball_team(team)
 	character.set_spawn_transform(spawn)
-	character.set_facing_direction(
-		Vector3(0.0, 0.0, -1.0) if team == &"home" else Vector3(0.0, 0.0, 1.0)
-	)
+	character.set_facing_direction(facing)
 
 
 func _on_goal_entered(body: Node3D, goal: Area3D) -> void:
@@ -306,19 +411,24 @@ func _on_goal_entered(body: Node3D, goal: Area3D) -> void:
 
 
 func _reset_ball(generation: int) -> void:
-	if is_instance_valid(_holder):
-		_holder = null
 	if not is_instance_valid(_ball) or not is_instance_valid(_ball_parent):
 		return
+	_holder = null
+	_pickup_blocked_holder = null
+	_pickup_blocked_time = 0.0
 	_ball.reparent(_ball_parent, true)
 	_ball.freeze = true
+	_ball.collision_layer = 1
+	_ball.collision_mask = 1
+	_ball.sleeping = false
 	_ball.global_transform = _ball_spawn
 	_ball.linear_velocity = Vector3.ZERO
 	_ball.angular_velocity = Vector3.ZERO
 	_pickup_cooldown = 0.8
 	ball_holder_changed.emit("NADIE")
+	ball_holder_peer_changed.emit(0)
 	await get_tree().create_timer(0.8).timeout
-	if generation == _generation and is_instance_valid(_ball):
+	if generation == _generation and _active and is_instance_valid(_ball):
 		_ball.freeze = false
 
 
@@ -332,22 +442,32 @@ func _follow_holder() -> void:
 
 
 func _clamp_ball_position(value: Vector3) -> Vector3:
+	var maximum := _ball_bounds.end
 	return Vector3(
-		clampf(value.x, BALL_MIN.x, BALL_MAX.x),
-		clampf(value.y, BALL_MIN.y, BALL_MAX.y),
-		clampf(value.z, BALL_MIN.z, BALL_MAX.z)
+		clampf(value.x, _ball_bounds.position.x, maximum.x),
+		clampf(value.y, _ball_bounds.position.y, maximum.y),
+		clampf(value.z, _ball_bounds.position.z, maximum.z)
 	)
 
 
 func _is_ball_inside_arena() -> bool:
+	var maximum := _ball_bounds.end
 	return (
-		_ball.global_position.x >= BALL_MIN.x - 0.8
-		and _ball.global_position.x <= BALL_MAX.x + 0.8
-		and _ball.global_position.z >= BALL_MIN.z - 0.8
-		and _ball.global_position.z <= BALL_MAX.z + 0.8
+		_ball.global_position.x >= _ball_bounds.position.x - 0.8
+		and _ball.global_position.x <= maximum.x + 0.8
+		and _ball.global_position.z >= _ball_bounds.position.z - 0.8
+		and _ball.global_position.z <= maximum.z + 0.8
 		and _ball.global_position.y >= -0.8
-		and _ball.global_position.y <= BALL_MAX.y + 2.0
+		and _ball.global_position.y <= maximum.y + 2.0
 	)
+
+
+func _can_collect_ball(character: LocalBaseCharacter) -> bool:
+	if character.get_local_health() <= 0:
+		return false
+	var offset := _ball.global_position - character.global_position
+	var horizontal := Vector2(offset.x, offset.z).length()
+	return horizontal < 0.82 and absf(offset.y) < 1.05
 
 
 func _find_descendant(root: Node, group: StringName) -> Node:

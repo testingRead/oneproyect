@@ -21,6 +21,13 @@ func _run() -> void:
 	var baseline_nodes := get_node_count()
 	_require(lab.start_reference_round(6601), "Tornado match must start")
 	_require(await _wait_for_phase(lab, LocalRoundController.Phase.ACTIVE, 180), "Tornado must reach active")
+	_require(
+		not lab.player.is_first_person()
+		and not lab.player.is_top_down_mode()
+		and not lab.foot_button.visible
+		and not lab.crosshair.visible,
+		"Tornado must keep third-person movement without football controls"
+	)
 	_require(get_nodes_in_group(&"tornado_hazard").size() == 1, "Arena must mount tornado")
 	_require(get_nodes_in_group(&"tornado_loose_object").size() == 12, "Arena must mount physical objects")
 	lab.player.global_position = Vector3(0.0, 0.02, -20.0)

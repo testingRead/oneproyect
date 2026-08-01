@@ -340,7 +340,10 @@ func _rpc_hazard_state(subject: int, position: Vector3, remaining: float) -> voi
 	hazard_state_received.emit(subject, position, remaining)
 
 
-@rpc("authority", "call_remote", "unreliable_ordered", 2)
+# Actions are sparse and gameplay-visible. A lost kick, swing or confirmed
+# push is much more noticeable than the few bytes saved by making these
+# packets unreliable; continuous player and object states stay unreliable.
+@rpc("authority", "call_remote", "reliable", 2)
 func _rpc_action(round_id: int, peer_id: int, action: int, target_peer_id: int, direction: Vector3, flag: bool) -> void:
 	if round_id == _round_id:
 		action_received.emit(peer_id, action, target_peer_id, direction, flag)

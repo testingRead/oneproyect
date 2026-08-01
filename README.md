@@ -22,15 +22,18 @@ referencias de laboratorio. Sus medidas y pruebas están en:
 - [pruebas y capturas](docs/LOCAL_BASE_VALIDATION.md).
 - [contrato de interacciones](docs/LOCAL_INTERACTIONS.md).
 
-`ENTER` o **RONDA** ejecuta localmente preparar → reglas → cuenta regresiva →
-actividad → resultado → limpieza. El primer minijuego monta
-`campo_futbol_local`: una cancha sobre la isla, dos arcos, paredes físicas de
-rebote y un balón que cae al centro en cada saque. La ronda usa primera persona
-y mira central sólo durante el juego, termina al marcar tres goles o al agotarse
-el tiempo, y vuelve a la isla en tercera persona sin conservar nodos ni señales
-de la cancha.
-La escena multijugador previa permanece congelada hasta aprobar esta experiencia
-local y añadir un NPC basado en el mismo personaje.
+Cada minijuego ejecuta preparar → reglas → cuenta regresiva → actividad →
+resultado → limpieza. El catálogo descubre automáticamente los recursos de
+`data/minigames`: fútbol de rebote, corona central, bomba de relevo, tornado,
+Bateball y arena de tiro. Cada uno monta únicamente su mapa y objetos; al
+terminar vuelve a la misma sala o al menú sin conservar nodos, temporizadores ni
+señales de la ronda.
+
+La arena de tiro es el primer modo individual completo: primera persona, ocho
+spawns, tres perfiles de arma, cargador/recarga, hitscan, cinco eliminaciones y
+tres bots ligeros cuando se juega en solitario. En LAN el anfitrión confirma
+impactos, vida, munición, bajas y reapariciones, mientras cada teléfono conserva
+movimiento, cámara, trazadores, sonido y animación inmediatos.
 
 La compilación local reproducible del laboratorio se realiza íntegramente en
 Termux con [`tools/android-native/build-termux.sh`](tools/android-native/README.md).
@@ -41,14 +44,15 @@ a Downloads.
 
 - Escritorio: WASD o flechas para moverse, ratón para cámara, Espacio para
   saltar, `P`/Escape para pausa y `R` para reiniciar.
-- Android: toda la mitad izquierda acepta un joystick flotante y toda la
-  derecha queda para mirar, salvo **SALTO** y **PATEAR**. La patada usa la
-  orientación del personaje, no el último giro independiente de la cámara.
+- Android: la mitad izquierda mueve y la derecha controla la vista o la mira.
+  Los botones cambian por modo: salto y patada en fútbol, bate/disparo en
+  Bateball y disparar/recargar en shooter. Mantener **DISPARAR** respeta la
+  cadencia sin confundir toques del joystick o de cámara con tiros.
 
-El modo activo es fútbol de rebote. Los goles se clasifican como `TÚ` o
-`RIVAL`; después de cada gol se reposiciona el jugador y el balón vuelve a caer
-desde el centro. Los desastres y mapas anteriores quedan fuera de esta ruta y
-se retomarán como contenido independiente.
+Los modos con equipos alternan slots y conservan spawns y miradas coherentes;
+los individuales orientan todos los puntos de aparición hacia el centro del
+escenario. Los nombres del shooter respetan profundidad y no revelan rivales
+detrás de coberturas.
 
 El menú guarda nombre, personaje, sonido, vibración, cámara en primera/tercera
 persona, sensibilidad, límite de 30/45/60 FPS y tres perfiles de calidad. Las

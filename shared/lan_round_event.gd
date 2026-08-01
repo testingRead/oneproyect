@@ -7,6 +7,8 @@ enum Kind {
 	ROUND_COMPLETED = 3,
 	HAZARD_STATE = 4,
 	DAMAGE_CONFIRMED = 5,
+	WEAPON_STATE = 6,
+	HIT_CONFIRMED = 7,
 }
 
 enum Subject {
@@ -15,10 +17,14 @@ enum Subject {
 	FOOTBALL = 3,
 	BATEBALL = 4,
 	TORNADO = 5,
+	SHOOTER = 6,
 }
 
 enum Action {
 	FOOTBALL_KICK = 1,
 	BATEBALL_SWING = 2,
 	CHARACTER_PUSH = 3,
+	BATEBALL_IMPACT = 4,
+	SHOOTER_SHOT = 5,
+	SHOOTER_RELOAD = 6,
 }

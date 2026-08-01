@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - agent/graybox
+      - feature/local-minigame
 
 permissions:
   contents: write
@@ -94,6 +95,16 @@ jobs:
             --script res://tests/local_base_test.gd
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/local_round_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/crown_round_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/bomb_round_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/tornado_round_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/bateball_round_test.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
+            --script res://tests/shooter_round_test.gd
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --script res://tests/network_codec_test.gd
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \

@@ -16,6 +16,9 @@ de decidir qué resultados necesitarán autoridad remota.
   limpieza.
 - `LocalBaseCharacter`: movimiento e impulsos inmediatos; desconoce mapas,
   rondas y red.
+- `LocalShooterHost`: arma seleccionada por semilla, hitscan, bots locales,
+  vida, cargadores independientes, respawn y clasificación individual; no
+  crea el escenario.
 
 El mapa declara:
 
@@ -27,11 +30,17 @@ El mapa declara:
 
 La semilla sigue formando parte del contrato aunque el primer campo sea
 determinista. `campo_futbol_local` es el primer paquete de minijuego completo:
-escena propia, cinco puntos de aparición, cancha, dos porterías, paredes de
+escena propia, ocho puntos de aparición, cancha, dos porterías, paredes de
 rebote y balón
 `RigidBody3D`. `LocalMapHost` instancia `map_scene` y sólo conserva el
 constructor anterior como fallback para definiciones sin escena. No existe
 generación procedural ambiciosa.
+
+Los modos por equipos consultan la misma `MinigameMapDefinition` para equipo,
+spawn y orientación inicial o de reaparición. En modos individuales, cada
+spawn mira automáticamente al centro geométrico del conjunto. Bateball ofrece ocho posiciones
+únicas (4v4); su escena de arena no duplica ese roster y únicamente aporta la
+geometría y el `AABB` válido para el balón.
 
 ## Ciclo y limpieza
 

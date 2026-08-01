@@ -2,14 +2,10 @@ class_name LocalBateballArena
 extends Node3D
 
 const CENTRE := Vector3(0.0, 0.0, -20.0)
-const TEAM_SPAWNS := [
-	Vector3(0.0, 0.02, -6.0),
-	Vector3(-8.0, 0.02, -9.0),
-	Vector3(8.0, 0.02, -9.0),
-	Vector3(0.0, 0.02, -34.0),
-	Vector3(-8.0, 0.02, -31.0),
-	Vector3(8.0, 0.02, -31.0),
-]
+const BALL_BOUNDS := AABB(
+	Vector3(-14.35, 0.2, -39.35),
+	Vector3(28.7, 4.6, 38.7)
+)
 
 
 func _ready() -> void:
@@ -82,14 +78,8 @@ func _add_ball() -> void:
 	add_child(ball)
 
 
-func get_team_for_slot(slot: int) -> StringName:
-	return &"home" if posmod(slot, 2) == 0 else &"away"
-
-
-func get_spawn_for_slot(slot: int) -> Transform3D:
-	var team_index := posmod(slot, 6) >> 1
-	var spawn_index := team_index if get_team_for_slot(slot) == &"home" else 3 + team_index
-	return Transform3D(Basis.IDENTITY, TEAM_SPAWNS[spawn_index])
+func get_ball_bounds() -> AABB:
+	return BALL_BOUNDS
 
 
 func _add_box(node_name: String, position_value: Vector3, size_value: Vector3, material: Material, collision_enabled: bool) -> void:

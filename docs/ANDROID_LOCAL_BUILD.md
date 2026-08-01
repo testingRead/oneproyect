@@ -31,6 +31,18 @@ cd "$HOME/projects/oneproyect/tools/android-native"
 ./build-termux.sh
 ```
 
+La ruta recomendada antes de entregar una prueba ejecuta seis procesos de test
+en paralelo, valida después dos peers ENet y sólo entonces compila:
+
+```sh
+cd "$HOME/projects/oneproyect/tools/android-native"
+TEST_WORKERS=6 GRADLE_WORKERS=6 ./validate-and-build-termux.sh
+```
+
+Gradle mantiene ahora su daemon vivo entre iteraciones para reutilizar JVM,
+configuración y cachés. Los ocho núcleos no se ocupan todos: seis trabajan y dos
+quedan disponibles para Android, SSH y picos de memoria.
+
 El resultado se valida por firma y ABI y se copia a
 `Downloads/oneproyect-android-native-local.apk`. ADB no interviene. El Editor
 Android de Godot sigue siendo una alternativa para iteración visual manual.
@@ -91,9 +103,11 @@ peso sin ayudar al POCO.
 
 ## Tamaño
 
-Los APK actuales ya separan arquitecturas, usan una textura WebP pequeña y no
-incluyen modelos, audio ni dependencias externas pesadas. La mayor parte del
-peso restante pertenece a la plantilla oficial de Godot.
+Los APK de GitHub separan arquitecturas y comprimen las bibliotecas nativas; el
+APK directo de Termux sólo contiene ARM64. Los modelos existentes son low-poly
+y los efectos nuevos del shooter se generan con geometría y audio pequeños en
+tiempo de carga. La mayor parte del peso restante pertenece a la plantilla
+oficial de Godot.
 
 Una reducción mucho mayor exigiría compilar una plantilla Android personalizada
 del motor, desactivando módulos no usados. No conviene hacerlo todavía: la

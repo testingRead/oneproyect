@@ -121,18 +121,25 @@ principio se conserva.
 | Corona central | tercera persona | robar por contacto | portador al terminar; empate si nadie | host: portador con enfriamiento |
 | Bomba de relevo | tercera persona | entregar por contacto | explota el portador al agotar la mecha | host: portador, mecha y explosión |
 | Tornado | tercera persona | evitar embudo y proyectiles | tiempo o todos eliminados | host: peligro y daño; reacción local |
-| Bateball | elevada oblicua | apuntar tiro / bate cargado | primer equipo a 2 | host: posesión, balón y marcador |
+| Bateball | elevada oblicua | apuntar tiro / bate cargado | primer equipo a 2 | host: posesión, balón, impacto, vida y marcador |
+| Arena de tiro | primera persona | disparar / recargar / cubrirse | primer jugador a 5 bajas | host LAN: raycast, vida, respawn y clasificación |
 
 ## Deuda identificada que no debe ocultarse
 
 - Bateball ya usa el contrato versionado común para posesión y marcador. Los
   métodos RPC antiguos permanecen aislados hasta retirar sus pruebas legadas,
   pero la ruta activa no depende de ellos.
-- Patada y bate ya usan un evento de acción no fiable y ordenado para que la
-  animación remota acompañe el resultado físico sin bloquear el movimiento.
+- Patada, bate e impactos confirmados son eventos fiables y poco frecuentes;
+  locomoción y snapshots físicos continúan por canales no fiables. Perder una
+  acción discreta era más visible que el coste de retransmitir sus pocos bytes.
 - Bateball confirma daño desde el host y respawnea al jugador eliminado en su
-  spawn después de dos segundos. Todavía falta una animación visual específica
-  de eliminación/reaparición.
+  spawn después de dos segundos. El golpe cargado empuja horizontalmente sin
+  lanzar al rival, deja el balón cerca y bloquea sólo al antiguo portador
+  durante 0,7 s para que la posesión sea realmente disputable. Todavía falta
+  una animación visual específica de eliminación/reaparición.
+- Bateball declara ocho spawns únicos alternados (4v4). Equipo, spawn y mirada
+  proceden de una única definición de mapa; la escena visual sólo declara sus
+  límites físicos del balón.
 - En penales LAN el anfitrión realiza la selección. Para una versión final por
   equipos deberá declararse explícitamente qué jugador patea cada turno.
 - Los equipos se derivan de slots alternados, pero el roster debe congelarse
@@ -141,10 +148,15 @@ principio se conserva.
 ### Presentación remota
 
 - La locomoción remota ya usa la velocidad recibida.
-- Eventos de animación discretos todavía no tienen un canal general; sólo el
-  bate posee un RPC propio.
+- Patada, empuje, bate, impacto y disparo usan el canal fiable general de
+  acciones. Las posiciones y velocidades siguen separadas en snapshots no
+  fiables.
 - Tornado aplica vida confirmada por evento. La salud genérica recibida dentro
   del snapshot de locomoción todavía no alimenta una barra visual remota.
+- Shooter confirma por eventos compactos el impacto al tirador, la vida de la
+  víctima, el cargador/recarga, la reaparición y la tabla de bajas. El host
+  limita la cadencia y munición de cada `peer_id`; el cliente conserva el
+  retroceso, sonido y trazador inmediatos.
 
 ## Responsabilidad objetivo
 

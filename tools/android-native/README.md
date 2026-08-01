@@ -11,6 +11,17 @@ cd "$HOME/projects/oneproyect/tools/android-native"
 ./build-termux.sh
 ```
 
+Para ejecutar primero toda la regresión local y LAN, aprovechando cuatro
+procesos Godot y compilando únicamente si todos pasan:
+
+```sh
+cd "$HOME/projects/oneproyect/tools/android-native"
+TEST_WORKERS=6 GRADLE_WORKERS=6 ./validate-and-build-termux.sh
+```
+
+Cada prueba conserva su log separado bajo `$TMPDIR/oneproyect-validation`. Un
+fallo muestra las últimas líneas relevantes y evita generar un APK engañoso.
+
 El wrapper fija AGP 9.3.1, compatible con el Gradle 9.6.1 de Termux. El primer
 build descarga y cachea AGP y el AAR `4.7.1.stable`. Los siguientes
 reutilizan Gradle Build Cache. El APK de laboratorio usa el package separado

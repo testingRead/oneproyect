@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="MinigameMapDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/minigames/map_definition.gd" id="1_map"]
+[ext_resource type="PackedScene" path="res://scenes/local/maps/shooter_arena.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_map")
+map_id = &"shooter_local"
+tags = PackedStringArray("shooter", "free_for_all", "first_person", "local_candidate")
+selection_weight = 1.0
+maximum_players = 8
+map_scene = ExtResource("2_scene")
+footprint = Vector2(30, 40)
+playable_area_index = 1
+boundary_policy = 0
+spawn_points = PackedVector3Array(0, 0.02, -5, 0, 0.02, -35, -12, 0.02, -7, 12, 0.02, -33, 12, 0.02, -7, -12, 0.02, -33, -5, 0.02, -20, 5, 0.02, -20)
+safe_zone_centres = PackedVector3Array()
+event_points = PackedVector3Array(0, 1.2, -20)
+navigation_points = PackedVector3Array(-12, 0, -6, 12, 0, -6, -12, 0, -34, 12, 0, -34, 0, 0, -20)
+available_objects = PackedStringArray("p9", "c16", "t12", "coberturas")
+compatible_disasters = PackedStringArray()
+compatible_minigames = PackedStringArray("shooter_local")
+modular_slots = PackedStringArray()

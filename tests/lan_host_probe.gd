@@ -11,6 +11,8 @@ var _got_bateball_shot := false
 var _sent_round_contract := false
 var _got_pitch := false
 var _got_push_request := false
+var _got_shooter_request := false
+var _got_shooter_reload_request := false
 
 
 func _init() -> void:
@@ -27,7 +29,12 @@ func _run() -> void:
 			_got_pitch = is_equal_approx(_pitch, -0.25)
 	)
 	_lan.action_request_received.connect(func(peer_id: int, action: int, target_peer_id: int, direction: Vector3, _flag: bool) -> void:
-		_got_push_request = peer_id != 1 and action == LAN_EVENT.Action.CHARACTER_PUSH and target_peer_id == 1 and direction.dot(Vector3.RIGHT) > 0.9
+		if action == LAN_EVENT.Action.CHARACTER_PUSH:
+			_got_push_request = peer_id != 1 and target_peer_id == 1 and direction.dot(Vector3.RIGHT) > 0.9
+		elif action == LAN_EVENT.Action.SHOOTER_SHOT:
+			_got_shooter_request = peer_id != 1 and direction.dot(Vector3.FORWARD) > 0.9
+		elif action == LAN_EVENT.Action.SHOOTER_RELOAD:
+			_got_shooter_reload_request = peer_id != 1
 	)
 	_lan.game_started.connect(func(_path: String, _seed: int) -> void: _got_start = true)
 	_lan.object_impulse_received.connect(func(name: String, impulse: Vector3) -> void:
@@ -55,8 +62,23 @@ func _run() -> void:
 		_lan.broadcast_bateball_score(1, 0, false)
 		if not _sent_round_contract:
 			_sent_round_contract = true
+			var client_peer_id := 0
+			for player_id: Variant in _lan.players:
+				if int(player_id) != 1:
+					client_peer_id = int(player_id)
+					break
 			_lan.broadcast_action(
 				1, LAN_EVENT.Action.FOOTBALL_KICK, Vector3.FORWARD
+			)
+			_lan.broadcast_action(
+				1,
+				LAN_EVENT.Action.BATEBALL_IMPACT,
+				Vector3.RIGHT,
+				true,
+				client_peer_id
+			)
+			_lan.broadcast_action(
+				1, LAN_EVENT.Action.SHOOTER_SHOT, Vector3.FORWARD
 			)
 			_lan.broadcast_round_event(
 				LAN_EVENT.Kind.HOLDER_CHANGED,
@@ -82,7 +104,19 @@ func _run() -> void:
 				PackedInt32Array([76, 1]),
 				PackedVector3Array([Vector3(4.0, 1.0, 0.0)])
 			)
-		if _got_client_state and _got_pitch and _got_push_request and _got_start and _got_impulse and _got_bateball_shot:
+			_lan.broadcast_round_event(
+				LAN_EVENT.Kind.WEAPON_STATE,
+				LAN_EVENT.Subject.SHOOTER,
+				client_peer_id,
+				PackedInt32Array([3, 1, 900])
+			)
+			_lan.broadcast_round_event(
+				LAN_EVENT.Kind.HIT_CONFIRMED,
+				LAN_EVENT.Subject.SHOOTER,
+				client_peer_id,
+				PackedInt32Array([66])
+			)
+		if _got_client_state and _got_pitch and _got_push_request and _got_shooter_request and _got_shooter_reload_request and _got_start and _got_impulse and _got_bateball_shot:
 			for settle_frame in 90:
 				await process_frame
 			print("LAN_HOST_OK players=%d start=%s state=%s impulse=%s bateball=%s" % [_lan.players.size(), _got_start, _got_client_state, _got_impulse, _got_bateball_shot])

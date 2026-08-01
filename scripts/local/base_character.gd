@@ -21,6 +21,8 @@ const ACTION_KICK := &"KICK"
 const ACTION_TAKE := &"TAKE"
 const ACTION_THROW := &"THROW"
 
+const BAT_CHARGED_PUSH_FORCE := 5.6
+
 @export_range(0.8, 1.2, 0.01) var stature := SCALE.STATURE_STANDARD
 @export var controls_enabled := true
 @export var emit_metrics := true
@@ -76,6 +78,8 @@ var _bat_charge := 0.0
 var _bat_cooldown := 0.0
 var _foot_action_available := false
 var _hand_action_available := false
+var _movement_override_enabled := false
+var _movement_override := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -103,6 +107,7 @@ func _physics_process(delta: float) -> void:
 		var previous_charge := _bat_charge
 		_bat_charge = minf(3.0, _bat_charge + delta)
 		if absf(previous_charge - _bat_charge) > 0.04 or _bat_charge >= 3.0:
+			visual_root.set_bat_charge_ratio(_bat_charge / 3.0)
 			bat_charge_changed.emit(_bat_charge / 3.0, _bat_charge >= 3.0)
 	_align_interaction_nodes()
 	_resolve_kick(delta)
@@ -119,11 +124,14 @@ func _physics_process(delta: float) -> void:
 		if _touch_move.length_squared() > desktop.length_squared()
 		else desktop
 	)
-	if not controls_enabled:
+	if _movement_override_enabled:
+		movement_input = _movement_override
+	elif not controls_enabled:
 		movement_input = Vector2.ZERO
 	var input_strength := clampf(movement_input.length(), 0.0, 1.0)
 	var wants_run := (
-		Input.is_action_pressed("sprint")
+		_movement_override_enabled
+		or Input.is_action_pressed("sprint")
 		or _touch_sprint
 		or (_touch_move.length() > 0.82 and _touch_move == movement_input)
 	)
@@ -216,6 +224,11 @@ func set_touch_move(value: Vector2) -> void:
 
 func set_touch_sprint(enabled: bool) -> void:
 	_touch_sprint = enabled
+
+
+func set_movement_override(value: Vector2, enabled: bool) -> void:
+	_movement_override_enabled = enabled
+	_movement_override = value.limit_length(1.0) if enabled else Vector2.ZERO
 
 
 func request_jump() -> void:
@@ -373,6 +386,10 @@ func set_team(team: StringName) -> void:
 	visual_root.set_team_color(normalized)
 
 
+func set_player_slot_color(slot: int) -> void:
+	visual_root.set_player_slot_color(slot)
+
+
 func set_bateball_team(team: StringName) -> void:
 	set_team(team)
 	set_meta(&"bateball_team", get_meta(&"team"))
@@ -383,6 +400,7 @@ func set_bat_enabled(enabled: bool) -> void:
 	_bat_charge = 0.0
 	_bat_cooldown = 0.0
 	visual_root.set_bat_equipped(enabled)
+	visual_root.set_bat_charge_ratio(0.0)
 	bat_charge_changed.emit(0.0, false)
 
 
@@ -432,6 +450,8 @@ func _resolve_bat_swing(charged: bool) -> void:
 		if candidate == self or not candidate is LocalBaseCharacter:
 			continue
 		var target := candidate as LocalBaseCharacter
+		if target.get_local_health() <= 0:
+			continue
 		var offset := target.global_position - global_position
 		var horizontal := Vector3(offset.x, 0.0, offset.z)
 		var reach := 2.9 if charged else 1.75
@@ -441,7 +461,10 @@ func _resolve_bat_swing(charged: bool) -> void:
 			continue
 		target.apply_local_damage(14 if charged else 8)
 		if charged:
-			target.apply_external_push((horizontal.normalized() + Vector3.UP * 0.16).normalized(), 8.6)
+			# A charged bat displaces the rival without launching it. Keeping the
+			# impulse horizontal makes the result readable and preserves floor
+			# contact, while walls and other bodies remain in charge of collisions.
+			target.apply_external_push(horizontal.normalized(), BAT_CHARGED_PUSH_FORCE)
 		bat_hit.emit(target, charged)
 		hit_count += 1
 	action_resolved.emit(&"BAT", hit_count > 0)
@@ -495,6 +518,16 @@ func get_kick_direction() -> Vector3:
 func get_kick_force() -> float:
 	var pitch := _get_kick_pitch()
 	return lerpf(3.2, 8.0, inverse_lerp(-0.6, 0.5, pitch))
+
+
+func get_shoot_origin() -> Vector3:
+	var camera := spring_arm.get_node("Camera") as Camera3D
+	return camera.global_position + get_shoot_direction() * 0.22
+
+
+func get_shoot_direction() -> Vector3:
+	var camera := spring_arm.get_node("Camera") as Camera3D
+	return -camera.global_basis.z.normalized()
 
 
 func request_goalkeeper_dive(side: int, level: int) -> bool:
