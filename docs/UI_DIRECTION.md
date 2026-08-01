@@ -11,7 +11,8 @@ teléfonos de gama baja.
 
 ## Sala
 
-La sala Local/LAN se compone de cuatro regiones:
+La sala Local/LAN reproduce la composición aprobada en
+`UI_DISENO_01_SALA_ISLA.png` y se compone de cuatro regiones:
 
 ```text
 cabecera: sala · jugadores/listos · estado
@@ -20,8 +21,9 @@ cabecera: sala · jugadores/listos · estado
 └── acciones: volver · chat futuro · listo · iniciar
 ```
 
-- Cada jugador usa una tarjeta 2D de color de slot, no un `SubViewport` ni un
-  modelo 3D adicional.
+- Cada jugador usa una tarjeta 2D con número, silueta dibujada, color de slot,
+  nombre, personaje, puntos y estado. No usa un `SubViewport` ni un modelo 3D
+  adicional.
 - Los puntos son de sesión, no experiencia persistente.
 - Verde significa listo; turquesa acción principal; naranja información del
   anfitrión; rojo sólo abandonar/cancelar.
@@ -36,3 +38,17 @@ cabecera: sala · jugadores/listos · estado
 3. Nuevos minijuegos entran mediante el catálogo y el selector ya existente.
 4. Las pantallas de juego reutilizarán la misma paleta, tipografía y botones,
    pero no deben cubrir controles táctiles ni información de juego crítica.
+
+## Implementación
+
+- `IslandUiTheme` concentra paleta, fuente, botones, selectores, entradas y
+  `StyleBoxFlat`.
+- `IslandUiArt` dibuja el fondo de isla, logotipo, siluetas e iconos de
+  minijuego con primitivas 2D baratas.
+- `menu_capture_test.gd` genera capturas reproducibles a 1280 × 720 del inicio,
+  sala local y sala multijugador llena.
+- La misma familia visual se aplica a joystick, botones de acción, punto de
+  mira y paneles informativos dentro de la partida.
+
+No se incluye la maqueta rasterizada dentro de la aplicación. La captura es
+una referencia; la implementación final es adaptable y nativa.

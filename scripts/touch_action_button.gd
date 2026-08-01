@@ -48,13 +48,16 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_DRAW:
 		var center := size * 0.5
 		var radius := minf(size.x, size.y) * 0.46
-		var color := accent.lightened(0.12) if _pressed else accent
-		draw_circle(center, radius, color)
-		draw_arc(center, radius, 0.0, TAU, 40, Color.WHITE, 3.0)
+		var panel := Color(0.015, 0.075, 0.125, 0.9)
+		var glow := accent.lightened(0.14) if _pressed else accent
+		draw_circle(center + Vector2(0.0, 4.0), radius, Color(0.0, 0.015, 0.03, 0.48))
+		draw_circle(center, radius, panel.lightened(0.08) if _pressed else panel)
+		draw_circle(center, radius * 0.78, Color(glow.r, glow.g, glow.b, 0.18 if not _pressed else 0.34))
+		draw_arc(center, radius, 0.0, TAU, 40, glow, 4.0, true)
 		var font := ThemeDB.fallback_font
 		var font_size := 22
 		var text_size := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
-		draw_string(font, center - text_size * 0.5 + Vector2(0.0, text_size.y * 0.78), label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
+		draw_string(font, center - text_size * 0.5 + Vector2(0.0, text_size.y * 0.78), label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0.96, 0.99, 1.0))
 
 
 func _release() -> void:

@@ -61,9 +61,11 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _draw() -> void:
-	draw_circle(_center, radius, Color(0.08, 0.1, 0.13, 0.55))
-	draw_arc(_center, radius, 0.0, TAU, 40, Color(0.7, 0.76, 0.84, 0.65), 3.0)
-	draw_circle(_knob, radius * 0.42, Color(0.28, 0.62, 0.95, 0.82))
+	draw_circle(_center + Vector2(0.0, 4.0), radius, Color(0.0, 0.015, 0.03, 0.42))
+	draw_circle(_center, radius, Color(0.015, 0.075, 0.125, 0.66))
+	draw_arc(_center, radius, 0.0, TAU, 40, Color(0.12, 0.77, 0.91, 0.78), 3.0, true)
+	draw_circle(_knob, radius * 0.42, Color(0.06, 0.42, 0.58, 0.9))
+	draw_arc(_knob, radius * 0.42, 0.0, TAU, 32, Color(0.22, 0.93, 1.0, 0.94), 3.0, true)
 
 
 func _update_value(position: Vector2) -> void:

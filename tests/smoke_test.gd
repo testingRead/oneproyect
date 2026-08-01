@@ -27,11 +27,11 @@ func _run() -> void:
 	root.add_child(menu)
 	await process_frame
 	_require(
-		menu.get_node("MenuPanel/Screens/Main/PlayLocal") is Button,
+		menu.find_child("PlayLocal", true, false) is Button,
 		"Menu must expose a dedicated offline play action"
 	)
 	_require(
-		menu.get_node("MenuPanel/Screens/Main/Multiplayer") is Button,
+		menu.find_child("Multiplayer", true, false) is Button,
 		"Menu must expose the multiplayer lobby action"
 	)
 	_require(
