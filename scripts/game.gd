@@ -70,7 +70,6 @@ var _multiplayer_matches := 0
 var _multiplayer_rounds := 0
 var _multiplayer_survivals := 0
 var _last_reward_match_id := 0
-var _last_reward_round := 0
 var _last_completed_match_id := 0
 var _install_id := ""
 var _defeated_this_round := false
@@ -79,8 +78,6 @@ var _returning_to_menu := false
 var _last_sent_health := -1
 var _last_sent_limb_mask := -1
 var _network_status_base := "MODO LOCAL"
-var _match_total_rounds := NET.DEFAULT_MATCH_ROUNDS
-var _match_finished := false
 var _match_victory_awarded := false
 
 
@@ -281,10 +278,10 @@ func _on_disaster_clock_changed(seconds_left: int) -> void:
 func _on_round_survived(_round_number: int) -> void:
 	_participating_round = false
 	player.reset_to_spawn()
-	player.set_controls_enabled(not _match_finished)
-	$HUD/Joystick.set_input_enabled(not _match_finished)
-	restart_button.disabled = _match_finished
-	pause_restart.disabled = _match_finished
+	player.set_controls_enabled(true)
+	$HUD/Joystick.set_input_enabled(true)
+	restart_button.disabled = false
+	pause_restart.disabled = false
 	if network.is_online():
 		if not _defeated_this_round:
 			sounds.play_success()
@@ -304,7 +301,6 @@ func _on_round_started(_round_number: int) -> void:
 		_match_victory_awarded = false
 	_defeated_this_round = false
 	_participating_round = true
-	_match_finished = false
 	match_result.visible = false
 	player.reset_to_spawn()
 	player.set_controls_enabled(true)
@@ -312,7 +308,7 @@ func _on_round_started(_round_number: int) -> void:
 	restart_button.disabled = false
 	pause_restart.disabled = false
 	if network.is_online():
-		score_label.text = "RONDA %d/%d" % [_round_number, _match_total_rounds]
+		score_label.text = "MINIJUEGO EN CURSO"
 
 
 func _on_experience_selected(plan: Dictionary) -> void:
@@ -469,13 +465,9 @@ func _on_standings_received(
 	round_points: PackedByteArray,
 	total_scores: PackedInt32Array,
 	round_number: int,
-	total_rounds: int,
-	match_finished: bool,
 	winner_player_id: int,
 	match_id: int
 ) -> void:
-	_match_total_rounds = total_rounds
-	_match_finished = match_finished
 	if round_number <= 0:
 		return
 	var rows := PackedStringArray()
@@ -509,48 +501,39 @@ func _on_standings_received(
 	)
 	if (
 		match_id > 0
-		and (
-			match_id != _last_reward_match_id
-			or round_number > _last_reward_round
-		)
+		and match_id != _last_reward_match_id
 	):
 		_last_reward_match_id = match_id
-		_last_reward_round = round_number
 		_multiplayer_experience += local_round_points
 		_multiplayer_rounds += 1
 		_multiplayer_survivals += int(local_survived)
 		_save_profile()
-	if match_finished:
-		player.set_controls_enabled(false)
-		$HUD/Joystick.set_input_enabled(false)
-		restart_button.disabled = true
-		pause_restart.disabled = true
-		var winner_index := player_ids.find(winner_player_id)
-		var winner_name := (
-			player_names[winner_index]
-			if winner_index >= 0
-			else "Sin ganador"
-		)
-		round_title.text = "GANADOR: %s" % winner_name
-		round_detail.text = "Clasificación final tras %d rondas" % total_rounds
-		if match_id > 0 and match_id != _last_completed_match_id:
-			_last_completed_match_id = match_id
-			_multiplayer_matches += 1
-			if winner_player_id == network.get_local_player_id():
-				_match_victory_awarded = true
-				_total_victories += 1
-		network.profile_victories = _total_victories
-		network.profile_experience = _multiplayer_experience
-		_save_profile()
-		result_title.text = "GANADOR: %s" % winner_name
-		result_standings.text = "\n".join(rows)
-		result_reward.text = (
-			"+%d XP esta ronda · %d XP total · %d victorias"
-			% [local_round_points, _multiplayer_experience, _total_victories]
-		)
-		return_room_button.disabled = false
-		exit_match_button.disabled = false
-		match_result.visible = true
+	player.set_controls_enabled(false)
+	$HUD/Joystick.set_input_enabled(false)
+	restart_button.disabled = true
+	pause_restart.disabled = true
+	var winner_index := player_ids.find(winner_player_id)
+	var winner_name := player_names[winner_index] if winner_index >= 0 else "Sin ganador"
+	round_title.text = "GANADOR: %s" % winner_name
+	round_detail.text = "MINIJUEGO TERMINADO · VUELVE A LA SALA"
+	if match_id > 0 and match_id != _last_completed_match_id:
+		_last_completed_match_id = match_id
+		_multiplayer_matches += 1
+		if winner_player_id == network.get_local_player_id():
+			_match_victory_awarded = true
+			_total_victories += 1
+	network.profile_victories = _total_victories
+	network.profile_experience = _multiplayer_experience
+	_save_profile()
+	result_title.text = "GANADOR: %s" % winner_name
+	result_standings.text = "\n".join(rows)
+	result_reward.text = (
+		"+%d XP · %d XP total · %d victorias"
+		% [local_round_points, _multiplayer_experience, _total_victories]
+	)
+	return_room_button.disabled = false
+	exit_match_button.disabled = false
+	match_result.visible = true
 
 
 func _on_remote_player_joined(peer_id: int, player_name: String, player_color: int) -> void:
@@ -663,10 +646,6 @@ func _load_profile() -> void:
 		_last_reward_match_id = int(
 			config.get_value("player", "last_reward_match_id", 0)
 		)
-		_last_reward_round = maxi(
-			0,
-			int(config.get_value("player", "last_reward_round", 0))
-		)
 		_last_completed_match_id = int(
 			config.get_value("player", "last_completed_match_id", 0)
 		)
@@ -718,7 +697,6 @@ func _save_profile() -> void:
 	config.set_value("player", "multiplayer_rounds", _multiplayer_rounds)
 	config.set_value("player", "multiplayer_survivals", _multiplayer_survivals)
 	config.set_value("player", "last_reward_match_id", _last_reward_match_id)
-	config.set_value("player", "last_reward_round", _last_reward_round)
 	config.set_value("player", "last_completed_match_id", _last_completed_match_id)
 	config.set_value("player", "install_id", _install_id)
 	config.set_value("player", "character", network.color_index)
@@ -739,7 +717,7 @@ func _reset_streak() -> void:
 
 
 func _update_score() -> void:
-	score_label.text = "RONDAS %d · RÉCORD %d · VICTORIAS %d" % [
+	score_label.text = "SUPERADOS %d · RÉCORD %d · VICTORIAS %d" % [
 		_completed_rounds,
 		_best_rounds,
 		_total_victories,

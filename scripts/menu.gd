@@ -28,12 +28,12 @@ var _create_button: Button
 var _refresh_button: Button
 var _waiting_title: Label
 var _waiting_detail: Label
+var _waiting_roster: VBoxContainer
 var _character_button: OptionButton
 var _character_preview: RemoteAvatar
 var _character_viewport: SubViewport
 var _ready_button: Button
 var _start_button: Button
-var _rounds_button: OptionButton
 var _exclusion_button: OptionButton
 var _room_buttons: Array[Button] = []
 var _room_ids := PackedInt32Array()
@@ -472,27 +472,27 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	player_rows.add_child(rule)
 	var roster_panel := _panel("OnlineRosterPanel", Color(0.01, 0.055, 0.095, 0.9), Color(0.1, 0.42, 0.58, 0.72))
 	roster_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var roster_rows := VBoxContainer.new()
+	roster_rows.add_theme_constant_override("separation", 7)
+	roster_panel.add_child(roster_rows)
 	_waiting_detail = _label("Esperando jugadores…", 16)
 	_waiting_detail.name = "WaitingPlayers"
 	_waiting_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_waiting_detail.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	roster_panel.add_child(_waiting_detail)
+	_waiting_detail.add_theme_color_override("font_color", ISLAND_THEME.CYAN_BRIGHT)
+	roster_rows.add_child(_waiting_detail)
+	var waiting_scroll := ScrollContainer.new()
+	waiting_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	waiting_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	roster_rows.add_child(waiting_scroll)
+	_waiting_roster = VBoxContainer.new()
+	_waiting_roster.name = "OnlinePlayerRoster"
+	_waiting_roster.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_waiting_roster.add_theme_constant_override("separation", 6)
+	waiting_scroll.add_child(_waiting_roster)
 	content.add_child(player_panel)
 	content.add_child(roster_panel)
 	screen.add_child(content)
-	var settings := HBoxContainer.new()
-	settings.add_theme_constant_override("separation", 10)
-	_rounds_button = OptionButton.new()
-	_rounds_button.name = "MatchRounds"
-	_rounds_button.theme_type_variation = &"IslandSelector"
-	_rounds_button.custom_minimum_size = Vector2(0.0, 48.0)
-	_rounds_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_rounds_button.add_theme_font_size_override("font_size", 18)
-	for rounds: int in NET.MATCH_ROUND_OPTIONS:
-		_rounds_button.add_item("PARTIDA: %d RONDAS" % rounds, rounds)
-	_rounds_button.select(NET.MATCH_ROUND_OPTIONS.find(NET.DEFAULT_MATCH_ROUNDS))
-	_rounds_button.item_selected.connect(_on_round_count_selected)
-	settings.add_child(_rounds_button)
 	_exclusion_button = OptionButton.new()
 	_exclusion_button.name = "ModeExclusion"
 	_exclusion_button.theme_type_variation = &"IslandSelector"
@@ -507,8 +507,7 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	_exclusion_button.add_item("VETO: DOMINIO", NET.ModeId.DOMAIN)
 	_exclusion_button.add_item("VETO: DRONES", NET.ModeId.DRONE_HUNT)
 	_exclusion_button.item_selected.connect(_on_exclusion_selected)
-	settings.add_child(_exclusion_button)
-	screen.add_child(settings)
+	screen.add_child(_exclusion_button)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 10)
 	var leave := _button("←  SALIR", "LeaveRoom", &"IslandBackButton")
@@ -740,9 +739,13 @@ func _update_selected_minigame_showcase() -> void:
 
 
 func _clear_roster() -> void:
-	if _lan_room_roster == null:
+	_clear_container(_lan_room_roster)
+
+
+func _clear_container(container: Control) -> void:
+	if container == null:
 		return
-	for child in _lan_room_roster.get_children():
+	for child in container.get_children():
 		child.queue_free()
 
 
@@ -752,7 +755,8 @@ func _build_room_player_card(
 	points: int,
 	ready: bool,
 	slot: int,
-	is_local: bool
+	is_local: bool,
+	profile_note := ""
 ) -> PanelContainer:
 	var accent := _slot_color(slot)
 	var panel := _panel(
@@ -760,37 +764,50 @@ func _build_room_player_card(
 		Color(0.055, 0.12, 0.19, 0.96) if is_local else Color(0.04, 0.085, 0.14, 0.96),
 		accent if is_local else Color(accent.r, accent.g, accent.b, 0.58)
 	)
-	panel.custom_minimum_size.y = 70.0
+	panel.add_theme_stylebox_override(
+		"panel",
+		ISLAND_THEME.style(
+			Color(0.055, 0.12, 0.19, 0.96) if is_local else Color(0.04, 0.085, 0.14, 0.96),
+			accent if is_local else Color(accent.r, accent.g, accent.b, 0.58),
+			2,
+			14,
+			8
+		)
+	)
+	panel.custom_minimum_size.y = 62.0
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	panel.add_child(row)
 	var rank := _label(str(slot + 1), 18)
-	rank.custom_minimum_size = Vector2(38.0, 38.0)
+	rank.custom_minimum_size = Vector2(36.0, 36.0)
 	rank.add_theme_color_override("font_color", accent)
 	rank.add_theme_stylebox_override("normal", ISLAND_THEME.style(Color(0.01, 0.06, 0.1, 0.95), accent, 2, 24, 4))
 	row.add_child(rank)
 	var avatar := ISLAND_ART.new()
-	avatar.custom_minimum_size = Vector2(50.0, 52.0)
+	avatar.custom_minimum_size = Vector2(44.0, 46.0)
 	avatar.configure(ISLAND_ART.Kind.PLAYER, accent)
 	row.add_child(avatar)
 	var identity := VBoxContainer.new()
 	identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var name_label := _label(player_name.to_upper() + (" · TÚ" if is_local else ""), 17)
+	var name_label := _label(player_name.to_upper() + (" · TÚ" if is_local else ""), 16)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	name_label.add_theme_color_override("font_color", Color.WHITE)
 	identity.add_child(name_label)
-	var character_label := _label("PERSONAJE: %s" % character_name.to_upper(), 11)
+	var character_text := "PERSONAJE: %s" % character_name.to_upper()
+	if not profile_note.is_empty():
+		character_text += " · " + profile_note
+	var character_label := _label(character_text, 10)
 	character_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	character_label.add_theme_color_override("font_color", accent)
 	identity.add_child(character_label)
 	row.add_child(identity)
 	var points_label := _label("%d PTS" % maxi(0, points), 16)
-	points_label.custom_minimum_size.x = 76.0
+	points_label.custom_minimum_size.x = 72.0
 	points_label.add_theme_color_override("font_color", ISLAND_THEME.WHITE)
 	points_label.add_theme_stylebox_override("normal", ISLAND_THEME.style(Color(0.05, 0.17, 0.28, 0.95), Color(0.1, 0.3, 0.44, 0.8), 1, 10, 5))
 	row.add_child(points_label)
-	var state := _label("✓ LISTO" if ready else "ESPERANDO", 14)
-	state.custom_minimum_size.x = 106.0
+	var state := _label("✓ LISTO" if ready else "ESPERANDO", 12)
+	state.custom_minimum_size.x = 100.0
 	state.add_theme_color_override("font_color", Color(0.02, 0.12, 0.05) if ready else ISLAND_THEME.ORANGE)
 	state.add_theme_stylebox_override("normal", ISLAND_THEME.style(ISLAND_THEME.GREEN if ready else Color(0.1, 0.07, 0.025, 0.9), ISLAND_THEME.GREEN if ready else ISLAND_THEME.ORANGE, 1, 10, 5))
 	row.add_child(state)
@@ -916,7 +933,7 @@ func _on_room_waiting(
 	character_indices: PackedByteArray,
 	victory_counts: PackedInt32Array,
 	experience_values: PackedInt32Array,
-	total_rounds: int
+	session_scores: PackedInt32Array
 ) -> void:
 	_show_screen(_waiting_screen)
 	_is_host = is_host
@@ -926,33 +943,29 @@ func _on_room_waiting(
 		if is_host
 		else "SALA %d" % room_id
 	)
-	var player_states := PackedStringArray()
 	var visible_count := mini(player_names.size(), ready_flags.size())
 	visible_count = mini(visible_count, character_indices.size())
 	visible_count = mini(visible_count, victory_counts.size())
 	visible_count = mini(visible_count, experience_values.size())
+	visible_count = mini(visible_count, session_scores.size())
+	_clear_container(_waiting_roster)
 	for index in visible_count:
 		var character_index := CHARACTER_CATALOG.sanitize_index(character_indices[index])
-		player_states.append(
-			"%s  %s · %s · %d victorias · %d XP" % [
-				"✓" if ready_flags[index] != 0 else "○",
-				player_names[index],
-				CHARACTER_CATALOG.NAMES[character_index],
-				victory_counts[index],
-				experience_values[index],
-			]
-		)
-	_waiting_detail.text = "%d/5 JUGADORES · %d LISTOS\n%s" % [
+		_waiting_roster.add_child(_build_room_player_card(
+			player_names[index],
+			CHARACTER_CATALOG.NAMES[character_index],
+			session_scores[index],
+			ready_flags[index] != 0,
+			index,
+			player_names[index] == network.display_name,
+			"%dV · %dXP" % [victory_counts[index], experience_values[index]]
+		))
+	_waiting_detail.text = "%d/5 JUGADORES · %d LISTOS · PUNTOS DE ESTA SALA" % [
 		player_count,
 		ready_count,
-		"\n".join(player_states),
 	]
 	_character_button.disabled = local_ready
 	_exclusion_button.disabled = local_ready
-	_rounds_button.disabled = not is_host
-	var rounds_index := NET.MATCH_ROUND_OPTIONS.find(total_rounds)
-	if rounds_index >= 0:
-		_rounds_button.select(rounds_index)
 	_ready_button.disabled = false
 	_ready_button.text = "CANCELAR LISTO" if local_ready else "MARCAR LISTO"
 	_start_button.visible = is_host
@@ -1051,7 +1064,7 @@ func _load_name() -> void:
 	network.profile_experience = _multiplayer_experience
 	_name_input.text = network.display_name
 	_profile_summary.text = (
-		"%d VICTORIAS · %d XP · %d PARTIDAS · %d/%d RONDAS SOBREVIVIDAS"
+		"%d VICTORIAS · %d XP · %d PARTIDAS · %d/%d MINIJUEGOS SUPERADOS"
 		% [
 			_total_victories,
 			_multiplayer_experience,
@@ -1103,12 +1116,6 @@ func _toggle_ready() -> void:
 		return
 	_ready_button.disabled = true
 	network.set_room_profile(not _local_ready)
-
-
-func _on_round_count_selected(index: int) -> void:
-	if not _is_host or _loading_game:
-		return
-	network.set_room_rules(_rounds_button.get_item_id(index))
 
 
 func _on_exclusion_selected(index: int) -> void:

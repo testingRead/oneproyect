@@ -109,14 +109,13 @@ red. Al cambiar de la sala al mapa, el cliente reconstruye desde el estado
 conservado todos los avatares que ya estaban conectados.
 
 Los empujones se envían como eventos fiables pequeños únicamente al jugador
-objetivo. Cada ronda publica vida, puntos y clasificación; al terminar la
-partida se puede volver a la misma sala, preparar otra partida o salir al
-lobby. La sala muestra nombre, personaje, estado listo, victorias y experiencia
-de cada jugador.
+objetivo. Cada minijuego publica vida, puntos y clasificación; al terminar se
+vuelve explícitamente a la misma sala para repetirlo, elegir otro o salir. La
+sala conserva la puntuación y muestra cada jugador en su propia tarjeta.
 
-Victorias, XP, partidas, rondas y supervivencias multijugador se guardan por
-separado del modo local. Las recompensas llevan identificador de partida y
-ronda para no duplicarse al reconectar; siguen siendo progreso local de
+Victorias, XP, partidas y supervivencias multijugador se guardan por separado
+del modo local. Las recompensas llevan identificador de minijuego para no
+duplicarse al reconectar; siguen siendo progreso local de
 prototipo, no una economía segura.
 
 El VPS escucha en UDP `9999` y es autoritativo para sesión, fase, clasificación,

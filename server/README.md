@@ -40,11 +40,11 @@ iniciar, se requieren al menos dos jugadores y todos deben confirmar `ready`;
 si éste se desconecta, el rol pasa al siguiente jugador conectado. El servidor
 conserva sólo el índice lógico de personaje, nunca su modelo o material.
 
-Al finalizar la cantidad elegida de rondas, la sala permanece en resultado
-hasta que un jugador pide volver. Entonces se reutiliza la misma sala, se
-limpian puntuación y estados `ready`, y se conservan identidad y progreso de
-sesión. La RPC de sala incluye sólo índices y cifras de perfil; nunca recursos
-visuales.
+Cada inicio ejecuta exactamente un minijuego. Al finalizar, la sala permanece
+en resultado hasta que un jugador pide volver; nunca encadena otro modo. La
+misma sala conserva identidad, puntuación acumulada y progreso, mientras limpia
+los estados `ready` y restaura el cuerpo para el próximo minijuego. La RPC de
+sala incluye sólo índices y cifras; nunca recursos visuales.
 
 ## Medición
 

@@ -32,8 +32,6 @@ const SNAPSHOT_PACKET_SIZE := (
 const ARENA_HALF_EXTENT := 25.2
 const FLOOR_HEIGHT := 1.2
 const ALL_BODY_PARTS_MASK := 0b111111111111
-const DEFAULT_MATCH_ROUNDS := 5
-const MATCH_ROUND_OPTIONS := [3, 5, 7]
 const ROUND_PLACE_POINTS := [5, 4, 3, 2, 1]
 
 enum RoomPhase {

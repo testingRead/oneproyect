@@ -622,7 +622,7 @@ func _run() -> void:
 	disaster.round_survived.emit(99)
 	await process_frame
 	var score: Label = game.get_node("HUD/RoundPanel/Score")
-	_require(score.text.contains("RONDAS 1"), "Completed round must update persistent score HUD")
+	_require(score.text.contains("SUPERADOS 1"), "Completed minigame must update the score HUD")
 	disaster.round_started.emit(100)
 	player.apply_hazard_damage(GrayboxPlayer.MAX_HEALTH)
 	await process_frame

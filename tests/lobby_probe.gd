@@ -15,8 +15,6 @@ var requested_create := false
 var requested_join := false
 var requested_ready := false
 var requested_start := false
-var requested_rules := false
-var saw_selected_rounds := false
 var returned_to_lobby := false
 var replayed_remote := false
 
@@ -102,14 +100,9 @@ func _on_room_waiting(
 	_character_indices: PackedByteArray,
 	_victory_counts: PackedInt32Array,
 	_experience_values: PackedInt32Array,
-	total_rounds: int
+	_session_scores: PackedInt32Array
 ) -> void:
 	joined = true
-	saw_selected_rounds = saw_selected_rounds or total_rounds == 3
-	if role == "host" and is_host and not requested_rules:
-		requested_rules = true
-		network.set_room_rules(3)
-		return
 	saw_two_players = saw_two_players or player_count >= NET.MIN_PLAYERS_TO_START
 	if not local_ready and not requested_ready:
 		requested_ready = true
@@ -129,7 +122,7 @@ func _run() -> void:
 	var started_msec := Time.get_ticks_msec()
 	while Time.get_ticks_msec() - started_msec < TIMEOUT_MSEC:
 		await process_frame
-		if joined and saw_two_players and saw_selected_rounds and started:
+		if joined and saw_two_players and started:
 			var completed_room_id: int = network.get_room_id()
 			var replay_count := [0]
 			network.remote_player_joined.connect(func(

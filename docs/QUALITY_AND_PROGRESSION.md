@@ -29,10 +29,10 @@ Referencias:
 ## Identidad y progreso
 
 El perfil genera un identificador aleatorio de instalación y almacena por
-separado victorias, experiencia, partidas, rondas y supervivencias
+separado victorias, experiencia, minijuegos jugados y supervivencias
 multijugador. El modo local no modifica esos contadores. Cada clasificación
-lleva un identificador de partida y ronda para que una retransmisión o
-reconexión no otorgue dos veces la misma recompensa.
+lleva un identificador de minijuego para que una retransmisión o reconexión no
+otorgue dos veces la misma recompensa.
 
 El preset Android activa
 `retain_data_on_uninstall`, que permite que Android pregunte si se quieren

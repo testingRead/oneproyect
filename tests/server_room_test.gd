@@ -186,7 +186,7 @@ func _run() -> void:
 		"Room must count the minimum two connected players"
 	)
 	_require(
-		not room.start_rounds(),
+		not room.start_minigame(),
 		"Lobby room must reject an arbitrary start before everyone is ready"
 	)
 	first.ready = true
@@ -201,9 +201,7 @@ func _run() -> void:
 			],
 			"Distinct player vetoes must both be honored while three modes remain"
 		)
-	_require(room.set_total_rounds(3), "Host must be able to select a supported match length")
-	_require(room.start_rounds(), "Host-ready room must enter countdown with two players")
-	_require(room.total_rounds == 3, "Selected match length must survive match startup")
+	_require(room.start_minigame(), "Host-ready room must enter countdown with two players")
 	room.phase_end_tick = room.server_tick + 1
 	room.tick()
 	_require(room.phase == NET.RoomPhase.ACTIVE, "Countdown must advance to active play")
@@ -289,61 +287,58 @@ func _run() -> void:
 		not room._snapshot_buffers.has(first.player_id),
 		"Leaving players must release their long-lived snapshot buffer"
 	)
-	for expected_round in [2, 3]:
-		room.phase_end_tick = room.server_tick + 1
-		room.tick()
-		_require(
-			room.phase == NET.RoomPhase.COUNTDOWN
-			and first.health == 100
-			and first.active,
-			"Next countdown must restore eliminated players"
-		)
-		room.phase_end_tick = room.server_tick + 1
-		room.tick()
-		_require(
-			room.phase == NET.RoomPhase.ACTIVE
-			and room.round_number == expected_round,
-			"Countdown must start the expected configured round"
-		)
-		first.health = 90
-		first.active = true
-		second.health = 80
-		second.active = true
-		room.phase_end_tick = room.server_tick + 1
-		room.tick()
 	_require(
-		room.match_finished
-		and room.round_number == room.total_rounds
-		and room.phase == NET.RoomPhase.RESULT
+		room.phase == NET.RoomPhase.RESULT
 		and room.phase_end_tick == 0,
-		"Configured final round must freeze on the final classification"
+		"A completed minigame must freeze on its classification"
 	)
 	var final_standings: Array[RefCounted] = room.standings()
 	_require(
 		final_standings[0] == second
-		and second.score == 13
-		and first.score == 10,
-		"Accumulated points must determine the match winner across rounds"
+		and second.score == 5
+		and first.score == 0,
+		"The minigame result must add points to the room scoreboard"
 	)
 	_require(
 		second.profile_victories == 1
-		and second.profile_experience == 13
-		and first.profile_experience == 10,
+		and second.profile_experience == 5
+		and first.profile_experience == 0,
 		"Server session profile must reflect multiplayer results only"
 	)
 	room.tick()
 	_require(
 		room.phase == NET.RoomPhase.RESULT,
-		"Finished match must not revive or start another minigame automatically"
+		"A finished minigame must not revive or start another one automatically"
 	)
-	_require(room.reopen_waiting_room(), "A finished match must reopen its same room")
+	_require(room.reopen_waiting_room(), "A finished minigame must reopen its same room")
 	_require(
 		room.phase == NET.RoomPhase.WAITING
 		and room.round_number == 0
 		and not first.ready
 		and not second.ready
-		and second.profile_victories == 1,
-		"Reopening must reset match state while retaining room profile progress"
+		and second.profile_victories == 1
+		and second.score == 5,
+		"Reopening must retain profiles and room points"
+	)
+	first.ready = true
+	second.ready = true
+	_require(room.start_minigame(), "The same room must start another minigame")
+	room.phase_end_tick = room.server_tick + 1
+	room.tick()
+	_require(
+		room.phase == NET.RoomPhase.ACTIVE and first.health == 100 and first.active,
+		"A new minigame must restore players after returning to the room"
+	)
+	first.health = 90
+	second.health = 80
+	room.phase_end_tick = room.server_tick + 1
+	room.tick()
+	_require(
+		room.phase == NET.RoomPhase.RESULT
+		and first.score == 5
+		and second.score == 9,
+		"Repeated minigames must accumulate points without an automatic chain (%d-%d)"
+		% [first.score, second.score]
 	)
 
 	var first_id: int = first.player_id

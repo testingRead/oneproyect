@@ -64,7 +64,7 @@ signal room_waiting_updated(
 	character_indices: PackedByteArray,
 	victory_counts: PackedInt32Array,
 	experience_values: PackedInt32Array,
-	total_rounds: int
+	session_scores: PackedInt32Array
 )
 signal standings_received(
 	player_ids: PackedInt32Array,
@@ -73,8 +73,6 @@ signal standings_received(
 	round_points: PackedByteArray,
 	total_scores: PackedInt32Array,
 	round_number: int,
-	total_rounds: int,
-	match_finished: bool,
 	winner_player_id: int,
 	match_id: int
 )
@@ -204,11 +202,6 @@ func set_room_profile(ready: bool, mode_exclusion: int = excluded_mode_id) -> vo
 			ready,
 			excluded_mode_id
 		)
-
-
-func set_room_rules(total_rounds: int) -> void:
-	if _session_accepted:
-		_rpc_set_room_rules.rpc_id(1, total_rounds)
 
 
 func leave_room() -> void:
@@ -468,11 +461,6 @@ func _rpc_set_room_profile(
 
 
 @rpc("any_peer", "call_remote", "reliable", 0)
-func _rpc_set_room_rules(_total_rounds: int) -> void:
-	pass
-
-
-@rpc("any_peer", "call_remote", "reliable", 0)
 func _rpc_leave_room() -> void:
 	pass
 
@@ -558,7 +546,7 @@ func _rpc_room_waiting(
 	character_indices: PackedByteArray,
 	victory_counts: PackedInt32Array,
 	experience_values: PackedInt32Array,
-	total_rounds: int
+	session_scores: PackedInt32Array
 ) -> void:
 	_room_id = room_id
 	_waiting_room_cached = true
@@ -574,7 +562,7 @@ func _rpc_room_waiting(
 		character_indices,
 		victory_counts,
 		experience_values,
-		total_rounds,
+		session_scores,
 	]
 	status_changed.emit(
 		"SALA %d · %d/%d JUGADORES" % [
@@ -596,7 +584,7 @@ func _rpc_room_waiting(
 		character_indices,
 		victory_counts,
 		experience_values,
-		total_rounds
+		session_scores
 	)
 
 
@@ -783,8 +771,6 @@ func _rpc_receive_standings(
 	round_points: PackedByteArray,
 	total_scores: PackedInt32Array,
 	round_number: int,
-	total_rounds: int,
-	match_finished: bool,
 	winner_player_id: int,
 	match_id: int
 ) -> void:
@@ -795,8 +781,6 @@ func _rpc_receive_standings(
 		round_points,
 		total_scores,
 		round_number,
-		total_rounds,
-		match_finished,
 		winner_player_id,
 		match_id
 	)

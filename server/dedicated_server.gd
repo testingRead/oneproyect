@@ -210,7 +210,7 @@ func _rpc_start_room() -> void:
 	if not room.all_connected_ready():
 		_rpc_room_action_failed.rpc_id(sender, "players_not_ready")
 		return
-	if not room.start_rounds():
+	if not room.start_minigame():
 		_rpc_room_action_failed.rpc_id(sender, "room_unavailable")
 		return
 	_broadcast_lobby_rooms()
@@ -238,22 +238,6 @@ func _rpc_set_room_profile(
 	session.excluded_mode_id = clampi(excluded_mode_id, -1, NET.ModeId.size() - 1)
 	session.ready = ready
 	_broadcast_player_profile(room, session)
-	_broadcast_room_waiting(room)
-
-
-@rpc("any_peer", "call_remote", "reliable", 0)
-func _rpc_set_room_rules(total_rounds: int) -> void:
-	var sender := multiplayer.get_remote_sender_id()
-	var room: Node = room_manager.find_room_for_peer(sender)
-	if room == null:
-		_rpc_room_action_failed.rpc_id(sender, "not_in_room")
-		return
-	if not room.is_host_peer(sender):
-		_rpc_room_action_failed.rpc_id(sender, "host_only")
-		return
-	if not room.set_total_rounds(total_rounds):
-		_rpc_room_action_failed.rpc_id(sender, "invalid_round_count")
-		return
 	_broadcast_room_waiting(room)
 
 
@@ -466,7 +450,7 @@ func _rpc_room_waiting(
 	_character_indices: PackedByteArray,
 	_victory_counts: PackedInt32Array,
 	_experience_values: PackedInt32Array,
-	_total_rounds: int
+	_session_scores: PackedInt32Array
 ) -> void:
 	pass
 
@@ -562,8 +546,6 @@ func _rpc_receive_standings(
 	_round_points: PackedByteArray,
 	_total_scores: PackedInt32Array,
 	_round_number: int,
-	_total_rounds: int,
-	_match_finished: bool,
 	_winner_player_id: int,
 	_match_id: int
 ) -> void:
@@ -630,11 +612,7 @@ func _send_standings_to_peer(room: Node, peer_id: int) -> void:
 		health_values.append(clampi(session.health, 0, 100))
 		round_points.append(clampi(session.round_points, 0, 255))
 		total_scores.append(session.score)
-	var winner_player_id: int = (
-		ranked[0].player_id
-		if room.match_finished and not ranked.is_empty()
-		else 0
-	)
+	var winner_player_id: int = ranked[0].player_id if not ranked.is_empty() else 0
 	_rpc_receive_standings.rpc_id(
 		peer_id,
 		player_ids,
@@ -643,8 +621,6 @@ func _send_standings_to_peer(room: Node, peer_id: int) -> void:
 		round_points,
 		total_scores,
 		room.round_number,
-		room.total_rounds,
-		room.match_finished,
 		winner_player_id,
 		room.match_id
 	)
@@ -789,6 +765,7 @@ func _broadcast_room_waiting(room: Node) -> void:
 	var character_indices := PackedByteArray()
 	var victory_counts := PackedInt32Array()
 	var experience_values := PackedInt32Array()
+	var session_scores := PackedInt32Array()
 	for session: RefCounted in room.session_manager.sessions:
 		if not session.connected:
 			continue
@@ -797,6 +774,7 @@ func _broadcast_room_waiting(room: Node) -> void:
 		character_indices.append(session.color_index)
 		victory_counts.append(session.profile_victories)
 		experience_values.append(session.profile_experience)
+		session_scores.append(session.score)
 	var ready_count: int = room.ready_count()
 	var all_ready: bool = room.all_connected_ready()
 	for session: RefCounted in room.session_manager.sessions:
@@ -818,7 +796,7 @@ func _broadcast_room_waiting(room: Node) -> void:
 				character_indices,
 				victory_counts,
 				experience_values,
-				room.total_rounds
+				session_scores
 			)
 
 

@@ -2,7 +2,6 @@ extends SceneTree
 
 const NETWORK_SCRIPT := preload("res://client/network_client.gd")
 const MENU_SCENE := preload("res://scenes/menu.tscn")
-const NET := preload("res://shared/net_constants.gd")
 
 
 func _init() -> void:
@@ -16,17 +15,10 @@ func _run() -> void:
 	var menu := MENU_SCENE.instantiate()
 	root.add_child(menu)
 	await process_frame
-	var rounds := menu.find_child("MatchRounds", true, false) as OptionButton
-	_require(rounds != null, "Waiting room must expose match length")
 	_require(
-		rounds.item_count == NET.MATCH_ROUND_OPTIONS.size(),
-		"Match length must offer only the supported choices"
+		menu.find_child("MatchRounds", true, false) == null,
+		"A room starts exactly one minigame and must not expose match rounds"
 	)
-	for index in rounds.item_count:
-		_require(
-			rounds.get_item_id(index) == NET.MATCH_ROUND_OPTIONS[index],
-			"Match length option IDs must match shared rules"
-		)
 	menu.call(
 		"_on_room_waiting",
 		2,
@@ -40,13 +32,22 @@ func _run() -> void:
 		PackedByteArray([2, 3]),
 		PackedInt32Array([4, 7]),
 		PackedInt32Array([21, 34]),
-		3
+		PackedInt32Array([8, 5])
 	)
 	var waiting_players := menu.find_child("WaitingPlayers", true, false) as Label
 	_require(
-		waiting_players.text.contains("Ana · LINCE MASCULINO · 4 victorias · 21 XP")
-		and waiting_players.text.contains("Beto · LINCE FEMENINA · 7 victorias · 34 XP"),
-		"Waiting room must show names, characters, ready state, wins and XP"
+		waiting_players.text.contains("2/5 JUGADORES · 2 LISTOS"),
+		"Waiting room must summarize occupancy and readiness"
+	)
+	var online_roster := menu.find_child("OnlinePlayerRoster", true, false) as VBoxContainer
+	_require(online_roster.get_child_count() == 2, "Online players must use ordered cards")
+	var online_text := ""
+	for label in online_roster.find_children("*", "Label", true, false):
+		online_text += (label as Label).text + "\n"
+	_require(
+		online_text.contains("ANA") and online_text.contains("8 PTS")
+		and online_text.contains("4V · 21XP"),
+		"Online cards must organize identity, session points and profile data"
 	)
 	_require(
 		menu.find_child("WaitingRoom", true, false).visible,
@@ -62,10 +63,7 @@ func _run() -> void:
 	)
 	var chat := menu.find_child("LanChat", true, false) as Button
 	_require(chat != null and chat.disabled, "Chat shell must not claim an unavailable transport")
-	print("MENU_SMOKE_OK round_options=%d selected=%d" % [
-		rounds.item_count,
-		rounds.get_item_id(rounds.selected),
-	])
+	print("MENU_SMOKE_OK online_cards=%d" % online_roster.get_child_count())
 	quit(0)
 
 

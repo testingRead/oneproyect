@@ -23,8 +23,6 @@ var mode_id := NET.ModeId.METEORS
 var session_manager: Node
 var host_player_id := 0
 var auto_start_when_ready := false
-var total_rounds := NET.DEFAULT_MATCH_ROUNDS
-var match_finished := false
 var match_id := 0
 
 var _snapshot_buffers: Dictionary = {}
@@ -59,7 +57,7 @@ func tick() -> void:
 		and auto_start_when_ready
 		and session_manager.connected_count() >= NET.MIN_PLAYERS_TO_START
 	):
-		start_rounds(true)
+		start_minigame(true)
 	if (
 		phase != NET.RoomPhase.WAITING
 		and phase_end_tick > 0
@@ -245,7 +243,7 @@ func accepts_new_players() -> bool:
 	)
 
 
-func start_rounds(ignore_ready := false) -> bool:
+func start_minigame(ignore_ready := false) -> bool:
 	if (
 		phase != NET.RoomPhase.WAITING
 		or session_manager.connected_count() < NET.MIN_PLAYERS_TO_START
@@ -253,13 +251,12 @@ func start_rounds(ignore_ready := false) -> bool:
 	):
 		return false
 	round_number = 0
-	match_finished = false
 	match_id = int(_random.randi() & 0x7fffffff)
 	if match_id == 0:
 		match_id = 1
 	mode_id = _pick_next_mode(-1)
+	round_seed = int(_random.randi() & 0x7fffffff)
 	for session: RefCounted in session_manager.sessions:
-		session.score = 0
 		session.round_points = 0
 		session.prepare_next_round()
 	phase = NET.RoomPhase.COUNTDOWN
@@ -269,25 +266,16 @@ func start_rounds(ignore_ready := false) -> bool:
 
 
 func reopen_waiting_room() -> bool:
-	if phase != NET.RoomPhase.RESULT or not match_finished:
+	if phase != NET.RoomPhase.RESULT:
 		return false
 	phase = NET.RoomPhase.WAITING
 	round_number = 0
 	phase_end_tick = 0
-	match_finished = false
 	for session: RefCounted in session_manager.sessions:
 		session.ready = false
-		session.score = 0
 		session.round_points = 0
 		session.prepare_next_round()
 	phase_changed.emit()
-	return true
-
-
-func set_total_rounds(value: int) -> bool:
-	if phase != NET.RoomPhase.WAITING or value not in NET.MATCH_ROUND_OPTIONS:
-		return false
-	total_rounds = value
 	return true
 
 
@@ -349,22 +337,9 @@ func _advance_phase() -> void:
 		NET.RoomPhase.ACTIVE:
 			_score_round()
 			phase = NET.RoomPhase.RESULT
-			match_finished = round_number >= total_rounds
-			if match_finished:
-				_award_match_winner_profile()
+			_award_match_winner_profile()
 			publish_standings = true
-			phase_end_tick = (
-				0
-				if match_finished
-				else server_tick + 6 * NET.SERVER_TICK_RATE
-			)
-		_:
-			_prepare_next_round()
-			phase = NET.RoomPhase.COUNTDOWN
-			var previous_mode := mode_id
-			mode_id = _pick_next_mode(previous_mode)
-			round_seed = int(_random.randi() & 0x7fffffff)
-			phase_end_tick = server_tick + 5 * NET.SERVER_TICK_RATE
+			phase_end_tick = 0
 	phase_changed.emit()
 	if publish_standings:
 		standings_changed.emit()
@@ -440,14 +415,19 @@ func _score_round() -> void:
 
 
 func _award_match_winner_profile() -> void:
-	var ranked := standings()
+	var ranked: Array[RefCounted] = []
+	for session: RefCounted in session_manager.sessions:
+		if session.connected:
+			ranked.append(session)
+	ranked.sort_custom(func(a: RefCounted, b: RefCounted) -> bool:
+		if a.round_points != b.round_points:
+			return a.round_points > b.round_points
+		if a.health != b.health:
+			return a.health > b.health
+		return a.player_id < b.player_id
+	)
 	if not ranked.is_empty():
 		ranked[0].profile_victories += 1
-
-
-func _prepare_next_round() -> void:
-	for session: RefCounted in session_manager.sessions:
-		session.prepare_next_round()
 
 
 func _tick_mode_events() -> void:

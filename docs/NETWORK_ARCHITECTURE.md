@@ -13,7 +13,7 @@ El servidor continúa siendo autoridad de:
 - salas, capacidad, anfitrión y estado `ready`;
 - identidad estable, token y ventana de reconexión;
 - fase, tiempo, semilla y selección de minijuego;
-- cantidad de rondas, eliminación, clasificación y puntuación acumulada;
+- final de cada minijuego, eliminación, clasificación y puntuación de sala;
 - generación y retransmisión de eventos compartidos;
 - pertenencia de cada estado al jugador que lo envía.
 
@@ -81,30 +81,28 @@ El HUD consulta directamente las estadísticas de `ENetPacketPeer` y muestra el
 RTT medio. La pérdida sólo aparece cuando llega al 1 %, para no añadir ruido
 visual en una conexión sana.
 
-## Rondas, eliminación y clasificación
+## Minijuegos, eliminación y clasificación
 
-El anfitrión elige 3, 5 o 7 rondas antes de iniciar. Al llegar a cero de vida,
+Cada inicio ejecuta exactamente un minijuego. Al llegar a cero de vida,
 el propietario pasa a una cámara superior, deja de colisionar y replica vida
 cero. El servidor bloquea cualquier intento posterior de volver a vida durante
-esa ronda. El siguiente minijuego reutiliza el mismo jugador y restaura salud,
-colisiones y partes.
+ese minijuego.
 
-Al terminar una ronda, el servidor ordena a los supervivientes por vida. Los
+Al terminar, el servidor ordena a los supervivientes por vida. Los
 puestos reciben 5, 4, 3, 2 o 1 puntos; los empates de vida reciben los mismos
 puntos y los eliminados reciben cero. Una RPC fiable publica nombres, vida,
-puntos de ronda y total. Después de la cantidad elegida se conserva la
-clasificación final y se anuncia al jugador con mayor puntuación.
+puntos obtenidos y total acumulado en la sala. Se anuncia el ganador de ese
+minijuego y no se inicia otro automáticamente.
 
-La clasificación fiable incluye un `match_id` y número de ronda. El cliente usa
-ambos para guardar una sola vez XP, partidas, rondas, supervivencias y
-victorias. Jugar local no toca esos contadores. Durante esta fase el servidor
-mantiene las cifras en memoria sólo para mostrarlas en la sala; la persistencia
-real sigue en `user://profile.cfg`.
+La clasificación fiable incluye un `match_id`. El cliente lo usa para guardar
+una sola vez XP, partidas, supervivencias y victorias. Jugar local no toca esos
+contadores. Durante esta fase el servidor mantiene la puntuación de sala en
+memoria; la persistencia del perfil sigue en `user://profile.cfg`.
 
 La clasificación final ofrece dos transiciones explícitas:
 
-- **Volver a la sala** reutiliza el mismo `room_id`, limpia puntuación y
-  estados `ready`, conserva jugadores y permite seleccionar de nuevo.
+- **Volver a la sala** reutiliza el mismo `room_id`, conserva puntuación y
+  jugadores, limpia estados `ready` y permite seleccionar de nuevo.
 - **Salir** abandona la sala y regresa a la lista multijugador.
 
 El servidor envía primero el estado completo de espera y después la señal de

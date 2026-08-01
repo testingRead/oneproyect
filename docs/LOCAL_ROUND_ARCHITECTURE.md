@@ -1,5 +1,10 @@
 # Contrato local de mapa y ronda
 
+Aquí “ronda” nombra únicamente el ciclo técnico interno de un minijuego
+(`prepare → active → result → cleanup`). No existe una configuración de varias
+rondas ni una rotación automática: al terminar un minijuego se vuelve a la
+sala.
+
 Esta capa funciona sin `Network` y no modifica la arquitectura ENet existente.
 Su objetivo es que mapas, eventos y rondas puedan aprobarse en un cliente antes
 de decidir qué resultados necesitarán autoridad remota.
