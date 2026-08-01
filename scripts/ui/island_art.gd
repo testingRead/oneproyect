@@ -109,7 +109,20 @@ func _draw_player() -> void:
 
 func _draw_minigame() -> void:
 	var centre := size * 0.5
-	var radius := minf(size.x, size.y) * 0.4
+	var radius := minf(size.x, size.y) * 0.31
+	var scene_color := _minigame_scene_color(String(minigame_id))
+	draw_style_box(
+		_capsule(scene_color, 18.0),
+		Rect2(Vector2(3.0, 3.0), size - Vector2(6.0, 6.0))
+	)
+	var horizon_y := size.y * 0.68
+	draw_rect(
+		Rect2(Vector2(3.0, horizon_y), Vector2(size.x - 6.0, size.y - horizon_y - 3.0)),
+		Color(0.22, 0.69, 0.78, 0.22)
+	)
+	for cloud_x in [0.2, 0.78]:
+		draw_circle(Vector2(size.x * cloud_x, size.y * 0.22), radius * 0.22, Color(1.0, 1.0, 1.0, 0.5))
+		draw_circle(Vector2(size.x * cloud_x + radius * 0.2, size.y * 0.22), radius * 0.16, Color(1.0, 1.0, 1.0, 0.5))
 	match String(minigame_id):
 		"meteors":
 			_draw_meteor(centre, radius)
@@ -137,6 +150,22 @@ func _draw_minigame() -> void:
 			_draw_ball(centre, radius, Color(0.94, 0.97, 1.0), ISLAND_THEME.CYAN)
 		_:
 			_draw_ball(centre, radius, Color(0.94, 0.12, 0.12), Color.WHITE)
+
+
+func _minigame_scene_color(id: String) -> Color:
+	match id:
+		"futbol_rebote", "bateball_arena", "domain":
+			return Color(0.55, 0.84, 0.68, 1.0)
+		"corona_central":
+			return Color(1.0, 0.87, 0.48, 1.0)
+		"bomba_relevo", "meteors":
+			return Color(1.0, 0.72, 0.58, 1.0)
+		"tornado_supervivencia", "flood", "shockwave":
+			return Color(0.57, 0.84, 0.93, 1.0)
+		"shooter_local", "shooter", "drone_hunt":
+			return Color(0.7, 0.76, 0.84, 1.0)
+		_:
+			return Color(0.98, 0.7, 0.75, 1.0)
 
 
 func _draw_meteor(centre: Vector2, radius: float) -> void:
@@ -173,7 +202,7 @@ func _draw_drone(centre: Vector2, radius: float) -> void:
 
 
 func _draw_ball(centre: Vector2, radius: float, base: Color, stripe: Color) -> void:
-	draw_circle(centre + Vector2(0, radius * 0.85), radius * 1.04, Color(0.0, 0.02, 0.04, 0.38))
+	draw_circle(centre + Vector2(0, radius * 0.72), radius * 0.72, Color(0.05, 0.1, 0.14, 0.16))
 	draw_circle(centre, radius, base)
 	draw_arc(centre, radius * 0.73, -0.45, 2.72, 32, stripe, radius * 0.24, true)
 	draw_arc(centre - Vector2(radius * 0.17, radius * 0.2), radius * 0.76, 2.72, 5.84, 32, stripe, radius * 0.24, true)

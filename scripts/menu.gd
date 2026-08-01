@@ -64,6 +64,7 @@ var _lan_mode_art: Control
 var _lan_mode_title: Label
 var _lan_mode_description: Label
 var _lan_host_badge: Label
+var _lan_room_capacity: Label
 var _lan_room_is_local := false
 var _lan_room_ready_state := false
 var _lan_room_is_host := false
@@ -284,6 +285,15 @@ func _build_lan_room_screen(parent: Control) -> VBoxContainer:
 	_lan_room_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_lan_room_detail.modulate = ISLAND_THEME.WHITE
 	header_row.add_child(_lan_room_detail)
+	_lan_room_capacity = _label("● 1/1", 17)
+	_lan_room_capacity.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_lan_room_capacity.custom_minimum_size.x = 90.0
+	_lan_room_capacity.add_theme_color_override("font_color", ISLAND_THEME.INK)
+	_lan_room_capacity.add_theme_stylebox_override(
+		"normal",
+		ISLAND_THEME.style(Color(0.93, 0.95, 0.96), ISLAND_THEME.LINE, 2, 12, 7)
+	)
+	header_row.add_child(_lan_room_capacity)
 	screen.add_child(header)
 	var selection_panel := _panel("SelectionPanel", ISLAND_THEME.PAPER, ISLAND_THEME.ORANGE)
 	selection_panel.custom_minimum_size.y = 190.0
@@ -491,7 +501,7 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	selection_row.add_child(character_box)
 	screen.add_child(selection_panel)
 	var roster_panel := _panel("OnlineRosterPanel", ISLAND_THEME.PAPER, Color(0.82, 0.85, 0.88))
-	roster_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	roster_panel.custom_minimum_size.y = 112.0
 	var roster_rows := VBoxContainer.new()
 	roster_rows.add_theme_constant_override("separation", 4)
 	roster_panel.add_child(roster_rows)
@@ -511,6 +521,9 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	_waiting_roster.add_theme_constant_override("separation", 8)
 	waiting_scroll.add_child(_waiting_roster)
 	screen.add_child(roster_panel)
+	var waiting_spacer := Control.new()
+	waiting_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	screen.add_child(waiting_spacer)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 10)
 	var leave := _button("←  SALIR", "LeaveRoom", &"IslandBackButton")
@@ -589,6 +602,7 @@ func _enter_lan_room(local_only: bool, host := true) -> void:
 	_lan_host_badge.text = "★ SOLO" if local_only else "★ ANFITRIÓN: %s" % network.display_name if host else "INVITADO"
 	_lan_host_badge.modulate = Color.WHITE if local_only or host else ISLAND_THEME.MUTED
 	_lan_room_detail.text = "★  %d PTS" % lan.local_session_points if local_only else "CONECTANDO…"
+	_lan_room_capacity.text = "● 1/1" if local_only else "● %d/%d" % [lan.players.size(), NET.MAX_PLAYERS_PER_ROOM]
 	_lan_room_character.select(CHARACTER_CATALOG.sanitize_index(network.color_index))
 	_lan_room_character.disabled = false
 	_lan_room_mode.disabled = not local_only and not host
@@ -701,6 +715,7 @@ func _refresh_lan_room() -> void:
 		))
 	var local_points := int(lan.players.get(lan.get_local_peer_id(), {}).get("points", 0))
 	_lan_room_detail.text = "★  %d PTS" % local_points
+	_lan_room_capacity.text = "● %d/%d" % [ids.size(), NET.MAX_PLAYERS_PER_ROOM]
 	var local_profile: Dictionary = lan.players.get(lan.get_local_peer_id(), {})
 	_lan_room_ready_state = bool(local_profile.get("ready", false))
 	_lan_room_ready.text = "×  CANCELAR" if _lan_room_ready_state else "✓  LISTO"
@@ -728,6 +743,7 @@ func _refresh_local_room_roster() -> void:
 		true
 	))
 	_lan_room_detail.text = "★  %d PTS" % lan.local_session_points
+	_lan_room_capacity.text = "● 1/1"
 
 
 func _update_selected_minigame_showcase() -> void:
@@ -777,7 +793,7 @@ func _build_room_player_card(
 			7
 		)
 	)
-	panel.custom_minimum_size = Vector2(220.0, 82.0)
+	panel.custom_minimum_size = Vector2(228.0, 88.0)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 7)
 	panel.add_child(row)
@@ -790,14 +806,14 @@ func _build_room_player_card(
 	identity.add_theme_constant_override("separation", 1)
 	var slot_label := _label(
 		"JUGADOR %d%s" % [slot + 1, " · ANFITRIÓN" if is_local else ""],
-		9
+		10
 	)
 	slot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	slot_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	slot_label.clip_text = true
 	slot_label.add_theme_color_override("font_color", accent.darkened(0.14))
 	identity.add_child(slot_label)
-	var name_label := _label(player_name.to_upper(), 14)
+	var name_label := _label(player_name.to_upper(), 16)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	name_label.clip_text = true
@@ -806,7 +822,7 @@ func _build_room_player_card(
 	var character_text := character_name.to_upper()
 	if not profile_note.is_empty():
 		character_text += " · " + profile_note
-	var character_label := _label(character_text, 8)
+	var character_label := _label(character_text, 9)
 	character_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	character_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	character_label.clip_text = true
@@ -814,12 +830,12 @@ func _build_room_player_card(
 	identity.add_child(character_label)
 	var stats := HBoxContainer.new()
 	stats.add_theme_constant_override("separation", 4)
-	var points_label := _label("★ %d" % maxi(0, points), 11)
+	var points_label := _label("★ %d" % maxi(0, points), 12)
 	points_label.custom_minimum_size.x = 52.0
 	points_label.add_theme_color_override("font_color", accent.darkened(0.18))
 	points_label.add_theme_stylebox_override("normal", ISLAND_THEME.style(Color(accent.r, accent.g, accent.b, 0.12), Color(accent.r, accent.g, accent.b, 0.28), 1, 10, 5))
 	stats.add_child(points_label)
-	var state := _label("✓ LISTO" if ready else "ESPERA", 9)
+	var state := _label("✓ LISTO" if ready else "ESPERA", 10)
 	state.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	state.add_theme_color_override("font_color", Color.WHITE if ready else ISLAND_THEME.ORANGE)
 	state.add_theme_stylebox_override("normal", ISLAND_THEME.style(ISLAND_THEME.GREEN if ready else Color(1.0, 0.93, 0.9, 1.0), ISLAND_THEME.GREEN if ready else ISLAND_THEME.ORANGE, 1, 10, 5))
@@ -955,11 +971,17 @@ func _on_room_waiting(
 	_show_screen(_waiting_screen)
 	_is_host = is_host
 	_local_ready = local_ready
-	_waiting_title.text = (
-		"SALA %d · ERES ANFITRIÓN" % room_id
-		if is_host
-		else "SALA %d" % room_id
-	)
+	var local_score := 0
+	var local_name_index := player_names.find(network.display_name)
+	if local_name_index >= 0 and local_name_index < session_scores.size():
+		local_score = session_scores[local_name_index]
+	_waiting_title.text = "SALA %d · %s · %d/%d · ★ %d PTS" % [
+		room_id,
+		"ANFITRIÓN" if is_host else "INVITADO",
+		player_count,
+		NET.MAX_PLAYERS_PER_ROOM,
+		local_score,
+	]
 	var visible_count := mini(player_names.size(), ready_flags.size())
 	visible_count = mini(visible_count, character_indices.size())
 	visible_count = mini(visible_count, victory_counts.size())
