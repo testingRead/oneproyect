@@ -1,69 +1,64 @@
-# Auditoría para reconstrucción local
+# Base local consolidada
 
-Fecha de corte: 2026-07-30. Esta clasificación evita seguir ampliando la escena
-multijugador mientras se aprueba una base física local.
+Fecha de consolidación: 2026-08-01.
 
-## A. Base confirmada
+Este documento fija la frontera de la base interna antes de una iteración de
+interfaz. No es una promesa de lanzamiento público: describe qué rutas son
+oficiales, qué integración se conserva y qué no debe tocarse sin una prueba.
 
-- Godot 4.7.1, GDScript y Compatibility/OpenGL.
-- Controles táctiles reutilizables: joystick izquierdo, mirada derecha y botón.
-- `CharacterBody3D` como cuerpo lógico y cámara local inmediata.
-- Exportación Android ARM64/ARM32, firma estable y pruebas ARM64.
-- Transporte ENet, salas, sesiones y servidor dedicado. Se conservan sin
-  intervenir en esta etapa.
-- Caché de mapas y contrato de límites consultable.
-
-## B. Experimentos útiles, aislados
-
-- Minijuegos, mapas ampliados, armas, daño localizado y desmembramiento.
-- Avatares orgánicos, ropa, especies y catálogo de ocho variantes.
-- Calidad baja/media/alta, landmarks y decoración procedural.
-- Modos shooter, dominio, drones, inundación, onda y meteoritos.
-
-Permanecen disponibles para reutilización posterior, pero no forman parte de la
-ruta oficial `LOCAL_DEVELOPMENT` ni se usarán para aprobar locomoción.
-
-## C. Comportamientos accidentales por convertir en reglas
-
-- Empujes y meteoritos que producen impulsos divertidos.
-- Objetos físicos que pueden encadenar golpes.
-- Balanceos exagerados del personaje.
-
-No se eliminan como ideas, pero tampoco se conservan como parámetros opacos.
-Cada uno volverá únicamente mediante una prueba y valores documentados.
-
-## D. Residuos y soluciones competidoras
-
-- Offsets de aparición `y = 1.2`, cápsula centrada y modelos con correcciones
-  verticales diferentes.
-- Geometría del personaje embebida dentro de `main.tscn`.
-- Medidas repetidas entre escenas de mapa.
-- Una UID huérfana de `shared/movement_rules.gd`, sin script correspondiente.
-- La escena principal mezcla jugador, mapas, seis modos, features, audio, HUD,
-  pools y red, por lo que no sirve como laboratorio de física.
-
-La UID huérfana se elimina. La escena principal se conserva temporalmente sólo
-como integración multijugador heredada. No recibirá nuevas mecánicas. La ruta
-oficial pasa a ser:
+## Ruta oficial de juego
 
 ```text
-LOCAL_DEVELOPMENT
-└── LocalDevelopmentLab
-    ├── PhysicalWorld (isla y océano)
-    ├── LocalPlayableArea (cuatro límites reutilizables)
-    ├── LocalBaseCharacter
-    ├── ScaleReferences
-    ├── TestCourse
-    ├── LocalMapHost
-    ├── LocalEventHost (pool fijo)
-    └── LocalRoundController
+Bootstrap
+├── Menú
+│   ├── Sala local ─┐
+│   └── Sala LAN ───┼── LocalDevelopmentLab
+│                  │   ├── isla física y costa
+│                  │   ├── LocalBaseCharacter
+│                  │   ├── LocalMapHost
+│                  │   ├── LocalRoundController
+│                  │   └── hosts de minijuego
+│                  └── vuelve a la misma sala
+└── --local-development ── LocalDevelopmentLab directo
 ```
 
-Cuando la base sea aprobada, `main.tscn` instanciará el mismo
-`LocalBaseCharacter` y dejará de mantener el controlador heredado.
+La isla es el mundo físico común. Cada `MinigameDefinition` monta sólo su
+escena, objetos y límites de ronda; al terminar, `LocalRoundController` limpia
+el contenido y devuelve al jugador a la sala.
 
-`MapDefinition` es ahora el único contrato de contenido para mapas nuevos:
-declara huella, área jugable, apariciones, zonas seguras, puntos de evento y
-navegación, objetos disponibles y compatibilidad con desastres/minijuegos.
-`isla_laboratorio` es la primera definición de referencia; no sustituye ni
-reescribe todavía los mapas heredados.
+## Sistemas aprobados
+
+- Controlador local, colisión, cámara, salto y animación procedural.
+- Joystick izquierdo y gesto derecho; en los modos de puntería se puede mover
+  mientras se apunta y se suelta para ejecutar la acción.
+- Física nativa de objetos rígidos: pelota, impactos, muros y rebotes.
+- Ciclo preparar → reglas → cuenta atrás → activo → resultado → limpieza.
+- Fútbol de rebote, corona, bomba, tornado, Bateball, balón de eliminación y
+  arena de tiro.
+- Sala LAN ENet con equipos por slots alternados, estado de objetos y eventos
+  de ronda confiables.
+- Marcador temporal de sala: empieza en cero, concede 3 puntos por victoria o
+  1 por empate y se borra al cerrar/abandonar la sala.
+
+## Integración remota preservada
+
+`scenes/main.tscn`, `scripts/game.gd`, `scripts/minigames/` y sus mapas no son
+la ruta Local/LAN actual. Se conservan porque aún sostienen el flujo de sala
+remota, el servidor dedicado y sus pruebas de integración. No deben recibir
+mecánicas nuevas durante el rediseño de UX; la migración futura deberá reutilizar
+la base local y retirar esa ruta mediante una tarea explícita.
+
+## Diagnóstico conservado
+
+Las pruebas bajo `tests/` no se exportan al APK. Algunas son de captura,
+capacidad, red o movimiento real y no se ejecutan en cada build, pero permanecen
+como herramientas de diagnóstico. La validación normal cubre personajes, rondas
+locales, minijuegos, sala LAN, códecs, servidor y menú.
+
+## Retirado en esta consolidación
+
+- `data/maps/isla_laboratorio.tres`: definición antigua sin cargas, referencias
+  ni papel en la isla física actual.
+
+No se eliminó ninguna escena, script, mapa o personaje que participe en una
+ruta de menú, exportación o prueba activa.
