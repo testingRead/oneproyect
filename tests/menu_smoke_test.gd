@@ -52,6 +52,16 @@ func _run() -> void:
 		menu.find_child("WaitingRoom", true, false).visible,
 		"Waiting room payload must switch to the room screen"
 	)
+	menu.call("_open_local_room")
+	await process_frame
+	var roster := menu.find_child("PlayerRoster", true, false) as VBoxContainer
+	_require(roster != null and roster.get_child_count() == 1, "Local room must render one roster card")
+	_require(
+		menu.find_child("PlayerCard0", true, false) != null,
+		"Roster card must expose player identity, character, points and ready state"
+	)
+	var chat := menu.find_child("LanChat", true, false) as Button
+	_require(chat != null and chat.disabled, "Chat shell must not claim an unavailable transport")
 	print("MENU_SMOKE_OK round_options=%d selected=%d" % [
 		rounds.item_count,
 		rounds.get_item_id(rounds.selected),

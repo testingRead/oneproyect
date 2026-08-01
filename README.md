@@ -22,6 +22,7 @@ referencias de laboratorio. Sus medidas y pruebas están en:
 - [pruebas y capturas](docs/LOCAL_BASE_VALIDATION.md).
 - [contrato de interacciones](docs/LOCAL_INTERACTIONS.md).
 - [hito interno antes de UX](docs/PRELAUNCH_BASELINE.md).
+- [dirección de interfaz Sala Isla](docs/UI_DIRECTION.md).
 
 Cada minijuego ejecuta preparar → reglas → cuenta regresiva → actividad →
 resultado → limpieza. El catálogo descubre automáticamente los recursos de

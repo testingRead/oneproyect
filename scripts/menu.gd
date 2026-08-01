@@ -51,6 +51,7 @@ var _lan_start_button: Button
 var _lan_address_input: LineEdit
 var _lan_room_title: Label
 var _lan_room_detail: Label
+var _lan_room_roster: VBoxContainer
 var _lan_room_character: OptionButton
 var _lan_room_mode: OptionButton
 var _lan_room_ready: Button
@@ -115,24 +116,29 @@ func _build_interface() -> void:
 
 	var panel := PanelContainer.new()
 	panel.name = "MenuPanel"
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-390.0, -350.0)
-	panel.size = Vector2(780.0, 700.0)
+	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	panel.offset_left = 28.0
+	panel.offset_top = 22.0
+	panel.offset_right = -28.0
+	panel.offset_bottom = -22.0
 	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.055, 0.075, 0.11, 0.98)
-	panel_style.border_color = Color(0.18, 0.45, 0.52, 0.9)
+	panel_style.bg_color = Color(0.035, 0.065, 0.105, 0.985)
+	panel_style.border_color = Color(0.1, 0.72, 0.82, 0.76)
 	panel_style.set_border_width_all(2)
-	panel_style.set_corner_radius_all(18)
-	panel_style.content_margin_left = 36.0
-	panel_style.content_margin_right = 36.0
-	panel_style.content_margin_top = 28.0
-	panel_style.content_margin_bottom = 28.0
+	panel_style.set_corner_radius_all(20)
+	panel_style.shadow_color = Color(0.0, 0.0, 0.0, 0.38)
+	panel_style.shadow_size = 8
+	panel_style.shadow_offset = Vector2(0.0, 4.0)
+	panel_style.content_margin_left = 24.0
+	panel_style.content_margin_right = 24.0
+	panel_style.content_margin_top = 20.0
+	panel_style.content_margin_bottom = 20.0
 	panel.add_theme_stylebox_override("panel", panel_style)
 	add_child(panel)
 
 	var screens := Control.new()
 	screens.name = "Screens"
-	screens.custom_minimum_size = Vector2(708.0, 644.0)
+	screens.custom_minimum_size = Vector2(0.0, 0.0)
 	panel.add_child(screens)
 	_main_screen = _build_main_screen(screens)
 	_lobby_screen = _build_lobby_screen(screens)
@@ -216,14 +222,38 @@ func _build_lan_screen(parent: Control) -> VBoxContainer:
 
 func _build_lan_room_screen(parent: Control) -> VBoxContainer:
 	var screen := _new_screen("LanRoom")
+	screen.add_theme_constant_override("separation", 12)
 	parent.add_child(screen)
-	_lan_room_title = _title("SALA", 32, Color(0.42, 0.9, 0.52))
-	screen.add_child(_lan_room_title)
-	_lan_room_detail = _label("1/8 JUGADORES · ANFITRIÓN", 17)
-	screen.add_child(_lan_room_detail)
+	var header := _panel("RoomHeader", Color(0.04, 0.12, 0.18, 0.96), Color(0.12, 0.76, 0.88, 0.8))
+	header.custom_minimum_size.y = 74.0
+	var header_row := HBoxContainer.new()
+	header_row.add_theme_constant_override("separation", 16)
+	header.add_child(header_row)
+	_lan_room_title = _title("SALA", 30, Color(0.55, 0.96, 1.0))
+	_lan_room_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_lan_room_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_row.add_child(_lan_room_title)
+	_lan_room_detail = _label("1/8 JUGADORES · 0 LISTOS", 16)
+	_lan_room_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_lan_room_detail.modulate = Color(0.72, 0.86, 0.96)
+	header_row.add_child(_lan_room_detail)
+	screen.add_child(header)
+	var body := HBoxContainer.new()
+	body.name = "RoomBody"
+	body.add_theme_constant_override("separation", 14)
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	screen.add_child(body)
+	var selection_panel := _panel("SelectionPanel", Color(0.045, 0.1, 0.16, 0.96), Color(0.12, 0.5, 0.66, 0.82))
+	selection_panel.custom_minimum_size.x = 385.0
+	var selection := VBoxContainer.new()
+	selection.add_theme_constant_override("separation", 11)
+	selection_panel.add_child(selection)
+	var selection_title := _title("MINIJUEGO SELECCIONADO", 18, Color(0.32, 0.9, 0.98))
+	selection_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	selection.add_child(selection_title)
 	_lan_room_mode = OptionButton.new()
 	_lan_room_mode.name = "SelectedMinigame"
-	_lan_room_mode.custom_minimum_size = Vector2(0.0, 54.0)
+	_lan_room_mode.custom_minimum_size = Vector2(0.0, 62.0)
 	_lan_room_mode.add_theme_font_size_override("font_size", 19)
 	for index in _local_minigames.size():
 		_lan_room_mode.add_item(
@@ -231,7 +261,15 @@ func _build_lan_room_screen(parent: Control) -> VBoxContainer:
 			index
 		)
 	_lan_room_mode.item_selected.connect(_on_lan_mode_selected)
-	screen.add_child(_lan_room_mode)
+	selection.add_child(_lan_room_mode)
+	var rule := _label("El anfitrión elige el modo. Los puntos sólo duran mientras esta sala siga abierta.", 15)
+	rule.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	rule.modulate = Color(0.72, 0.84, 0.94)
+	selection.add_child(rule)
+	selection.add_child(_spacer(6.0))
+	var character_title := _title("TU PERSONAJE", 18, Color(0.98, 0.72, 0.24))
+	character_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	selection.add_child(character_title)
 	_lan_room_character = OptionButton.new()
 	_lan_room_character.name = "SelectedCharacter"
 	_lan_room_character.custom_minimum_size = Vector2(0.0, 54.0)
@@ -242,20 +280,51 @@ func _build_lan_room_screen(parent: Control) -> VBoxContainer:
 			index
 		)
 	_lan_room_character.item_selected.connect(_on_lan_character_selected)
-	screen.add_child(_lan_room_character)
-	var note := _label("El anfitrión elige el minijuego; todos deben marcar LISTO.", 15)
-	note.modulate = Color(0.72, 0.82, 0.94)
-	screen.add_child(note)
+	selection.add_child(_lan_room_character)
+	body.add_child(selection_panel)
+	var roster_panel := _panel("RosterPanel", Color(0.045, 0.1, 0.16, 0.96), Color(0.12, 0.5, 0.66, 0.82))
+	roster_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var roster_layout := VBoxContainer.new()
+	roster_layout.add_theme_constant_override("separation", 8)
+	roster_panel.add_child(roster_layout)
+	var roster_title := _title("JUGADORES DE LA SALA", 18, Color(0.55, 0.96, 1.0))
+	roster_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	roster_layout.add_child(roster_title)
+	var roster_scroll := ScrollContainer.new()
+	roster_scroll.name = "PlayerRosterScroll"
+	roster_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	roster_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	roster_layout.add_child(roster_scroll)
+	_lan_room_roster = VBoxContainer.new()
+	_lan_room_roster.name = "PlayerRoster"
+	_lan_room_roster.add_theme_constant_override("separation", 7)
+	_lan_room_roster.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	roster_scroll.add_child(_lan_room_roster)
+	body.add_child(roster_panel)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 12)
+	var leave := _button("VOLVER", "LanLeave")
+	leave.custom_minimum_size.x = 160.0
+	leave.pressed.connect(_leave_lan_to_main)
+	actions.add_child(leave)
+	var chat := _button("CHAT · PRÓXIMAMENTE", "LanChat")
+	chat.custom_minimum_size.x = 210.0
+	chat.disabled = true
+	chat.tooltip_text = "El panel quedará listo para el chat de salas remotas."
+	actions.add_child(chat)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(spacer)
 	_lan_room_ready = _button("MARCAR LISTO", "LanReady")
+	_lan_room_ready.custom_minimum_size.x = 220.0
 	_lan_room_ready.pressed.connect(_toggle_lan_ready)
-	screen.add_child(_lan_room_ready)
-	_lan_room_start = _button("INICIAR MINIJUEGO", "LanStart")
+	actions.add_child(_lan_room_ready)
+	_lan_room_start = _button("INICIAR", "LanStart")
+	_lan_room_start.custom_minimum_size.x = 190.0
 	_lan_room_start.disabled = true
 	_lan_room_start.pressed.connect(_start_lan_room)
-	screen.add_child(_lan_room_start)
-	var leave := _button("SALIR DE LA SALA", "LanLeave")
-	leave.pressed.connect(_leave_lan_to_main)
-	screen.add_child(leave)
+	actions.add_child(_lan_room_start)
+	screen.add_child(actions)
 	return screen
 
 
@@ -428,6 +497,7 @@ func _enter_lan_room(local_only: bool, host := true) -> void:
 	_lan_room_start.visible = local_only or host
 	_lan_room_start.disabled = true
 	_show_screen(_lan_room_screen)
+	_refresh_local_room_roster()
 	if not local_only:
 		_refresh_lan_room()
 
@@ -439,6 +509,7 @@ func _toggle_lan_ready() -> void:
 	_lan_room_ready.text = "CANCELAR LISTO" if _lan_room_ready_state else "MARCAR LISTO"
 	if _lan_room_is_local:
 		_lan_room_start.disabled = not _lan_room_ready_state
+		_refresh_local_room_roster()
 	else:
 		lan.set_ready(_lan_room_ready_state)
 
@@ -511,14 +582,21 @@ func _refresh_lan_room() -> void:
 		return
 	var ids := PackedInt32Array(lan.players.keys())
 	ids.sort()
-	var lines := PackedStringArray()
 	var ready_count := 0
+	_clear_roster()
 	for peer_id in ids:
 		var profile: Dictionary = lan.players[peer_id]
 		var ready := bool(profile.get("ready", false))
 		ready_count += 1 if ready else 0
-		lines.append("%s  ·  %d PTS  ·  %s" % [str(profile.get("name", "Jugador")), int(profile.get("points", 0)), "LISTO" if ready else "ESPERANDO"])
-	_lan_room_detail.text = "%d/%d JUGADORES · %d LISTOS\n%s" % [ids.size(), 8, ready_count, "\n".join(lines)]
+		_lan_room_roster.add_child(_build_room_player_card(
+			str(profile.get("name", "Jugador")),
+			_character_name_for_path(str(profile.get("character", ""))),
+			int(profile.get("points", 0)),
+			ready,
+			lan.get_peer_slot(peer_id),
+			peer_id == lan.get_local_peer_id()
+		))
+	_lan_room_detail.text = "%d/%d JUGADORES · %d LISTOS" % [ids.size(), 8, ready_count]
 	var local_profile: Dictionary = lan.players.get(lan.get_local_peer_id(), {})
 	_lan_room_ready_state = bool(local_profile.get("ready", false))
 	_lan_room_ready.text = "CANCELAR LISTO" if _lan_room_ready_state else "MARCAR LISTO"
@@ -530,6 +608,87 @@ func _refresh_lan_room() -> void:
 			if _local_minigames[index].resource_path == lan.selected_minigame_path:
 				_lan_room_mode.select(index)
 				break
+
+
+func _refresh_local_room_roster() -> void:
+	if not _lan_room_is_local or _lan_room_roster == null:
+		return
+	_clear_roster()
+	_lan_room_roster.add_child(_build_room_player_card(
+		network.display_name,
+		_character_name_for_path(_selected_local_character_path()),
+		lan.local_session_points,
+		_lan_room_ready_state,
+		0,
+		true
+	))
+
+
+func _clear_roster() -> void:
+	if _lan_room_roster == null:
+		return
+	for child in _lan_room_roster.get_children():
+		child.queue_free()
+
+
+func _build_room_player_card(
+	player_name: String,
+	character_name: String,
+	points: int,
+	ready: bool,
+	slot: int,
+	is_local: bool
+) -> PanelContainer:
+	var accent := _slot_color(slot)
+	var panel := _panel(
+		"PlayerCard%d" % slot,
+		Color(0.055, 0.12, 0.19, 0.96) if is_local else Color(0.04, 0.085, 0.14, 0.96),
+		accent if is_local else Color(accent.r, accent.g, accent.b, 0.58)
+	)
+	panel.custom_minimum_size.y = 64.0
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	panel.add_child(row)
+	var mark := ColorRect.new()
+	mark.custom_minimum_size = Vector2(8.0, 0.0)
+	mark.color = accent
+	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(mark)
+	var identity := VBoxContainer.new()
+	identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var name_label := _label(player_name + (" · TÚ" if is_local else ""), 17)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	name_label.add_theme_color_override("font_color", Color.WHITE)
+	identity.add_child(name_label)
+	var character_label := _label("PERSONAJE: %s" % character_name, 13)
+	character_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	character_label.modulate = Color(0.72, 0.84, 0.94)
+	identity.add_child(character_label)
+	row.add_child(identity)
+	var points_label := _label("%d PTS" % maxi(0, points), 16)
+	points_label.custom_minimum_size.x = 88.0
+	points_label.add_theme_color_override("font_color", Color(1.0, 0.76, 0.24))
+	row.add_child(points_label)
+	var state := _label("✓ LISTO" if ready else "ESPERANDO", 14)
+	state.custom_minimum_size.x = 112.0
+	state.add_theme_color_override("font_color", Color(0.38, 1.0, 0.54) if ready else Color(1.0, 0.74, 0.28))
+	row.add_child(state)
+	return panel
+
+
+func _character_name_for_path(character_path: String) -> String:
+	for definition in _local_characters:
+		if definition.resource_path == character_path:
+			return str(definition.display_name)
+	return str(_local_characters[0].display_name) if not _local_characters.is_empty() else "BASE"
+
+
+func _slot_color(slot: int) -> Color:
+	var colors := [
+		Color(0.18, 0.78, 1.0), Color(0.66, 0.4, 1.0), Color(1.0, 0.72, 0.18),
+		Color(0.35, 0.94, 0.5), Color(1.0, 0.38, 0.66),
+	]
+	return colors[posmod(slot, colors.size())]
 
 
 func _on_lan_game_started(minigame_path: String, round_seed: int) -> void:
@@ -891,6 +1050,22 @@ func _new_screen(screen_name: String) -> VBoxContainer:
 	return screen
 
 
+func _panel(node_name: String, background: Color, border: Color) -> PanelContainer:
+	var result := PanelContainer.new()
+	result.name = node_name
+	var style := StyleBoxFlat.new()
+	style.bg_color = background
+	style.border_color = border
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(14)
+	style.content_margin_left = 16.0
+	style.content_margin_right = 16.0
+	style.content_margin_top = 12.0
+	style.content_margin_bottom = 12.0
+	result.add_theme_stylebox_override("panel", style)
+	return result
+
+
 func _title(text_value: String, size: int, color: Color) -> Label:
 	var result := _label(text_value, size)
 	result.add_theme_color_override("font_color", color)
@@ -912,7 +1087,35 @@ func _button(text_value: String, node_name: String) -> Button:
 	result.text = text_value
 	result.custom_minimum_size = Vector2(0.0, 52.0)
 	result.add_theme_font_size_override("font_size", 20)
+	var base := Color(0.055, 0.15, 0.22, 0.98)
+	var accent := Color(0.16, 0.78, 0.88, 1.0)
+	if "Ready" in node_name:
+		base = Color(0.08, 0.34, 0.2, 0.98)
+		accent = Color(0.3, 0.96, 0.48, 1.0)
+	elif "Leave" in node_name or "Back" in node_name:
+		base = Color(0.16, 0.08, 0.12, 0.98)
+		accent = Color(0.95, 0.34, 0.45, 1.0)
+	result.add_theme_stylebox_override("normal", _button_style(base, accent, 2))
+	result.add_theme_stylebox_override("hover", _button_style(base.lightened(0.1), Color.WHITE, 3))
+	result.add_theme_stylebox_override("pressed", _button_style(base.darkened(0.12), accent.darkened(0.08), 3))
+	result.add_theme_stylebox_override("disabled", _button_style(Color(0.08, 0.1, 0.13, 0.8), Color(0.25, 0.3, 0.35, 0.7), 1))
+	result.add_theme_color_override("font_color", Color(0.9, 0.97, 1.0))
+	result.add_theme_color_override("font_hover_color", Color.WHITE)
+	result.add_theme_color_override("font_disabled_color", Color(0.43, 0.5, 0.58))
 	return result
+
+
+func _button_style(background: Color, border: Color, width: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = background
+	style.border_color = border
+	style.set_border_width_all(width)
+	style.set_corner_radius_all(13)
+	style.content_margin_left = 16.0
+	style.content_margin_right = 16.0
+	style.content_margin_top = 8.0
+	style.content_margin_bottom = 8.0
+	return style
 
 
 func _spacer(height: float) -> Control:
