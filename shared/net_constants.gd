@@ -1,7 +1,7 @@
 class_name NetConstants
 extends RefCounted
 
-const PROTOCOL_VERSION := 11
+const PROTOCOL_VERSION := 12
 const DEFAULT_PORT := 9999
 const MAX_ROOMS := 5
 const MAX_PLAYERS_PER_ROOM := 8
@@ -71,6 +71,22 @@ static func mode_name(mode_id: int) -> String:
 			return "drone_hunt"
 		_:
 			return "meteors"
+
+
+static func mode_display_name(mode_id: int) -> String:
+	match mode_id:
+		ModeId.SHOCKWAVE:
+			return "ONDA DE CHOQUE"
+		ModeId.FLOOD:
+			return "INUNDACIÓN"
+		ModeId.SHOOTER:
+			return "ARENA DE TIRO"
+		ModeId.DOMAIN:
+			return "DOMINIO CON BATE"
+		ModeId.DRONE_HUNT:
+			return "CAZA DE DRONES"
+		_:
+			return "METEORITOS"
 
 
 static func mode_duration_ticks(mode_id: int) -> int:

@@ -16,7 +16,6 @@ var color_index := 0
 var profile_victories := 0
 var profile_experience := 0
 var ready := false
-var excluded_mode_id := -1
 var connected := false
 var reconnect_until_tick := 0
 

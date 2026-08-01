@@ -223,7 +223,7 @@ func toggle_pause() -> void:
 
 func restart_level() -> void:
 	if network.is_online() and (_participating_round or player.is_defeated()):
-		round_detail.text = "No puedes reaparecer hasta terminar la ronda"
+		round_detail.text = "No puedes reaparecer hasta terminar el minijuego"
 		return
 	get_tree().paused = false
 	pause_panel.visible = false
@@ -257,7 +257,7 @@ func _on_health_changed(current: int, maximum: int) -> void:
 
 func _on_player_defeated() -> void:
 	round_title.text = "ELIMINADO"
-	round_detail.text = "Observa desde arriba hasta que termine la ronda"
+	round_detail.text = "Observa desde arriba hasta que termine el minijuego"
 	_defeated_this_round = true
 	_reset_streak()
 	player.enter_spectator()

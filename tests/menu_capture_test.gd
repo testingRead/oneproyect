@@ -54,7 +54,8 @@ func _run() -> void:
 		PackedByteArray([0, 0, 0, 0, 0]),
 		PackedInt32Array([12, 10, 8, 6, 4]),
 		PackedInt32Array([80, 60, 40, 30, 20]),
-		PackedInt32Array([12, 10, 8, 6, 4])
+		PackedInt32Array([12, 10, 8, 6, 4]),
+		0
 	)
 	for frame in 4:
 		await process_frame

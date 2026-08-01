@@ -191,17 +191,18 @@ func _run() -> void:
 	)
 	first.ready = true
 	second.ready = true
-	first.excluded_mode_id = NET.ModeId.SHOOTER
-	second.excluded_mode_id = NET.ModeId.DOMAIN
-	for sample in 16:
-		_require(
-			room.call("_pick_next_mode", -1) not in [
-				NET.ModeId.SHOOTER,
-				NET.ModeId.DOMAIN,
-			],
-			"Distinct player vetoes must both be honored while three modes remain"
-		)
+	_require(
+		room.set_selected_mode(NET.ModeId.SHOOTER),
+		"Waiting-room host must select the next minigame"
+	)
+	_require(
+		not first.ready and not second.ready,
+		"Changing minigame must invalidate readiness confirmed for the old selection"
+	)
+	first.ready = true
+	second.ready = true
 	_require(room.start_minigame(), "Host-ready room must enter countdown with two players")
+	_require(room.mode_id == NET.ModeId.SHOOTER, "Selected minigame must survive startup")
 	room.phase_end_tick = room.server_tick + 1
 	room.tick()
 	_require(room.phase == NET.RoomPhase.ACTIVE, "Countdown must advance to active play")

@@ -2,6 +2,7 @@ extends SceneTree
 
 const NETWORK_SCRIPT := preload("res://client/network_client.gd")
 const MENU_SCENE := preload("res://scenes/menu.tscn")
+const NET := preload("res://shared/net_constants.gd")
 
 
 func _init() -> void:
@@ -32,11 +33,14 @@ func _run() -> void:
 		PackedByteArray([2, 3]),
 		PackedInt32Array([4, 7]),
 		PackedInt32Array([21, 34]),
-		PackedInt32Array([8, 5])
+		PackedInt32Array([8, 5]),
+		0
 	)
 	var waiting_players := menu.find_child("WaitingPlayers", true, false) as Label
 	_require(
-		waiting_players.text.contains("2/5 JUGADORES · 2 LISTOS"),
+		waiting_players.text.contains(
+			"2/%d JUGADORES · 2 LISTOS" % NET.MAX_PLAYERS_PER_ROOM
+		),
 		"Waiting room must summarize occupancy and readiness"
 	)
 	var online_roster := menu.find_child("OnlinePlayerRoster", true, false) as VBoxContainer

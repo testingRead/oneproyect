@@ -22,7 +22,7 @@ rutas visuales o del cliente.
 - reloj de salas y eventos: 20 ticks/s;
 - estados físicos del propietario: hasta 20/s;
 - snapshots: 10/s;
-- canal 0 fiable: sesión, reconexión y ronda;
+- canal 0 fiable: sesión, reconexión y ciclo del minijuego;
 - canal 1 `unreliable_ordered`: estados propietarios y snapshots;
 - canal 2 fiable: eventos críticos.
 
@@ -35,7 +35,7 @@ vacíos; el snapshot interno de dos jugadores usado por pruebas ocupa 72 bytes.
 Una desconexión conserva identidad, token, posición, velocidad, vida,
 puntuación y última secuencia durante 60 segundos. Un nuevo `peer_id` con el token
 correcto recupera el mismo `player_id`. El lobby crea hasta cinco salas dentro
-del proceso, cada una con un máximo de cinco sesiones. Sólo el anfitrión puede
+del proceso, cada una con un máximo de ocho sesiones. Sólo el anfitrión puede
 iniciar, se requieren al menos dos jugadores y todos deben confirmar `ready`;
 si éste se desconecta, el rol pasa al siguiente jugador conectado. El servidor
 conserva sólo el índice lógico de personaje, nunca su modelo o material.
@@ -45,6 +45,10 @@ en resultado hasta que un jugador pide volver; nunca encadena otro modo. La
 misma sala conserva identidad, puntuación acumulada y progreso, mientras limpia
 los estados `ready` y restaura el cuerpo para el próximo minijuego. La RPC de
 sala incluye sólo índices y cifras; nunca recursos visuales.
+
+Mientras la sala espera, el anfitrión publica un único `selected_mode_id`.
+Todos ven esa selección antes de marcarse listos. No existe una segunda ruta
+de selección mediante veto ni una elección aleatoria oculta en el servidor.
 
 ## Medición
 

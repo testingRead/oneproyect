@@ -34,7 +34,7 @@ var _character_preview: RemoteAvatar
 var _character_viewport: SubViewport
 var _ready_button: Button
 var _start_button: Button
-var _exclusion_button: OptionButton
+var _online_mode_button: OptionButton
 var _room_buttons: Array[Button] = []
 var _room_ids := PackedInt32Array()
 var _room_count := 0
@@ -493,21 +493,16 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	content.add_child(player_panel)
 	content.add_child(roster_panel)
 	screen.add_child(content)
-	_exclusion_button = OptionButton.new()
-	_exclusion_button.name = "ModeExclusion"
-	_exclusion_button.theme_type_variation = &"IslandSelector"
-	_exclusion_button.custom_minimum_size = Vector2(0.0, 48.0)
-	_exclusion_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_exclusion_button.add_theme_font_size_override("font_size", 17)
-	_exclusion_button.add_item("VETO: NINGUNO", -1)
-	_exclusion_button.add_item("VETO: METEORITOS", NET.ModeId.METEORS)
-	_exclusion_button.add_item("VETO: ONDA", NET.ModeId.SHOCKWAVE)
-	_exclusion_button.add_item("VETO: INUNDACIÓN", NET.ModeId.FLOOD)
-	_exclusion_button.add_item("VETO: SHOOTER", NET.ModeId.SHOOTER)
-	_exclusion_button.add_item("VETO: DOMINIO", NET.ModeId.DOMAIN)
-	_exclusion_button.add_item("VETO: DRONES", NET.ModeId.DRONE_HUNT)
-	_exclusion_button.item_selected.connect(_on_exclusion_selected)
-	screen.add_child(_exclusion_button)
+	_online_mode_button = OptionButton.new()
+	_online_mode_button.name = "OnlineMinigame"
+	_online_mode_button.theme_type_variation = &"IslandSelector"
+	_online_mode_button.custom_minimum_size = Vector2(0.0, 48.0)
+	_online_mode_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_online_mode_button.add_theme_font_size_override("font_size", 17)
+	for mode_id in NET.ModeId.size():
+		_online_mode_button.add_item("MINIJUEGO: %s" % NET.mode_display_name(mode_id), mode_id)
+	_online_mode_button.item_selected.connect(_on_online_mode_selected)
+	screen.add_child(_online_mode_button)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 10)
 	var leave := _button("←  SALIR", "LeaveRoom", &"IslandBackButton")
@@ -912,9 +907,10 @@ func _on_room_list(
 			continue
 		var waiting := phases[index] == NET.RoomPhase.WAITING
 		var host := host_names[index] if not host_names[index].is_empty() else "Sin anfitrión"
-		button.text = "SALA %d  ·  %d/5  ·  %s" % [
+		button.text = "SALA %d  ·  %d/%d  ·  %s" % [
 			room_ids[index],
 			player_counts[index],
+			NET.MAX_PLAYERS_PER_ROOM,
 			host if waiting else "EN PARTIDA",
 		]
 		button.disabled = not waiting or player_counts[index] >= NET.MAX_PLAYERS_PER_ROOM
@@ -933,7 +929,8 @@ func _on_room_waiting(
 	character_indices: PackedByteArray,
 	victory_counts: PackedInt32Array,
 	experience_values: PackedInt32Array,
-	session_scores: PackedInt32Array
+	session_scores: PackedInt32Array,
+	selected_mode_id: int
 ) -> void:
 	_show_screen(_waiting_screen)
 	_is_host = is_host
@@ -960,12 +957,14 @@ func _on_room_waiting(
 			player_names[index] == network.display_name,
 			"%dV · %dXP" % [victory_counts[index], experience_values[index]]
 		))
-	_waiting_detail.text = "%d/5 JUGADORES · %d LISTOS · PUNTOS DE ESTA SALA" % [
+	_waiting_detail.text = "%d/%d JUGADORES · %d LISTOS · PUNTOS DE ESTA SALA" % [
 		player_count,
+		NET.MAX_PLAYERS_PER_ROOM,
 		ready_count,
 	]
 	_character_button.disabled = local_ready
-	_exclusion_button.disabled = local_ready
+	_online_mode_button.select(clampi(selected_mode_id, 0, _online_mode_button.item_count - 1))
+	_online_mode_button.disabled = not is_host or local_ready
 	_ready_button.disabled = false
 	_ready_button.text = "CANCELAR LISTO" if local_ready else "MARCAR LISTO"
 	_start_button.visible = is_host
@@ -985,7 +984,7 @@ func _on_room_started(_room_id: int) -> void:
 		return
 	_loading_game = true
 	_character_button.disabled = true
-	_exclusion_button.disabled = true
+	_online_mode_button.disabled = true
 	_ready_button.disabled = true
 	_start_button.disabled = true
 	_waiting_detail.text = "Iniciando partida…"
@@ -1118,12 +1117,11 @@ func _toggle_ready() -> void:
 	network.set_room_profile(not _local_ready)
 
 
-func _on_exclusion_selected(index: int) -> void:
-	if _local_ready or _loading_game:
+func _on_online_mode_selected(index: int) -> void:
+	if not _is_host or _local_ready or _loading_game:
 		return
-	network.excluded_mode_id = _exclusion_button.get_item_id(index)
 	if network.is_online():
-		network.set_room_profile(false, network.excluded_mode_id)
+		network.set_room_mode(_online_mode_button.get_item_id(index))
 
 
 func _save_character() -> void:

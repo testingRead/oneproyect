@@ -6,6 +6,7 @@ const REMOTE_AVATAR_SCENE := preload("res://scenes/components/remote_avatar.tscn
 const GAMEPLAY_FEATURE_SCRIPT := preload("res://scripts/features/gameplay_feature.gd")
 const CHARACTER_CATALOG := preload("res://scripts/characters/character_catalog.gd")
 const WEAPONS := preload("res://shared/weapon_profiles.gd")
+const NET := preload("res://shared/net_constants.gd")
 
 
 func _init() -> void:
@@ -45,9 +46,9 @@ func _run() -> void:
 		"Waiting room must expose character selection and ready confirmation"
 	)
 	_require(
-		menu.find_child("ModeExclusion", true, false) is OptionButton
-		and menu.find_child("ModeExclusion", true, false).item_count == 7,
-		"Waiting room must expose one optional minigame veto"
+		menu.find_child("OnlineMinigame", true, false) is OptionButton
+		and menu.find_child("OnlineMinigame", true, false).item_count == NET.ModeId.size(),
+		"Waiting-room host must select one minigame directly"
 	)
 	menu.queue_free()
 	await process_frame

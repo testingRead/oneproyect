@@ -21,9 +21,9 @@ Referencias oficiales:
 ## Qué consume cada unidad
 
 El transporte frecuente conserva buffers `PackedByteArray` por destinatario.
-Un estado subido ocupa 22 bytes. Con cinco jugadores, cada cliente recibe
-snapshots de 120 bytes a 10 Hz. El tráfico de aplicación es aproximadamente
-1,17 KiB/s por jugador antes de cabeceras UDP/ENet.
+Un estado subido ocupa 22 bytes. Con ocho jugadores, cada cliente recibe
+snapshots de 192 bytes a 10 Hz. El tráfico de aplicación es aproximadamente
+1,88 KiB/s por jugador antes de cabeceras UDP/ENet.
 
 La prueba `tests/server_memory_benchmark.gd` construye cien salas y quinientas
 sesiones en un único proceso. La memoria estática incremental medida fue:
@@ -105,7 +105,7 @@ cliente seguirá resolviendo partículas, trazadores, sonido y animación.
 
 ## Política de capacidad
 
-Los máximos actuales de cinco salas por cinco jugadores son un límite de
+Los máximos actuales de cinco salas por ocho jugadores son un límite de
 producto, no el techo técnico medido. No se llenará la máquina hasta el 100 %:
 
 - CPU sostenida objetivo: como máximo 50 % de un núcleo para el proceso.

@@ -67,7 +67,7 @@ principio se conserva.
 ### Bomba
 
 - Corregido: el anfitrión elige un portador inicial determinista por semilla,
-  decide contactos y ejecuta la única mecha capaz de terminar la ronda.
+  decide contactos y ejecuta la única mecha capaz de terminar el minijuego.
 - Corregido: portador, tiempo restante, explosión y perdedor viajan como
   eventos fiables identificados por ronda.
 - Corregido: sólo pierde quien tenía la bomba; los demás sobreviven.

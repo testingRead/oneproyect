@@ -219,8 +219,7 @@ func _rpc_start_room() -> void:
 @rpc("any_peer", "call_remote", "reliable", 0)
 func _rpc_set_room_profile(
 	character_index: int,
-	ready: bool,
-	excluded_mode_id: int
+	ready: bool
 ) -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	var room: Node = room_manager.find_room_for_peer(sender)
@@ -235,9 +234,24 @@ func _rpc_set_room_profile(
 		_rpc_room_action_failed.rpc_id(sender, "not_in_room")
 		return
 	session.color_index = clampi(character_index, 0, NET.CHARACTER_VARIANT_COUNT - 1)
-	session.excluded_mode_id = clampi(excluded_mode_id, -1, NET.ModeId.size() - 1)
 	session.ready = ready
 	_broadcast_player_profile(room, session)
+	_broadcast_room_waiting(room)
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_set_room_mode(mode_id: int) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	var room: Node = room_manager.find_room_for_peer(sender)
+	if room == null:
+		_rpc_room_action_failed.rpc_id(sender, "not_in_room")
+		return
+	if not room.is_host_peer(sender):
+		_rpc_room_action_failed.rpc_id(sender, "host_only")
+		return
+	if not room.set_selected_mode(mode_id):
+		_rpc_room_action_failed.rpc_id(sender, "invalid_minigame")
+		return
 	_broadcast_room_waiting(room)
 
 
@@ -450,7 +464,8 @@ func _rpc_room_waiting(
 	_character_indices: PackedByteArray,
 	_victory_counts: PackedInt32Array,
 	_experience_values: PackedInt32Array,
-	_session_scores: PackedInt32Array
+	_session_scores: PackedInt32Array,
+	_selected_mode_id: int
 ) -> void:
 	pass
 
@@ -796,7 +811,8 @@ func _broadcast_room_waiting(room: Node) -> void:
 				character_indices,
 				victory_counts,
 				experience_values,
-				session_scores
+				session_scores,
+				room.selected_mode_id
 			)
 
 

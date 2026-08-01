@@ -21,7 +21,7 @@ Esta división sigue tres ideas usadas por motores y muestras grandes:
   [Game Features](https://dev.epicgames.com/documentation/en-us/unreal-engine/game-features-and-modular-gameplay-in-unreal-engine).
 
 No se copian esas arquitecturas completas: esta versión conserva sólo los
-límites útiles para un juego pequeño de cinco personas y teléfonos modestos.
+límites útiles para un juego pequeño de hasta ocho personas y teléfonos modestos.
 
 ## Capas estables
 

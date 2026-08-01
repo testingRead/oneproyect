@@ -194,7 +194,7 @@ func apply_network_state(
 			_finish_all_modes()
 			_active_mode = null
 			_current_plan = plan
-			state_changed.emit("RONDA TERMINADA", "Calculando clasificación…")
+			state_changed.emit("MINIJUEGO TERMINADO", "Calculando clasificación…")
 			if previous_state != RoundState.RESULT or previous_round != round_number:
 				round_survived.emit(round_number)
 
@@ -275,7 +275,7 @@ func _begin_result() -> void:
 	_last_clock_second = -1
 	_finish_all_modes()
 	_active_mode = null
-	state_changed.emit("RONDA TERMINADA", "Ronda %d completada" % round_number)
+	state_changed.emit("MINIJUEGO TERMINADO", "Clasificación calculada")
 	round_survived.emit(round_number)
 	_sync_round_state()
 

@@ -15,6 +15,8 @@ var requested_create := false
 var requested_join := false
 var requested_ready := false
 var requested_start := false
+var requested_mode := false
+var saw_selected_mode := false
 var returned_to_lobby := false
 var replayed_remote := false
 
@@ -100,10 +102,17 @@ func _on_room_waiting(
 	_character_indices: PackedByteArray,
 	_victory_counts: PackedInt32Array,
 	_experience_values: PackedInt32Array,
-	_session_scores: PackedInt32Array
+	_session_scores: PackedInt32Array,
+	selected_mode_id: int
 ) -> void:
 	joined = true
 	saw_two_players = saw_two_players or player_count >= NET.MIN_PLAYERS_TO_START
+	if role == "host" and is_host and not requested_mode:
+		requested_mode = true
+		if selected_mode_id != NET.ModeId.SHOOTER:
+			network.set_room_mode(NET.ModeId.SHOOTER)
+			return
+	saw_selected_mode = saw_selected_mode or selected_mode_id == NET.ModeId.SHOOTER
 	if not local_ready and not requested_ready:
 		requested_ready = true
 		network.set_room_profile(true)
@@ -122,7 +131,7 @@ func _run() -> void:
 	var started_msec := Time.get_ticks_msec()
 	while Time.get_ticks_msec() - started_msec < TIMEOUT_MSEC:
 		await process_frame
-		if joined and saw_two_players and started:
+		if joined and saw_two_players and saw_selected_mode and started:
 			var completed_room_id: int = network.get_room_id()
 			var replay_count := [0]
 			network.remote_player_joined.connect(func(
@@ -154,7 +163,7 @@ func _run() -> void:
 				_fail("server did not acknowledge leaving the room")
 				return
 			print(
-				"LOBBY_PROBE_OK role=%s room=%d players=2 ready=true replay=true"
+				"LOBBY_PROBE_OK role=%s room=%d players=2 ready=true mode=shooter replay=true"
 				% [role, completed_room_id]
 			)
 			network.disconnect_session()

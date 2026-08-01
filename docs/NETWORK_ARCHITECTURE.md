@@ -130,9 +130,10 @@ servidor mantiene el último estado propietario: posición, velocidad, vida,
 orientación, puntuación y máscara corporal. Una reconexión válida recupera el
 mismo `player_id` y ese estado.
 
-El lobby admite cinco salas en un proceso y cinco jugadores por sala. Sólo el
+El lobby admite cinco salas en un proceso y ocho jugadores por sala. Sólo el
 anfitrión inicia, se requieren al menos dos personas y todas deben marcarse
-listas. El anfitrión también fija la longitud de partida. No hay matchmaking
+listas. El anfitrión elige directamente el único minijuego que se ejecutará;
+no hay veto, rotación aleatoria ni longitud configurable. No hay matchmaking
 público, migración de proceso, P2P, cuentas ni persistencia de servidor.
 
 ## Límite futuro

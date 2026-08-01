@@ -916,7 +916,7 @@ func _on_round_phase_changed(
 				round_button.show()
 			banner_title.text = _minigame_title()
 			banner_detail.text = "La partida terminó. Vuelve a la sala para elegir de nuevo." if _launched_from_room and _match_has_started else "Pulsa JUGAR para iniciar"
-			banner_progress.text = "Dos arcos · paredes · primero a 3" if _selected_minigame_id == &"futbol_rebote" else "Vista aérea · primero a 2" if _is_bateball_game() else "Cinco eliminaciones · cargador y recarga" if _is_shooter_game() else "Una sola regla clara, una ronda limpia"
+			banner_progress.text = "Dos arcos · paredes · primero a 3" if _selected_minigame_id == &"futbol_rebote" else "Vista aérea · primero a 2" if _is_bateball_game() else "Cinco eliminaciones · cargador y recarga" if _is_shooter_game() else "Una sola regla clara, una partida limpia"
 			_on_player_metrics(player.get_diagnostics())
 		LocalRoundController.Phase.PREPARE:
 			_session_score_awarded = false
@@ -944,7 +944,7 @@ func _on_round_phase_changed(
 			_award_session_score(winner)
 		LocalRoundController.Phase.CLEANUP:
 			banner_title.text = "LIMPIANDO %s" % _minigame_title()
-			banner_detail.text = "Retirando mapa, objetos y estados de la ronda"
+			banner_detail.text = "Retirando mapa, objetos y estados del minijuego"
 			banner_progress.text = "Volviendo a la sala sin residuos"
 	if _is_elimination_ball_game():
 		match next_phase:
@@ -1024,14 +1024,14 @@ func _show_round_result(winner: int) -> void:
 	elif _is_bomb_game():
 		banner_title.text = "¡TE EXPLOTÓ LA BOMBA!" if winner < 0 else "¡SOBREVIVISTE!"
 		banner_detail.text = "%s quedó con la bomba al terminar la mecha" % bomb_host.get_holder_name()
-		banner_progress.text = "La explosión terminó la ronda"
+		banner_progress.text = "La explosión terminó el minijuego"
 	elif _is_tornado_game():
 		banner_title.text = "¡SOBREVIVISTE!" if winner > 0 else "ELIMINADO"
-		banner_detail.text = "La ronda terminó por tiempo o al caer todos"
+		banner_detail.text = "El minijuego terminó por tiempo o al caer todos"
 		banner_progress.text = "VIDA FINAL %d/100" % player.get_local_health()
 	elif _is_elimination_ball_game():
 		banner_title.text = "¡VICTORIA!" if winner > 0 else "DERROTA" if winner < 0 else "EMPATE"
-		banner_detail.text = "La ronda termina cuando un equipo queda sin jugadores"
+		banner_detail.text = "El minijuego termina cuando un equipo queda sin jugadores"
 		banner_progress.text = _elimination_ball_progress_text()
 	elif _is_shooter_game():
 		banner_title.text = "¡VICTORIA!" if winner > 0 else "DERROTA" if winner < 0 else "EMPATE"

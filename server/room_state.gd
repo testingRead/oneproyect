@@ -20,6 +20,7 @@ var round_number := 0
 var round_seed := 1
 var phase_end_tick := 0
 var mode_id := NET.ModeId.METEORS
+var selected_mode_id := NET.ModeId.METEORS
 var session_manager: Node
 var host_player_id := 0
 var auto_start_when_ready := false
@@ -254,7 +255,7 @@ func start_minigame(ignore_ready := false) -> bool:
 	match_id = int(_random.randi() & 0x7fffffff)
 	if match_id == 0:
 		match_id = 1
-	mode_id = _pick_next_mode(-1)
+	mode_id = selected_mode_id
 	round_seed = int(_random.randi() & 0x7fffffff)
 	for session: RefCounted in session_manager.sessions:
 		session.round_points = 0
@@ -276,6 +277,17 @@ func reopen_waiting_room() -> bool:
 		session.round_points = 0
 		session.prepare_next_round()
 	phase_changed.emit()
+	return true
+
+
+func set_selected_mode(value: int) -> bool:
+	if phase != NET.RoomPhase.WAITING or value < 0 or value >= NET.ModeId.size():
+		return false
+	if selected_mode_id == value:
+		return true
+	selected_mode_id = value
+	for session: RefCounted in session_manager.sessions:
+		session.ready = false
 	return true
 
 
@@ -343,38 +355,6 @@ func _advance_phase() -> void:
 	phase_changed.emit()
 	if publish_standings:
 		standings_changed.emit()
-
-
-func _pick_next_mode(previous_mode: int) -> int:
-	# Respect distinct player vetoes while preserving a useful rotation pool.
-	# When more modes are vetoed than we can honor, vote count wins and ties are
-	# shuffled by the room RNG.
-	var veto_counts := PackedInt32Array()
-	veto_counts.resize(NET.ModeId.size())
-	for session: RefCounted in session_manager.sessions:
-		if session.connected and session.excluded_mode_id >= 0:
-			veto_counts[session.excluded_mode_id] += 1
-	var voted_modes: Array[int] = []
-	for candidate in veto_counts.size():
-		if veto_counts[candidate] > 0:
-			voted_modes.append(candidate)
-	voted_modes.shuffle()
-	voted_modes.sort_custom(func(a: int, b: int) -> bool:
-		return veto_counts[a] > veto_counts[b]
-	)
-	var maximum_exclusions := maxi(0, NET.ModeId.size() - 3)
-	var excluded_modes: Dictionary = {}
-	for index in mini(maximum_exclusions, voted_modes.size()):
-		excluded_modes[voted_modes[index]] = true
-	var candidates := PackedInt32Array()
-	for candidate in NET.ModeId.size():
-		if not excluded_modes.has(candidate) and candidate != previous_mode:
-			candidates.append(candidate)
-	if candidates.is_empty():
-		for candidate in NET.ModeId.size():
-			if not excluded_modes.has(candidate):
-				candidates.append(candidate)
-	return candidates[_random.randi_range(0, candidates.size() - 1)]
 
 
 func _score_round() -> void:

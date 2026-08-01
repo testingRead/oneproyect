@@ -96,8 +96,9 @@ La guía para añadir modos, mapas y personajes sin acoplarlos al núcleo está 
 
 El arranque muestra dos rutas separadas. **JUGAR LOCAL** abre la isla-laboratorio
 sin conectarse a ningún servidor. **MULTIJUGADOR** abre un lobby ENet/UDP con hasta
-cinco salas simultáneas de cinco personas cada una. El creador es el anfitrión
-de la sala y puede iniciar cuando hay entre dos y cinco jugadores y todos han
+cinco salas simultáneas de ocho personas cada una. El creador es el anfitrión
+de la sala, elige directamente un minijuego y puede iniciar cuando hay entre
+dos y ocho jugadores y todos han
 marcado **LISTO**; si se desconecta, el siguiente jugador conectado hereda ese
 rol. El personaje se elige en la sala, queda bloqueado al confirmar y no puede
 cambiarse durante la partida.

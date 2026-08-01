@@ -64,7 +64,8 @@ signal room_waiting_updated(
 	character_indices: PackedByteArray,
 	victory_counts: PackedInt32Array,
 	experience_values: PackedInt32Array,
-	session_scores: PackedInt32Array
+	session_scores: PackedInt32Array,
+	selected_mode_id: int
 )
 signal standings_received(
 	player_ids: PackedInt32Array,
@@ -91,7 +92,6 @@ var display_name := ""
 var color_index := 0
 var profile_victories := 0
 var profile_experience := 0
-var excluded_mode_id := -1
 
 var _players: Dictionary = {}
 var _online := false
@@ -193,15 +193,18 @@ func start_room() -> void:
 		_rpc_start_room.rpc_id(1)
 
 
-func set_room_profile(ready: bool, mode_exclusion: int = excluded_mode_id) -> void:
+func set_room_profile(ready: bool) -> void:
 	if _session_accepted:
-		excluded_mode_id = clampi(mode_exclusion, -1, NET.ModeId.size() - 1)
 		_rpc_set_room_profile.rpc_id(
 			1,
 			clampi(color_index, 0, NET.CHARACTER_VARIANT_COUNT - 1),
-			ready,
-			excluded_mode_id
+			ready
 		)
+
+
+func set_room_mode(mode_id: int) -> void:
+	if _session_accepted:
+		_rpc_set_room_mode.rpc_id(1, clampi(mode_id, 0, NET.ModeId.size() - 1))
 
 
 func leave_room() -> void:
@@ -223,7 +226,7 @@ func is_in_lobby() -> bool:
 
 
 func replay_waiting_room() -> bool:
-	if _waiting_room_cached and _waiting_room_payload.size() == 12:
+	if _waiting_room_cached and _waiting_room_payload.size() == 13:
 		room_waiting_updated.emit.callv(_waiting_room_payload)
 		return true
 	return false
@@ -454,9 +457,13 @@ func _rpc_start_room() -> void:
 @rpc("any_peer", "call_remote", "reliable", 0)
 func _rpc_set_room_profile(
 	_character_index: int,
-	_ready: bool,
-	_excluded_mode_id: int
+	_ready: bool
 ) -> void:
+	pass
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _rpc_set_room_mode(_mode_id: int) -> void:
 	pass
 
 
@@ -546,7 +553,8 @@ func _rpc_room_waiting(
 	character_indices: PackedByteArray,
 	victory_counts: PackedInt32Array,
 	experience_values: PackedInt32Array,
-	session_scores: PackedInt32Array
+	session_scores: PackedInt32Array,
+	selected_mode_id: int
 ) -> void:
 	_room_id = room_id
 	_waiting_room_cached = true
@@ -563,6 +571,7 @@ func _rpc_room_waiting(
 		victory_counts,
 		experience_values,
 		session_scores,
+		selected_mode_id,
 	]
 	status_changed.emit(
 		"SALA %d · %d/%d JUGADORES" % [
@@ -584,7 +593,8 @@ func _rpc_room_waiting(
 		character_indices,
 		victory_counts,
 		experience_values,
-		session_scores
+		session_scores,
+		selected_mode_id
 	)
 
 

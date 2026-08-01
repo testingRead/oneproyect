@@ -6,7 +6,7 @@ rondas ni una rotación automática: al terminar un minijuego se vuelve a la
 sala.
 
 Esta capa funciona sin `Network` y no modifica la arquitectura ENet existente.
-Su objetivo es que mapas, eventos y rondas puedan aprobarse en un cliente antes
+Su objetivo es que mapas, eventos y partidas puedan aprobarse en un cliente antes
 de decidir qué resultados necesitarán autoridad remota.
 
 ## Responsabilidades
@@ -20,7 +20,7 @@ de decidir qué resultados necesitarán autoridad remota.
 - `LocalRoundController`: único dueño de fases, tiempos, bloqueo de controles y
   limpieza.
 - `LocalBaseCharacter`: movimiento e impulsos inmediatos; desconoce mapas,
-  rondas y red.
+  partidas y red.
 - `LocalShooterHost`: arma seleccionada por semilla, hitscan, bots locales,
   vida, cargadores independientes, respawn y clasificación individual; no
   crea el escenario.
@@ -54,8 +54,8 @@ PREPARE → RULES → COUNTDOWN → ACTIVE → RESULT → CLEANUP → IDLE
 ```
 
 `stop_and_clean()` incrementa una generación interna. Todo temporizador viejo
-comprueba esa generación al despertar, por lo que una ronda cancelada no puede
-continuar ni reactivar contenido. La prueba marca tres goles en ocho rondas y
+comprueba esa generación al despertar, por lo que una partida cancelada no puede
+continuar ni reactivar contenido. La prueba marca tres goles en ocho ejecuciones y
 ejecuta una cancelación; todas vuelven exactamente al mismo conteo de nodos y
 restauran la cámara en tercera persona.
 

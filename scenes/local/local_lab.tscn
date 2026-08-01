@@ -139,7 +139,7 @@ text = "ÁREA"
 layout_mode = 2
 theme_override_colors/font_color = Color(0.98, 0.55, 0.24, 1)
 theme_override_font_sizes/font_size = 14
-text = "RONDA IDLE"
+text = "MINIJUEGO LISTO"
 
 [node name="Metrics" type="Label" parent="HUD/DiagnosticsPanel/Margin/Rows"]
 layout_mode = 2
@@ -324,5 +324,5 @@ offset_bottom = -40.0
 grow_horizontal = 0
 grow_vertical = 0
 script = ExtResource("6_button")
-label = "RONDA"
+label = "MINIJUEGO"
 accent = Color(0.86, 0.36, 0.12, 0.9)
