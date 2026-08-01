@@ -1,4 +1,4 @@
-# Dirección de interfaz: Sala Isla
+# Dirección de interfaz: Tarjetas claras
 
 Dirección elegida el 2026-08-01 para la siguiente capa de UX.
 
@@ -11,22 +11,24 @@ teléfonos de gama baja.
 
 ## Sala
 
-La sala Local/LAN reproduce la composición aprobada en
-`UI_DISENO_01_SALA_ISLA.png` y se compone de cuatro regiones:
+La sala Local/LAN adapta la composición aprobada en
+`UI_DISENO_03_TARJETAS_CLARAS.png` y se compone de cuatro regiones:
 
 ```text
-cabecera: sala · jugadores/listos · estado
-├── selección: minijuego y personaje local
-├── roster: nombre · personaje · puntos de sesión · listo
+cabecera blanca: sala · anfitrión · puntos de sesión
+├── tarjeta protagonista: icono, minijuego, descripción y selectores
+├── carrusel de tarjetas: nombre · personaje · puntos · listo
 └── acciones: volver · chat futuro · listo · iniciar
 ```
 
-- Cada jugador usa una tarjeta 2D con número, silueta dibujada, color de slot,
+- Cada jugador usa una tarjeta blanca 2D con silueta dibujada, color de slot,
   nombre, personaje, puntos y estado. No usa un `SubViewport` ni un modelo 3D
   adicional.
 - Los puntos son de sesión, no experiencia persistente.
-- Verde significa listo; turquesa acción principal; naranja información del
-  anfitrión; rojo sólo abandonar/cancelar.
+- Verde significa listo; turquesa acción principal; coral destaca selección e
+  información del anfitrión; azul grisáceo identifica navegación secundaria.
+- El carrusel mantiene tarjetas legibles para ocho participantes sin reducir
+  fuentes ni apilar textos verticalmente; en pantallas estrechas se desplaza.
 - El botón de chat es una carcasa de UX desactivada. No abre red ni conserva
   mensajes hasta que exista una sala remota que lo requiera.
 

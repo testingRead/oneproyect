@@ -43,13 +43,13 @@ func _run() -> void:
 		),
 		"Waiting room must summarize occupancy and readiness"
 	)
-	var online_roster := menu.find_child("OnlinePlayerRoster", true, false) as VBoxContainer
+	var online_roster := menu.find_child("OnlinePlayerRoster", true, false) as HBoxContainer
 	_require(online_roster.get_child_count() == 2, "Online players must use ordered cards")
 	var online_text := ""
 	for label in online_roster.find_children("*", "Label", true, false):
 		online_text += (label as Label).text + "\n"
 	_require(
-		online_text.contains("ANA") and online_text.contains("8 PTS")
+		online_text.contains("ANA") and online_text.contains("★ 8")
 		and online_text.contains("4V · 21XP"),
 		"Online cards must organize identity, session points and profile data"
 	)
@@ -59,7 +59,7 @@ func _run() -> void:
 	)
 	menu.call("_open_local_room")
 	await process_frame
-	var roster := menu.find_child("PlayerRoster", true, false) as VBoxContainer
+	var roster := menu.find_child("PlayerRoster", true, false) as HBoxContainer
 	_require(roster != null and roster.get_child_count() == 1, "Local room must render one roster card")
 	_require(
 		menu.find_child("PlayerCard0", true, false) != null,

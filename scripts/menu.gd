@@ -28,13 +28,15 @@ var _create_button: Button
 var _refresh_button: Button
 var _waiting_title: Label
 var _waiting_detail: Label
-var _waiting_roster: VBoxContainer
+var _waiting_roster: HBoxContainer
 var _character_button: OptionButton
 var _character_preview: RemoteAvatar
 var _character_viewport: SubViewport
 var _ready_button: Button
 var _start_button: Button
 var _online_mode_button: OptionButton
+var _online_mode_art: Control
+var _online_mode_title: Label
 var _room_buttons: Array[Button] = []
 var _room_ids := PackedInt32Array()
 var _room_count := 0
@@ -53,7 +55,7 @@ var _lan_start_button: Button
 var _lan_address_input: LineEdit
 var _lan_room_title: Label
 var _lan_room_detail: Label
-var _lan_room_roster: VBoxContainer
+var _lan_room_roster: HBoxContainer
 var _lan_room_character: OptionButton
 var _lan_room_mode: OptionButton
 var _lan_room_ready: Button
@@ -274,7 +276,7 @@ func _build_lan_room_screen(parent: Control) -> VBoxContainer:
 	_lan_host_badge.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_lan_host_badge.custom_minimum_size.x = 190.0
 	_lan_host_badge.add_theme_color_override("font_color", ISLAND_THEME.ORANGE)
-	_lan_host_badge.add_theme_stylebox_override("normal", ISLAND_THEME.style(Color(0.08, 0.055, 0.02, 0.9), ISLAND_THEME.ORANGE, 2, 9, 8))
+	_lan_host_badge.add_theme_stylebox_override("normal", ISLAND_THEME.style(Color(1.0, 0.91, 0.88, 1.0), ISLAND_THEME.ORANGE, 2, 9, 8))
 	header_row.add_child(_lan_host_badge)
 	_lan_room_detail = _label("★  0 PTS", 18)
 	_lan_room_detail.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -283,84 +285,80 @@ func _build_lan_room_screen(parent: Control) -> VBoxContainer:
 	_lan_room_detail.modulate = ISLAND_THEME.WHITE
 	header_row.add_child(_lan_room_detail)
 	screen.add_child(header)
-	var body := HBoxContainer.new()
-	body.name = "RoomBody"
-	body.add_theme_constant_override("separation", 16)
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	screen.add_child(body)
-	var selection_panel := _panel("SelectionPanel", Color(0.012, 0.07, 0.12, 0.94), ISLAND_THEME.CYAN)
-	selection_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	selection_panel.size_flags_stretch_ratio = 1.15
+	var selection_panel := _panel("SelectionPanel", ISLAND_THEME.PAPER, ISLAND_THEME.ORANGE)
+	selection_panel.custom_minimum_size.y = 190.0
 	var selection := VBoxContainer.new()
-	selection.add_theme_constant_override("separation", 7)
+	selection.add_theme_constant_override("separation", 5)
 	selection_panel.add_child(selection)
-	var selection_title := _title("MINIJUEGO SELECCIONADO", 16, Color(0.01, 0.09, 0.12))
-	selection_title.custom_minimum_size.y = 34.0
-	selection_title.add_theme_color_override("font_shadow_color", Color.TRANSPARENT)
-	selection_title.add_theme_stylebox_override("normal", ISLAND_THEME.style(ISLAND_THEME.CYAN_BRIGHT, ISLAND_THEME.CYAN_BRIGHT, 0, 10, 6))
-	selection.add_child(selection_title)
 	var mode_showcase := HBoxContainer.new()
 	mode_showcase.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	mode_showcase.add_theme_constant_override("separation", 14)
 	_lan_mode_art = ISLAND_ART.new()
-	_lan_mode_art.custom_minimum_size = Vector2(190.0, 190.0)
+	_lan_mode_art.custom_minimum_size = Vector2(170.0, 142.0)
 	_lan_mode_art.configure(ISLAND_ART.Kind.MINIGAME, ISLAND_THEME.CYAN, &"futbol_rebote")
 	mode_showcase.add_child(_lan_mode_art)
 	var mode_copy := VBoxContainer.new()
 	mode_copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mode_copy.alignment = BoxContainer.ALIGNMENT_CENTER
-	_lan_mode_title = _title("MINIJUEGO", 28, ISLAND_THEME.WHITE)
+	_lan_mode_title = _title("MINIJUEGO", 30, ISLAND_THEME.INK)
 	_lan_mode_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	mode_copy.add_child(_lan_mode_title)
 	var divider := HSeparator.new()
-	divider.modulate = ISLAND_THEME.CYAN
+	divider.modulate = ISLAND_THEME.ORANGE
 	mode_copy.add_child(divider)
 	_lan_mode_description = _label("Selecciona una partida.", 15)
 	_lan_mode_description.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_lan_mode_description.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_lan_mode_description.modulate = Color(0.82, 0.9, 0.97)
+	_lan_mode_description.modulate = ISLAND_THEME.MUTED
 	mode_copy.add_child(_lan_mode_description)
 	mode_showcase.add_child(mode_copy)
-	selection.add_child(mode_showcase)
+	var selectors := VBoxContainer.new()
+	selectors.custom_minimum_size.x = 310.0
+	selectors.alignment = BoxContainer.ALIGNMENT_CENTER
+	selectors.add_theme_constant_override("separation", 7)
 	_lan_room_mode = OptionButton.new()
 	_lan_room_mode.name = "SelectedMinigame"
 	_lan_room_mode.theme_type_variation = &"IslandSelector"
-	_lan_room_mode.custom_minimum_size = Vector2(0.0, 48.0)
+	_lan_room_mode.custom_minimum_size = Vector2(0.0, 52.0)
 	_lan_room_mode.add_theme_font_size_override("font_size", 15)
 	for index in _local_minigames.size():
-		_lan_room_mode.add_item("CAMBIAR: %s" % _local_minigames[index].display_name, index)
+		_lan_room_mode.add_item("MINIJUEGO: %s" % _local_minigames[index].display_name, index)
 	_lan_room_mode.item_selected.connect(_on_lan_mode_selected)
-	selection.add_child(_lan_room_mode)
+	selectors.add_child(_lan_room_mode)
 	_lan_room_character = OptionButton.new()
 	_lan_room_character.name = "SelectedCharacter"
 	_lan_room_character.theme_type_variation = &"IslandSelector"
-	_lan_room_character.custom_minimum_size = Vector2(0.0, 48.0)
+	_lan_room_character.custom_minimum_size = Vector2(0.0, 52.0)
 	_lan_room_character.add_theme_font_size_override("font_size", 15)
 	for index in _local_characters.size():
 		_lan_room_character.add_item("TU PERSONAJE: %s" % _local_characters[index].display_name, index)
 	_lan_room_character.item_selected.connect(_on_lan_character_selected)
-	selection.add_child(_lan_room_character)
-	body.add_child(selection_panel)
-	var roster_panel := _panel("RosterPanel", Color(0.01, 0.055, 0.095, 0.84), Color(0.1, 0.42, 0.58, 0.72))
-	roster_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	roster_panel.size_flags_stretch_ratio = 0.9
+	selectors.add_child(_lan_room_character)
+	mode_showcase.add_child(selectors)
+	selection.add_child(mode_showcase)
+	screen.add_child(selection_panel)
+	var roster_panel := _panel("RosterPanel", ISLAND_THEME.PAPER, Color(0.82, 0.85, 0.88))
+	roster_panel.custom_minimum_size.y = 105.0
 	var roster_layout := VBoxContainer.new()
-	roster_layout.add_theme_constant_override("separation", 6)
+	roster_layout.add_theme_constant_override("separation", 4)
 	roster_panel.add_child(roster_layout)
-	var roster_title := _title("JUGADORES DE LA SALA", 16, ISLAND_THEME.CYAN_BRIGHT)
+	var roster_title := _title("JUGADORES DE LA SALA", 14, ISLAND_THEME.INK)
 	roster_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	roster_layout.add_child(roster_title)
 	var roster_scroll := ScrollContainer.new()
 	roster_scroll.name = "PlayerRosterScroll"
-	roster_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	roster_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	roster_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	roster_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	roster_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	roster_layout.add_child(roster_scroll)
-	_lan_room_roster = VBoxContainer.new()
+	_lan_room_roster = HBoxContainer.new()
 	_lan_room_roster.name = "PlayerRoster"
-	_lan_room_roster.add_theme_constant_override("separation", 6)
-	_lan_room_roster.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lan_room_roster.add_theme_constant_override("separation", 8)
 	roster_scroll.add_child(_lan_room_roster)
-	body.add_child(roster_panel)
+	screen.add_child(roster_panel)
+	var room_spacer := Control.new()
+	room_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	screen.add_child(room_spacer)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 12)
 	var leave := _button("←  VOLVER", "LanLeave", &"IslandBackButton")
@@ -442,21 +440,42 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	_waiting_title = _title("SALA", 22, ISLAND_THEME.ORANGE)
 	_waiting_title.name = "WaitingTitle"
 	screen.add_child(_waiting_title)
-	var content := HBoxContainer.new()
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_theme_constant_override("separation", 14)
-	var player_panel := _panel("OnlinePlayerPanel", Color(0.012, 0.07, 0.12, 0.94), ISLAND_THEME.CYAN)
-	player_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var player_rows := VBoxContainer.new()
-	player_rows.add_theme_constant_override("separation", 7)
-	player_panel.add_child(player_rows)
-	player_rows.add_child(_title("TU PERSONAJE", 17, ISLAND_THEME.CYAN_BRIGHT))
-	var character_row := HBoxContainer.new()
-	character_row.add_theme_constant_override("separation", 12)
-	var avatar := ISLAND_ART.new()
-	avatar.custom_minimum_size = Vector2(100.0, 112.0)
-	avatar.configure(ISLAND_ART.Kind.PLAYER, _slot_color(0))
-	character_row.add_child(avatar)
+	var selection_panel := _panel("OnlineSelectionPanel", ISLAND_THEME.PAPER, ISLAND_THEME.ORANGE)
+	selection_panel.custom_minimum_size.y = 142.0
+	var selection_row := HBoxContainer.new()
+	selection_row.add_theme_constant_override("separation", 14)
+	selection_panel.add_child(selection_row)
+	_online_mode_art = ISLAND_ART.new()
+	_online_mode_art.custom_minimum_size = Vector2(142.0, 112.0)
+	_online_mode_art.configure(ISLAND_ART.Kind.MINIGAME, ISLAND_THEME.ORANGE, &"meteors")
+	selection_row.add_child(_online_mode_art)
+	var mode_copy := VBoxContainer.new()
+	mode_copy.alignment = BoxContainer.ALIGNMENT_CENTER
+	mode_copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_online_mode_title = _title("METEORITOS", 28, ISLAND_THEME.INK)
+	_online_mode_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	mode_copy.add_child(_online_mode_title)
+	var mode_hint := _label("El anfitrión elige un único minijuego para esta partida.", 13)
+	mode_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	mode_hint.modulate = ISLAND_THEME.MUTED
+	mode_copy.add_child(mode_hint)
+	_online_mode_button = OptionButton.new()
+	_online_mode_button.name = "OnlineMinigame"
+	_online_mode_button.theme_type_variation = &"IslandSelector"
+	_online_mode_button.custom_minimum_size = Vector2(0.0, 46.0)
+	_online_mode_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_online_mode_button.add_theme_font_size_override("font_size", 15)
+	for mode_id in NET.ModeId.size():
+		_online_mode_button.add_item("CAMBIAR: %s" % NET.mode_display_name(mode_id), mode_id)
+	_online_mode_button.item_selected.connect(_on_online_mode_selected)
+	mode_copy.add_child(_online_mode_button)
+	selection_row.add_child(mode_copy)
+	var character_box := VBoxContainer.new()
+	character_box.custom_minimum_size.x = 330.0
+	character_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	var character_title := _title("TU PERSONAJE", 14, ISLAND_THEME.CYAN)
+	character_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	character_box.add_child(character_title)
 	_character_button = OptionButton.new()
 	_character_button.name = "RoomCharacter"
 	_character_button.theme_type_variation = &"IslandSelector"
@@ -465,44 +484,33 @@ func _build_waiting_screen(parent: Control) -> VBoxContainer:
 	_character_button.add_theme_font_size_override("font_size", 16)
 	_character_button.add_item("PERSONAJE: %s" % CHARACTER_CATALOG.NAMES[0], 0)
 	_character_button.item_selected.connect(_on_character_selected)
-	character_row.add_child(_character_button)
-	player_rows.add_child(character_row)
+	character_box.add_child(_character_button)
 	var rule := _label("EL PERSONAJE SE BLOQUEA AL MARCAR LISTO", 12)
 	rule.modulate = ISLAND_THEME.MUTED
-	player_rows.add_child(rule)
-	var roster_panel := _panel("OnlineRosterPanel", Color(0.01, 0.055, 0.095, 0.9), Color(0.1, 0.42, 0.58, 0.72))
-	roster_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	character_box.add_child(rule)
+	selection_row.add_child(character_box)
+	screen.add_child(selection_panel)
+	var roster_panel := _panel("OnlineRosterPanel", ISLAND_THEME.PAPER, Color(0.82, 0.85, 0.88))
+	roster_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var roster_rows := VBoxContainer.new()
-	roster_rows.add_theme_constant_override("separation", 7)
+	roster_rows.add_theme_constant_override("separation", 4)
 	roster_panel.add_child(roster_rows)
-	_waiting_detail = _label("Esperando jugadores…", 16)
+	_waiting_detail = _label("Esperando jugadores…", 14)
 	_waiting_detail.name = "WaitingPlayers"
 	_waiting_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_waiting_detail.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_waiting_detail.add_theme_color_override("font_color", ISLAND_THEME.CYAN_BRIGHT)
+	_waiting_detail.add_theme_color_override("font_color", ISLAND_THEME.INK)
 	roster_rows.add_child(_waiting_detail)
 	var waiting_scroll := ScrollContainer.new()
-	waiting_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	waiting_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	waiting_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	waiting_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	waiting_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	roster_rows.add_child(waiting_scroll)
-	_waiting_roster = VBoxContainer.new()
+	_waiting_roster = HBoxContainer.new()
 	_waiting_roster.name = "OnlinePlayerRoster"
-	_waiting_roster.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_waiting_roster.add_theme_constant_override("separation", 6)
+	_waiting_roster.add_theme_constant_override("separation", 8)
 	waiting_scroll.add_child(_waiting_roster)
-	content.add_child(player_panel)
-	content.add_child(roster_panel)
-	screen.add_child(content)
-	_online_mode_button = OptionButton.new()
-	_online_mode_button.name = "OnlineMinigame"
-	_online_mode_button.theme_type_variation = &"IslandSelector"
-	_online_mode_button.custom_minimum_size = Vector2(0.0, 48.0)
-	_online_mode_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_online_mode_button.add_theme_font_size_override("font_size", 17)
-	for mode_id in NET.ModeId.size():
-		_online_mode_button.add_item("MINIJUEGO: %s" % NET.mode_display_name(mode_id), mode_id)
-	_online_mode_button.item_selected.connect(_on_online_mode_selected)
-	screen.add_child(_online_mode_button)
+	screen.add_child(roster_panel)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 10)
 	var leave := _button("←  SALIR", "LeaveRoom", &"IslandBackButton")
@@ -756,56 +764,68 @@ func _build_room_player_card(
 	var accent := _slot_color(slot)
 	var panel := _panel(
 		"PlayerCard%d" % slot,
-		Color(0.055, 0.12, 0.19, 0.96) if is_local else Color(0.04, 0.085, 0.14, 0.96),
-		accent if is_local else Color(accent.r, accent.g, accent.b, 0.58)
+		ISLAND_THEME.PAPER,
+		accent if is_local else Color(0.78, 0.81, 0.85, 1.0)
 	)
 	panel.add_theme_stylebox_override(
 		"panel",
 		ISLAND_THEME.style(
-			Color(0.055, 0.12, 0.19, 0.96) if is_local else Color(0.04, 0.085, 0.14, 0.96),
-			accent if is_local else Color(accent.r, accent.g, accent.b, 0.58),
+			ISLAND_THEME.PAPER,
+			accent if is_local else Color(0.78, 0.81, 0.85, 1.0),
 			2,
-			14,
-			8
+			16,
+			7
 		)
 	)
-	panel.custom_minimum_size.y = 62.0
+	panel.custom_minimum_size = Vector2(220.0, 82.0)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 7)
 	panel.add_child(row)
-	var rank := _label(str(slot + 1), 18)
-	rank.custom_minimum_size = Vector2(36.0, 36.0)
-	rank.add_theme_color_override("font_color", accent)
-	rank.add_theme_stylebox_override("normal", ISLAND_THEME.style(Color(0.01, 0.06, 0.1, 0.95), accent, 2, 24, 4))
-	row.add_child(rank)
 	var avatar := ISLAND_ART.new()
-	avatar.custom_minimum_size = Vector2(44.0, 46.0)
+	avatar.custom_minimum_size = Vector2(62.0, 66.0)
 	avatar.configure(ISLAND_ART.Kind.PLAYER, accent)
 	row.add_child(avatar)
 	var identity := VBoxContainer.new()
 	identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var name_label := _label(player_name.to_upper() + (" · TÚ" if is_local else ""), 16)
+	identity.add_theme_constant_override("separation", 1)
+	var slot_label := _label(
+		"JUGADOR %d%s" % [slot + 1, " · ANFITRIÓN" if is_local else ""],
+		9
+	)
+	slot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	slot_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	slot_label.clip_text = true
+	slot_label.add_theme_color_override("font_color", accent.darkened(0.14))
+	identity.add_child(slot_label)
+	var name_label := _label(player_name.to_upper(), 14)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	name_label.add_theme_color_override("font_color", Color.WHITE)
+	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	name_label.clip_text = true
+	name_label.add_theme_color_override("font_color", ISLAND_THEME.INK)
 	identity.add_child(name_label)
-	var character_text := "PERSONAJE: %s" % character_name.to_upper()
+	var character_text := character_name.to_upper()
 	if not profile_note.is_empty():
 		character_text += " · " + profile_note
-	var character_label := _label(character_text, 10)
+	var character_label := _label(character_text, 8)
 	character_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	character_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	character_label.clip_text = true
 	character_label.add_theme_color_override("font_color", accent)
 	identity.add_child(character_label)
+	var stats := HBoxContainer.new()
+	stats.add_theme_constant_override("separation", 4)
+	var points_label := _label("★ %d" % maxi(0, points), 11)
+	points_label.custom_minimum_size.x = 52.0
+	points_label.add_theme_color_override("font_color", accent.darkened(0.18))
+	points_label.add_theme_stylebox_override("normal", ISLAND_THEME.style(Color(accent.r, accent.g, accent.b, 0.12), Color(accent.r, accent.g, accent.b, 0.28), 1, 10, 5))
+	stats.add_child(points_label)
+	var state := _label("✓ LISTO" if ready else "ESPERA", 9)
+	state.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	state.add_theme_color_override("font_color", Color.WHITE if ready else ISLAND_THEME.ORANGE)
+	state.add_theme_stylebox_override("normal", ISLAND_THEME.style(ISLAND_THEME.GREEN if ready else Color(1.0, 0.93, 0.9, 1.0), ISLAND_THEME.GREEN if ready else ISLAND_THEME.ORANGE, 1, 10, 5))
+	stats.add_child(state)
+	identity.add_child(stats)
 	row.add_child(identity)
-	var points_label := _label("%d PTS" % maxi(0, points), 16)
-	points_label.custom_minimum_size.x = 72.0
-	points_label.add_theme_color_override("font_color", ISLAND_THEME.WHITE)
-	points_label.add_theme_stylebox_override("normal", ISLAND_THEME.style(Color(0.05, 0.17, 0.28, 0.95), Color(0.1, 0.3, 0.44, 0.8), 1, 10, 5))
-	row.add_child(points_label)
-	var state := _label("✓ LISTO" if ready else "ESPERANDO", 12)
-	state.custom_minimum_size.x = 100.0
-	state.add_theme_color_override("font_color", Color(0.02, 0.12, 0.05) if ready else ISLAND_THEME.ORANGE)
-	state.add_theme_stylebox_override("normal", ISLAND_THEME.style(ISLAND_THEME.GREEN if ready else Color(0.1, 0.07, 0.025, 0.9), ISLAND_THEME.GREEN if ready else ISLAND_THEME.ORANGE, 1, 10, 5))
-	row.add_child(state)
 	return panel
 
 
@@ -964,6 +984,9 @@ func _on_room_waiting(
 	]
 	_character_button.disabled = local_ready
 	_online_mode_button.select(clampi(selected_mode_id, 0, _online_mode_button.item_count - 1))
+	_online_mode_title.text = NET.mode_display_name(selected_mode_id)
+	_online_mode_art.minigame_id = StringName(NET.mode_name(selected_mode_id))
+	_online_mode_art.queue_redraw()
 	_online_mode_button.disabled = not is_host or local_ready
 	_ready_button.disabled = false
 	_ready_button.text = "CANCELAR LISTO" if local_ready else "MARCAR LISTO"
@@ -1179,7 +1202,8 @@ func _new_screen(screen_name: String) -> VBoxContainer:
 func _panel(node_name: String, background: Color, border: Color) -> PanelContainer:
 	var result := PanelContainer.new()
 	result.name = node_name
-	result.add_theme_stylebox_override("panel", ISLAND_THEME.style(background, border, 2, 14, 14))
+	var surface := ISLAND_THEME.PAPER if background.get_luminance() < 0.45 else background
+	result.add_theme_stylebox_override("panel", ISLAND_THEME.style(surface, border, 2, 18, 14))
 	return result
 
 
@@ -1224,7 +1248,7 @@ func _button_style(background: Color, border: Color, width: int) -> StyleBoxFlat
 
 
 func _build_brand_header(title_text: String, badge_text: String) -> PanelContainer:
-	var header := _panel("BrandHeader", Color(0.012, 0.065, 0.11, 0.94), ISLAND_THEME.CYAN)
+	var header := _panel("BrandHeader", ISLAND_THEME.PAPER, Color(0.86, 0.88, 0.9))
 	header.custom_minimum_size.y = 78.0
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 15)
@@ -1242,7 +1266,7 @@ func _build_brand_header(title_text: String, badge_text: String) -> PanelContain
 	badge.autowrap_mode = TextServer.AUTOWRAP_OFF
 	badge.custom_minimum_size.x = 240.0
 	badge.add_theme_color_override("font_color", ISLAND_THEME.ORANGE)
-	badge.add_theme_stylebox_override("normal", ISLAND_THEME.style(Color(0.08, 0.055, 0.02, 0.9), ISLAND_THEME.ORANGE, 2, 9, 8))
+	badge.add_theme_stylebox_override("normal", ISLAND_THEME.style(Color(1.0, 0.91, 0.88, 1.0), ISLAND_THEME.ORANGE, 2, 12, 8))
 	row.add_child(badge)
 	return header
 
