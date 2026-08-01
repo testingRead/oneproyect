@@ -344,6 +344,10 @@ func get_ammo() -> int:
 	return _ammo
 
 
+func get_kill_scores() -> Dictionary:
+	return _kill_scores.duplicate()
+
+
 func get_bots() -> Array[LocalBaseCharacter]:
 	return _bots
 

@@ -26,6 +26,7 @@ const BEACON_INTERVAL := 0.75
 var is_host := false
 var selected_minigame_path := ""
 var players: Dictionary = {}
+var local_session_points := 0
 
 var _peer: ENetMultiplayerPeer
 var _discovery: PacketPeerUDP
@@ -56,6 +57,7 @@ func _process(delta: float) -> void:
 
 func host_room(display_name: String, character_path: String) -> Error:
 	leave_room()
+	local_session_points = 0
 	_peer = ENetMultiplayerPeer.new()
 	_peer.set_bind_ip("*")
 	var error := _peer.create_server(LAN_PORT, MAX_PLAYERS, 3)
@@ -112,6 +114,7 @@ func leave_room() -> void:
 	is_host = false
 	players.clear()
 	selected_minigame_path = ""
+	local_session_points = 0
 	lobby_changed.emit()
 
 
@@ -136,6 +139,32 @@ func get_peer_slot(peer_id: int) -> int:
 func get_player_name(peer_id: int) -> String:
 	var profile: Dictionary = players.get(peer_id, {})
 	return str(profile.get("name", "Jugador"))
+
+
+func get_session_points(peer_id: int) -> int:
+	if not is_active():
+		return local_session_points if peer_id == 1 else 0
+	return int((players.get(peer_id, {}) as Dictionary).get("points", 0))
+
+
+func reset_local_session_points() -> void:
+	local_session_points = 0
+
+
+func award_local_session_points(amount: int) -> void:
+	local_session_points += maxi(0, amount)
+	lobby_changed.emit()
+
+
+func award_session_points(peer_ids: PackedInt32Array, amount: int) -> void:
+	if not is_host or not is_active() or amount <= 0:
+		return
+	for peer_id in peer_ids:
+		if players.has(peer_id):
+			var profile: Dictionary = players[peer_id]
+			profile.points = int(profile.get("points", 0)) + amount
+			players[peer_id] = profile
+	_broadcast_lobby()
 
 
 func set_ready(ready: bool) -> void:
@@ -298,10 +327,12 @@ func _rpc_set_character(character_path: String) -> void:
 
 
 @rpc("authority", "call_local", "reliable", 0)
-func _rpc_lobby_state(peer_ids: PackedInt32Array, names: PackedStringArray, ready_flags: PackedByteArray, character_paths: PackedStringArray, minigame_path: String) -> void:
+func _rpc_lobby_state(peer_ids: PackedInt32Array, names: PackedStringArray, ready_flags: PackedByteArray, character_paths: PackedStringArray, points: PackedInt32Array, minigame_path: String) -> void:
 	players.clear()
 	for index in peer_ids.size():
-		players[peer_ids[index]] = _profile(names[index], character_paths[index], ready_flags[index] != 0)
+		var profile := _profile(names[index], character_paths[index], ready_flags[index] != 0)
+		profile.points = points[index] if index < points.size() else 0
+		players[peer_ids[index]] = profile
 	selected_minigame_path = minigame_path
 	lobby_changed.emit()
 
@@ -442,12 +473,14 @@ func _broadcast_lobby() -> void:
 	var names := PackedStringArray()
 	var ready := PackedByteArray()
 	var characters := PackedStringArray()
+	var points := PackedInt32Array()
 	for peer_id in ids:
 		var profile: Dictionary = players[peer_id]
 		names.append(str(profile.name))
 		ready.append(1 if bool(profile.ready) else 0)
 		characters.append(str(profile.character))
-	_rpc_lobby_state.rpc(ids, names, ready, characters, selected_minigame_path)
+		points.append(int(profile.get("points", 0)))
+	_rpc_lobby_state.rpc(ids, names, ready, characters, points, selected_minigame_path)
 
 
 func _on_connected_to_host() -> void:
@@ -536,4 +569,5 @@ func _profile(display_name: String, character_path: String, ready: bool) -> Dict
 		"name": display_name.left(16),
 		"character": character_path,
 		"ready": ready,
+		"points": 0,
 	}

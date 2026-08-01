@@ -20,6 +20,10 @@ var _got_shooter_shot := false
 var _got_shooter_weapon_state := false
 var _got_shooter_hit := false
 var _sent_push_request := false
+var _got_elimination_action := false
+var _got_elimination_holder := false
+var _got_elimination_damage := false
+var _got_session_score := false
 
 
 func _init() -> void:
@@ -47,6 +51,8 @@ func _run() -> void:
 			_got_bateball_impact = target_peer_id == _lan.get_local_peer_id() and direction.dot(Vector3.RIGHT) > 0.9 and flag
 		elif peer_id == 1 and action == LAN_EVENT.Action.SHOOTER_SHOT:
 			_got_shooter_shot = direction.dot(Vector3.FORWARD) > 0.9
+		elif peer_id == 1 and action == LAN_EVENT.Action.ELIMINATION_BALL_THROW:
+			_got_elimination_action = direction.dot(Vector3.LEFT) > 0.9
 	)
 	_lan.bateball_holder_received.connect(func(peer_id: int) -> void: _got_holder = peer_id == 1)
 	_lan.bateball_score_received.connect(func(home: int, away: int, complete: bool) -> void:
@@ -67,6 +73,10 @@ func _run() -> void:
 			_got_shooter_weapon_state = actor == _lan.get_local_peer_id() and ints == PackedInt32Array([3, 1, 900])
 		elif kind == LAN_EVENT.Kind.HIT_CONFIRMED and subject == LAN_EVENT.Subject.SHOOTER:
 			_got_shooter_hit = actor == _lan.get_local_peer_id() and ints == PackedInt32Array([66])
+		elif kind == LAN_EVENT.Kind.HOLDER_CHANGED and subject == LAN_EVENT.Subject.ELIMINATION_BALL:
+			_got_elimination_holder = actor == _lan.get_local_peer_id()
+		elif kind == LAN_EVENT.Kind.DAMAGE_CONFIRMED and subject == LAN_EVENT.Subject.ELIMINATION_BALL:
+			_got_elimination_damage = actor == _lan.get_local_peer_id() and not vectors.is_empty()
 	)
 	if _lan.join_room("127.0.0.1", "ClientProbe", "res://data/characters/base_character.tres") != OK:
 		push_error("LAN_CLIENT_FAIL: cannot connect")
@@ -89,6 +99,9 @@ func _run() -> void:
 				_lan.request_action(
 					LAN_EVENT.Action.SHOOTER_RELOAD, 0, Vector3.ZERO
 				)
+				_lan.request_action(
+					LAN_EVENT.Action.ELIMINATION_BALL_THROW, 0, Vector3.LEFT
+				)
 		if (
 			_started
 			and _got_physics
@@ -104,6 +117,10 @@ func _run() -> void:
 			and _got_shooter_shot
 			and _got_shooter_weapon_state
 			and _got_shooter_hit
+			and _got_elimination_action
+			and _got_elimination_holder
+			and _got_elimination_damage
+			and _got_session_score
 		):
 			print("LAN_CLIENT_OK peer=%d players=%d" % [_lan.get_local_peer_id(), _lan.players.size()])
 			_lan.leave_room()
@@ -122,3 +139,5 @@ func _on_lobby() -> void:
 	if _lan.players.has(local_id) and not _registered:
 		_registered = true
 		_lan.set_ready(true)
+	if _lan.players.has(local_id):
+		_got_session_score = int(_lan.players[local_id].get("points", 0)) == 3

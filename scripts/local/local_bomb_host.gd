@@ -78,6 +78,10 @@ func get_holder_name() -> String:
 	return display_name if not display_name.is_empty() else "JUGADOR"
 
 
+func get_holder_peer_id() -> int:
+	return int(_holder.get_meta(&"lan_peer_id", 1)) if is_instance_valid(_holder) else 0
+
+
 func get_remaining() -> float:
 	return _bomb.get_remaining() if is_instance_valid(_bomb) else 0.0
 

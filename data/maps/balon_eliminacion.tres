@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="MinigameMapDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/minigames/map_definition.gd" id="1_map"]
+[ext_resource type="PackedScene" path="res://scenes/local/maps/elimination_ball_arena.tscn" id="2_scene"]
+
+[resource]
+script = ExtResource("1_map")
+map_id = &"balon_eliminacion"
+tags = PackedStringArray("teams", "topdown", "ball", "elimination")
+maximum_players = 8
+map_scene = ExtResource("2_scene")
+footprint = Vector2(28, 32)
+playable_area_index = 1
+boundary_policy = 0
+spawn_points = PackedVector3Array(-6, 0.02, -11, 6, 0.02, -29, 6, 0.02, -11, -6, 0.02, -29, -10, 0.02, -14, 10, 0.02, -26, 10, 0.02, -14, -10, 0.02, -26)
+team_spawns_home = PackedVector3Array(-6, 0.02, -11, 6, 0.02, -11, -10, 0.02, -14, 10, 0.02, -14)
+team_spawns_away = PackedVector3Array(6, 0.02, -29, -6, 0.02, -29, 10, 0.02, -26, -10, 0.02, -26)
+event_points = PackedVector3Array(0, 0.2, -20)
+available_objects = PackedStringArray("balon_eliminacion", "coberturas")
+compatible_minigames = PackedStringArray("balon_eliminacion")

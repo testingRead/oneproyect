@@ -381,6 +381,7 @@ func _connect_network() -> void:
 func _open_local_room() -> void:
 	_save_name()
 	lan.leave_room()
+	lan.reset_local_session_points()
 	network.disconnect_session()
 	_enter_lan_room(true)
 
@@ -419,7 +420,7 @@ func _enter_lan_room(local_only: bool, host := true) -> void:
 	_lan_room_is_host = host
 	_lan_room_ready_state = false if local_only else bool(lan.players.get(lan.get_local_peer_id(), {}).get("ready", false))
 	_lan_room_title.text = "SALA LOCAL" if local_only else "SALA LAN · ANFITRIÓN" if host else "SALA LAN"
-	_lan_room_detail.text = "1/1 JUGADOR · SIN RED" if local_only else "Conectando jugadores…"
+	_lan_room_detail.text = "1/1 JUGADOR · %d PUNTOS · SIN RED" % lan.local_session_points if local_only else "Conectando jugadores…"
 	_lan_room_character.select(CHARACTER_CATALOG.sanitize_index(network.color_index))
 	_lan_room_character.disabled = false
 	_lan_room_mode.disabled = not local_only and not host
@@ -516,7 +517,7 @@ func _refresh_lan_room() -> void:
 		var profile: Dictionary = lan.players[peer_id]
 		var ready := bool(profile.get("ready", false))
 		ready_count += 1 if ready else 0
-		lines.append("%s  ·  %s" % [str(profile.get("name", "Jugador")), "LISTO" if ready else "ESPERANDO"])
+		lines.append("%s  ·  %d PTS  ·  %s" % [str(profile.get("name", "Jugador")), int(profile.get("points", 0)), "LISTO" if ready else "ESPERANDO"])
 	_lan_room_detail.text = "%d/%d JUGADORES · %d LISTOS\n%s" % [ids.size(), 8, ready_count, "\n".join(lines)]
 	var local_profile: Dictionary = lan.players.get(lan.get_local_peer_id(), {})
 	_lan_room_ready_state = bool(local_profile.get("ready", false))

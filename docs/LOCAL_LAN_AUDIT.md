@@ -122,7 +122,13 @@ principio se conserva.
 | Bomba de relevo | tercera persona | entregar por contacto | explota el portador al agotar la mecha | host: portador, mecha y explosión |
 | Tornado | tercera persona | evitar embudo y proyectiles | tiempo o todos eliminados | host: peligro y daño; reacción local |
 | Bateball | elevada oblicua | apuntar tiro / bate cargado | primer equipo a 2 | host: posesión, balón, impacto, vida y marcador |
+| Balón de eliminación | elevada oblicua | recoger / apuntar / lanzar | un equipo queda sin jugadores | host: posesión, impacto y eliminación; cuerpos rígidos a 15 Hz |
 | Arena de tiro | primera persona | disparar / recargar / cubrirse | primer jugador a 5 bajas | host LAN: raycast, vida, respawn y clasificación |
+
+La sala LAN conserva puntos exclusivamente en memoria mientras exista: 3 por
+victoria y 1 por empate. El anfitrión los incluye en el estado fiable del lobby;
+cerrar o abandonar la sala los reinicia. Este marcador no es progresión ni
+persistencia de cuenta.
 
 ## Deuda identificada que no debe ocultarse
 

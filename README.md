@@ -25,9 +25,16 @@ referencias de laboratorio. Sus medidas y pruebas están en:
 Cada minijuego ejecuta preparar → reglas → cuenta regresiva → actividad →
 resultado → limpieza. El catálogo descubre automáticamente los recursos de
 `data/minigames`: fútbol de rebote, corona central, bomba de relevo, tornado,
-Bateball y arena de tiro. Cada uno monta únicamente su mapa y objetos; al
+Bateball, balón de eliminación y arena de tiro. Cada uno monta únicamente su mapa y objetos; al
 terminar vuelve a la misma sala o al menú sin conservar nodos, temporizadores ni
 señales de la ronda.
+
+Balón de eliminación reutiliza la cámara elevada, la mira táctil y una pelota
+física con rebote. Un impacto válido elimina hasta la siguiente ronda; en local
+aparece un bot de práctica y en LAN el anfitrión decide posesión e impactos.
+Cada sala mantiene además un marcador temporal: 3 puntos por victoria y 1 por
+empate. Empieza en cero al crearla y desaparece al abandonarla; no altera el
+perfil permanente.
 
 La arena de tiro es el primer modo individual completo: primera persona, ocho
 spawns, tres perfiles de arma, cargador/recarga, hitscan, cinco eliminaciones y
@@ -45,8 +52,8 @@ a Downloads.
 - Escritorio: WASD o flechas para moverse, ratón para cámara, Espacio para
   saltar, `P`/Escape para pausa y `R` para reiniciar.
 - Android: la mitad izquierda mueve y la derecha controla la vista o la mira.
-  Los botones cambian por modo: salto y patada en fútbol, bate/disparo en
-  Bateball y disparar/recargar en shooter. Mantener **DISPARAR** respeta la
+  Los botones cambian por modo: salto y patada en fútbol, apuntar/soltar en
+  Bateball y balón de eliminación, y disparar/recargar en shooter. Mantener **DISPARAR** respeta la
   cadencia sin confundir toques del joystick o de cámara con tiros.
 
 Los modos con equipos alternan slots y conservan spawns y miradas coherentes;

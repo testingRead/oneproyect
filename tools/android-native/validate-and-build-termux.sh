@@ -36,7 +36,9 @@ TESTS=(
 	bomb_round_test
 	tornado_round_test
 	bateball_round_test
+	elimination_ball_round_test
 	shooter_round_test
+	session_score_test
 	network_codec_test
 	server_room_test
 	menu_smoke_test

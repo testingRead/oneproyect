@@ -111,7 +111,11 @@ func request_ball_shot(shooter: LocalBaseCharacter, aim_direction := Vector3.ZER
 	direction = direction.normalized()
 	shooter.set_facing_direction(direction)
 	shooter.visual_root.trigger_ball_shot()
-	_release_ball(direction * 9.8 + Vector3.UP * 0.72, direction)
+	# A full-field shot made two-player matches collapse into goalkeeper duels.
+	# Keep enough pace for passing and rebounds, but require carrying the ball
+	# into the attacking half before a reliable shot on goal.
+	var target_velocity := direction * 6.65 + Vector3.UP * 0.46
+	_release_ball(target_velocity * _ball.mass, direction)
 	return true
 
 

@@ -95,6 +95,7 @@ func _run() -> void:
 	_require(not lab.bateball_host.is_holder(lab.player), "Releasing aim must shoot the held ball")
 	_require(lab.banner_detail.text.begins_with("BALÓN SUELTO"), "HUD must identify a loose Bateball")
 	var ball: RigidBody3D = lab.bateball_host.get_ball() as RigidBody3D
+	_require(ball.linear_velocity.length() < 7.2, "Bateball shot must not cross the full field at excessive speed")
 	_require(
 		ball.physics_material_override != null
 		and ball.physics_material_override.bounce >= 0.8

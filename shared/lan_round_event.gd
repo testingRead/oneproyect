@@ -18,6 +18,7 @@ enum Subject {
 	BATEBALL = 4,
 	TORNADO = 5,
 	SHOOTER = 6,
+	ELIMINATION_BALL = 7,
 }
 
 enum Action {
@@ -27,4 +28,5 @@ enum Action {
 	BATEBALL_IMPACT = 4,
 	SHOOTER_SHOT = 5,
 	SHOOTER_RELOAD = 6,
+	ELIMINATION_BALL_THROW = 7,
 }

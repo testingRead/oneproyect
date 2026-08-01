@@ -8,6 +8,7 @@ const CROWN_HOST_SCRIPT := preload("res://scripts/local/local_crown_host.gd")
 const BOMB_HOST_SCRIPT := preload("res://scripts/local/local_bomb_host.gd")
 const TORNADO_HOST_SCRIPT := preload("res://scripts/local/local_tornado_host.gd")
 const BATEBALL_HOST_SCRIPT := preload("res://scripts/local/local_bateball_host.gd")
+const ELIMINATION_BALL_HOST_SCRIPT := preload("res://scripts/local/local_elimination_ball_host.gd")
 const SHOOTER_HOST_SCRIPT := preload("res://scripts/local/local_shooter_host.gd")
 const BASE_CHARACTER_SCENE := preload("res://scenes/local/base_character.tscn")
 const LAN_EVENT := preload("res://shared/lan_round_event.gd")
@@ -46,6 +47,7 @@ var crown_host
 var bomb_host
 var tornado_host
 var bateball_host
+var elimination_ball_host
 var shooter_host
 var lan_session
 var _lan_remotes: Dictionary = {}
@@ -62,6 +64,8 @@ var _pending_crown_holder_peer := -1
 var _pending_bomb_holder_peer := -1
 var _pending_bomb_remaining_msec := 0
 var _pending_bateball_holder_peer := -1
+var _pending_elimination_holder_peer := -1
+var _session_score_awarded := false
 
 
 func _ready() -> void:
@@ -86,6 +90,9 @@ func _ready() -> void:
 	bateball_host = BATEBALL_HOST_SCRIPT.new()
 	bateball_host.name = "BateballHost"
 	add_child(bateball_host)
+	elimination_ball_host = ELIMINATION_BALL_HOST_SCRIPT.new()
+	elimination_ball_host.name = "EliminationBallHost"
+	add_child(elimination_ball_host)
 	shooter_host = SHOOTER_HOST_SCRIPT.new()
 	shooter_host.name = "ShooterHost"
 	add_child(shooter_host)
@@ -117,6 +124,7 @@ func _ready() -> void:
 		bomb_host,
 		tornado_host,
 		bateball_host,
+		elimination_ball_host,
 		shooter_host,
 		_selected_minigame_id,
 		player,
@@ -149,6 +157,10 @@ func _ready() -> void:
 	bateball_host.ball_holder_peer_changed.connect(_on_local_bateball_holder_peer_changed)
 	bateball_host.character_health_authorized.connect(_on_bateball_character_health_authorized)
 	bateball_host.bat_impact_authorized.connect(_on_bateball_impact_authorized)
+	elimination_ball_host.ball_holder_changed.connect(_on_elimination_ball_holder_changed)
+	elimination_ball_host.ball_holder_peer_changed.connect(_on_local_elimination_holder_peer_changed)
+	elimination_ball_host.player_eliminated.connect(_on_elimination_player_eliminated)
+	elimination_ball_host.classification_changed.connect(_on_elimination_classification_changed)
 	shooter_host.score_changed.connect(_on_shooter_score_changed)
 	shooter_host.ammo_changed.connect(_on_shooter_ammo_changed)
 	shooter_host.combat_message.connect(_on_shooter_combat_message)
@@ -167,7 +179,7 @@ func _ready() -> void:
 	player.hand_action_availability_changed.connect(_on_hand_action_availability_changed)
 	player.character_push_requested.connect(_on_local_character_push)
 	_build_aim_guide()
-	look_pad.set_aim_mode(_is_bateball_game())
+	look_pad.set_aim_mode(_uses_top_down_aim())
 	playable_area.set_area_index(_area_index)
 	playable_area.set_physical_walls_enabled(false)
 	_on_player_metrics(player.get_diagnostics())
@@ -254,6 +266,7 @@ func _setup_lan_session() -> void:
 	lan_session.bateball_shot_received.connect(_on_lan_bateball_shot)
 	lan_session.round_event_received.connect(_on_lan_round_event)
 	bateball_host.set_session_authority(lan_session.is_host)
+	elimination_ball_host.set_session_authority(lan_session.is_host)
 	crown_host.set_session_authority(lan_session.is_host)
 	bomb_host.set_session_authority(lan_session.is_host)
 	football_host.set_session_authority(lan_session.is_host)
@@ -443,6 +456,12 @@ func _on_lan_action_request(
 		if is_instance_valid(reload_actor) and _is_shooter_game():
 			shooter_host.process_network_reload(reload_actor)
 		return
+	if action == LAN_EVENT.Action.ELIMINATION_BALL_THROW:
+		var thrower := _get_lan_character(peer_id)
+		if is_instance_valid(thrower) and _is_elimination_ball_game():
+			if elimination_ball_host.request_throw(thrower, direction):
+				lan_session.broadcast_action(peer_id, action, direction)
+		return
 	if action != LAN_EVENT.Action.CHARACTER_PUSH:
 		return
 	var actor := _get_lan_character(peer_id)
@@ -497,6 +516,10 @@ func _on_lan_action(
 		LAN_EVENT.Action.SHOOTER_SHOT:
 			if _is_shooter_game():
 				shooter_host.play_remote_shot(remote, direction)
+		LAN_EVENT.Action.ELIMINATION_BALL_THROW:
+			if _is_elimination_ball_game():
+				remote.set_facing_direction(direction)
+				remote.visual_root.trigger_ball_shot()
 
 
 func _on_lan_bateball_shot(peer_id: int, direction: Vector3) -> void:
@@ -514,6 +537,42 @@ func _on_local_bateball_holder_peer_changed(peer_id: int) -> void:
 			LAN_EVENT.Subject.BATEBALL,
 			peer_id
 		)
+
+
+func _on_local_elimination_holder_peer_changed(peer_id: int) -> void:
+	if lan_session != null and lan_session.is_active() and lan_session.is_host:
+		lan_session.broadcast_round_event(
+			LAN_EVENT.Kind.HOLDER_CHANGED,
+			LAN_EVENT.Subject.ELIMINATION_BALL,
+			peer_id
+		)
+
+
+func _on_elimination_player_eliminated(peer_id: int, attacker_peer_id: int, position_value: Vector3) -> void:
+	if _is_elimination_ball_game():
+		banner_detail.text = "%s fue eliminado por el balón" % (
+			lan_session.get_player_name(peer_id)
+			if lan_session != null and lan_session.is_active()
+			else "RIVAL" if peer_id != 1 else "JUGADOR"
+		)
+	if lan_session != null and lan_session.is_active() and lan_session.is_host:
+		lan_session.broadcast_round_event(
+			LAN_EVENT.Kind.DAMAGE_CONFIRMED,
+			LAN_EVENT.Subject.ELIMINATION_BALL,
+			peer_id,
+			PackedInt32Array([attacker_peer_id]),
+			PackedVector3Array([position_value])
+		)
+
+
+func _on_elimination_classification_changed(_home_alive: int, _away_alive: int, _complete: bool) -> void:
+	if _is_elimination_ball_game():
+		banner_progress.text = _elimination_ball_progress_text()
+
+
+func _on_elimination_ball_holder_changed(holder_name: String) -> void:
+	if _is_elimination_ball_game() and round_controller.phase == LocalRoundController.Phase.ACTIVE:
+		banner_detail.text = "BALÓN: %s · arrastra y suelta para lanzar" % holder_name
 
 
 func _on_lan_bateball_holder(peer_id: int) -> void:
@@ -559,6 +618,9 @@ func _on_lan_round_event(
 		_apply_pending_round_state()
 	elif kind == LAN_EVENT.Kind.HOLDER_CHANGED and subject == LAN_EVENT.Subject.BATEBALL:
 		_pending_bateball_holder_peer = actor_peer_id
+		_apply_pending_round_state()
+	elif kind == LAN_EVENT.Kind.HOLDER_CHANGED and subject == LAN_EVENT.Subject.ELIMINATION_BALL:
+		_pending_elimination_holder_peer = actor_peer_id
 		_apply_pending_round_state()
 	elif kind == LAN_EVENT.Kind.ROUND_COMPLETED and subject == LAN_EVENT.Subject.BOMB:
 		var loser := _get_lan_character(actor_peer_id)
@@ -622,6 +684,9 @@ func _on_lan_round_event(
 					integer_values[1] != 0,
 					vector_values[0] if not vector_values.is_empty() else shooter_target.global_position
 				)
+	elif kind == LAN_EVENT.Kind.DAMAGE_CONFIRMED and subject == LAN_EVENT.Subject.ELIMINATION_BALL:
+		if not vector_values.is_empty():
+			elimination_ball_host.apply_authoritative_elimination(actor_peer_id, vector_values[0])
 	elif kind == LAN_EVENT.Kind.SCORE_CHANGED and subject == LAN_EVENT.Subject.SHOOTER:
 		if integer_values.size() >= 2:
 			var ids := PackedInt32Array()
@@ -671,6 +736,10 @@ func _apply_pending_round_state() -> void:
 		var bateball_holder := _get_lan_character(_pending_bateball_holder_peer)
 		bateball_host.apply_authoritative_holder(bateball_holder)
 		_pending_bateball_holder_peer = -1
+	if _pending_elimination_holder_peer >= 0 and elimination_ball_host.is_active():
+		var elimination_holder := _get_lan_character(_pending_elimination_holder_peer)
+		elimination_ball_host.apply_authoritative_holder(elimination_holder)
+		_pending_elimination_holder_peer = -1
 
 
 func _on_local_bomb_holder_peer_changed(peer_id: int, remaining_msec: int) -> void:
@@ -850,6 +919,7 @@ func _on_round_phase_changed(
 			banner_progress.text = "Dos arcos · paredes · primero a 3" if _selected_minigame_id == &"futbol_rebote" else "Vista aérea · primero a 2" if _is_bateball_game() else "Cinco eliminaciones · cargador y recarga" if _is_shooter_game() else "Una sola regla clara, una ronda limpia"
 			_on_player_metrics(player.get_diagnostics())
 		LocalRoundController.Phase.PREPARE:
+			_session_score_awarded = false
 			call_deferred("_position_lan_teams")
 			round_button.hide()
 			banner_title.text = "PREPARANDO %s" % _minigame_title()
@@ -869,12 +939,31 @@ func _on_round_phase_changed(
 			banner_detail.text = "Consigue la corona" if _is_crown_game() else "Pásala al tocar a otro jugador" if _is_bomb_game() else "Evita el embudo y los objetos proyectados" if _is_tornado_game() else "Recoge, apunta y dispara al arco rival" if _is_bateball_game() else "Apunta al cuerpo visible y controla tu cargador" if _is_shooter_game() else "PATEA al arco rival · protege el tuyo"
 			banner_progress.text = "CORONA: %s" % crown_host.get_holder_name() if _is_crown_game() else "BOMBA: %.1f s" % bomb_host.get_remaining() if _is_bomb_game() else "VIDA %d/100 · %.1f s" % [player.get_local_health(), tornado_host.get_remaining()] if _is_tornado_game() else _bateball_score_text() if _is_bateball_game() else _shooter_progress_text() if _is_shooter_game() else _score_text()
 		LocalRoundController.Phase.RESULT:
-			var winner: int = crown_host.get_winner() if _is_crown_game() else bomb_host.get_winner() if _is_bomb_game() else tornado_host.get_winner() if _is_tornado_game() else bateball_host.get_winner() if _is_bateball_game() else shooter_host.get_winner() if _is_shooter_game() else football_host.get_winner()
+			var winner: int = crown_host.get_winner() if _is_crown_game() else bomb_host.get_winner() if _is_bomb_game() else tornado_host.get_winner() if _is_tornado_game() else bateball_host.get_winner() if _is_bateball_game() else elimination_ball_host.get_winner() if _is_elimination_ball_game() else shooter_host.get_winner() if _is_shooter_game() else football_host.get_winner()
 			_show_round_result(winner)
+			_award_session_score(winner)
 		LocalRoundController.Phase.CLEANUP:
 			banner_title.text = "LIMPIANDO %s" % _minigame_title()
 			banner_detail.text = "Retirando mapa, objetos y estados de la ronda"
 			banner_progress.text = "Volviendo a la sala sin residuos"
+	if _is_elimination_ball_game():
+		match next_phase:
+			LocalRoundController.Phase.IDLE:
+				banner_title.text = "BALÓN DE ELIMINACIÓN"
+				banner_progress.text = "Un impacto elimina · sin reapariciones"
+			LocalRoundController.Phase.PREPARE:
+				banner_title.text = "PREPARANDO ELIMINACIÓN"
+				banner_detail.text = "El balón aparece en el centro"
+			LocalRoundController.Phase.RULES:
+				banner_title.text = "BALÓN DE ELIMINACIÓN"
+				banner_detail.text = "Recoge, apunta y golpea al equipo rival"
+				banner_progress.text = "Solo el balón elimina · muévete mientras apuntas"
+			LocalRoundController.Phase.COUNTDOWN:
+				banner_detail.text = "Busca el balón o una cobertura"
+			LocalRoundController.Phase.ACTIVE:
+				banner_title.text = "¡ELIMINA!"
+				banner_detail.text = "Arrastra y suelta para lanzar"
+				banner_progress.text = _elimination_ball_progress_text()
 
 
 func _on_round_phase_time_changed(
@@ -915,6 +1004,7 @@ func _update_countdown_title(remaining_seconds: float) -> void:
 		else "BOMBA" if _is_bomb_game()
 		else "TORNADO" if _is_tornado_game()
 		else "BATEBALL" if _is_bateball_game()
+		else "ELIMINACIÓN" if _is_elimination_ball_game()
 		else "COMBATE" if _is_shooter_game()
 		else "SAQUE"
 	)
@@ -939,6 +1029,10 @@ func _show_round_result(winner: int) -> void:
 		banner_title.text = "¡SOBREVIVISTE!" if winner > 0 else "ELIMINADO"
 		banner_detail.text = "La ronda terminó por tiempo o al caer todos"
 		banner_progress.text = "VIDA FINAL %d/100" % player.get_local_health()
+	elif _is_elimination_ball_game():
+		banner_title.text = "¡VICTORIA!" if winner > 0 else "DERROTA" if winner < 0 else "EMPATE"
+		banner_detail.text = "La ronda termina cuando un equipo queda sin jugadores"
+		banner_progress.text = _elimination_ball_progress_text()
 	elif _is_shooter_game():
 		banner_title.text = "¡VICTORIA!" if winner > 0 else "DERROTA" if winner < 0 else "EMPATE"
 		banner_detail.text = "Terminó el combate individual"
@@ -975,6 +1069,13 @@ func _shooter_progress_text() -> String:
 		shooter_host.get_ammo(),
 		WEAPONS.magazine_size(shooter_host.get_weapon_id()),
 	]
+
+
+func _elimination_ball_progress_text() -> String:
+	var local_team: StringName = StringName(player.get_meta(&"bateball_team", &"home"))
+	var own: int = elimination_ball_host.get_home_alive() if local_team == &"home" else elimination_ball_host.get_away_alive()
+	var rival: int = elimination_ball_host.get_away_alive() if local_team == &"home" else elimination_ball_host.get_home_alive()
+	return "TU EQUIPO %d VIVOS · RIVAL %d · BALÓN: %s" % [own, rival, elimination_ball_host.get_holder_name()]
 
 
 func _on_football_score_changed(
@@ -1103,7 +1204,7 @@ func _on_hand_action_availability_changed(label: String, available: bool) -> voi
 
 
 func _can_show_hand_action() -> bool:
-	if _is_bateball_game() or _is_shooter_game():
+	if _is_bateball_game() or _is_elimination_ball_game() or _is_shooter_game():
 		return false
 	if _is_bomb_game() and bomb_host.is_holder(player):
 		return false
@@ -1243,7 +1344,7 @@ func _on_shooter_classification_authorized(
 
 
 func _on_aim_changed(value: Vector2, active: bool) -> void:
-	if not _is_bateball_game():
+	if not _uses_top_down_aim():
 		return
 	_aim_active = active
 	if value.length_squared() > 0.02:
@@ -1252,12 +1353,19 @@ func _on_aim_changed(value: Vector2, active: bool) -> void:
 
 
 func _on_aim_released(value: Vector2) -> void:
-	if not _is_bateball_game() or round_controller.phase != LocalRoundController.Phase.ACTIVE:
+	if not _uses_top_down_aim() or round_controller.phase != LocalRoundController.Phase.ACTIVE:
 		return
 	player.set_top_down_aim(value, false)
 	var direction := player.get_top_down_aim_direction()
 	player.set_facing_direction(direction)
-	if bateball_host.is_holder(player):
+	if _is_elimination_ball_game():
+		if elimination_ball_host.is_holder(player) and elimination_ball_host.request_throw(player, direction):
+			if lan_session != null and lan_session.is_active():
+				if lan_session.is_host:
+					lan_session.broadcast_action(lan_session.get_local_peer_id(), LAN_EVENT.Action.ELIMINATION_BALL_THROW, direction)
+				else:
+					lan_session.request_action(LAN_EVENT.Action.ELIMINATION_BALL_THROW, 0, direction)
+	elif bateball_host.is_holder(player):
 		if bateball_host.request_ball_shot(player, direction):
 			if lan_session != null and lan_session.is_active() and not lan_session.is_host:
 				lan_session.request_bateball_shot(direction)
@@ -1283,7 +1391,7 @@ func _update_aim_guide() -> void:
 	if _aim_line == null or _aim_fill == null:
 		return
 	var show_guide := (
-		_is_bateball_game()
+		_uses_top_down_aim()
 		and _aim_active
 		and round_controller.phase == LocalRoundController.Phase.ACTIVE
 	)
@@ -1297,7 +1405,11 @@ func _update_aim_guide() -> void:
 	var start := camera.unproject_position(player.global_position + Vector3.UP * 0.48)
 	var direction := _aim_value.normalized()
 	var perpendicular := Vector2(-direction.y, direction.x)
-	var has_ball: bool = bool(bateball_host.is_holder(player))
+	var has_ball: bool = bool(
+		elimination_ball_host.is_holder(player)
+		if _is_elimination_ball_game()
+		else bateball_host.is_holder(player)
+	)
 	var length := 180.0 if has_ball else 112.0
 	var finish := start + direction * length
 	_aim_line.default_color = Color(0.28, 0.9, 1.0, 0.96) if has_ball else Color(1.0, 0.58, 0.15, 0.96)
@@ -1477,12 +1589,87 @@ func _is_bateball_game() -> bool:
 	return _selected_minigame_id == &"bateball_arena"
 
 
+func _is_elimination_ball_game() -> bool:
+	return _selected_minigame_id == &"balon_eliminacion"
+
+
+func _uses_top_down_aim() -> bool:
+	return _is_bateball_game() or _is_elimination_ball_game()
+
+
 func _is_shooter_game() -> bool:
 	return _selected_minigame_id == &"shooter_local"
 
 
 func _minigame_title() -> String:
-	return "CORONA CENTRAL" if _is_crown_game() else "BOMBA DE RELEVO" if _is_bomb_game() else "TORNADO" if _is_tornado_game() else "BATEBALL" if _is_bateball_game() else "ARENA DE TIRO" if _is_shooter_game() else "FÚTBOL"
+	return "CORONA CENTRAL" if _is_crown_game() else "BOMBA DE RELEVO" if _is_bomb_game() else "TORNADO" if _is_tornado_game() else "BATEBALL" if _is_bateball_game() else "BALÓN DE ELIMINACIÓN" if _is_elimination_ball_game() else "ARENA DE TIRO" if _is_shooter_game() else "FÚTBOL"
+
+
+func _award_session_score(local_result: int) -> void:
+	if _session_score_awarded:
+		return
+	_session_score_awarded = true
+	var score_session = get_node_or_null("/root/LanSession")
+	if score_session == null:
+		return
+	if lan_session == null or not lan_session.is_active():
+		score_session.award_local_session_points(3 if local_result > 0 else 1 if local_result == 0 else 0)
+		return
+	if not lan_session.is_host:
+		return
+	var winners := _get_session_winner_peer_ids()
+	if winners.is_empty():
+		lan_session.award_session_points(PackedInt32Array(lan_session.players.keys()), 1)
+	else:
+		lan_session.award_session_points(winners, 3)
+
+
+func _get_session_winner_peer_ids() -> PackedInt32Array:
+	var result := PackedInt32Array()
+	var ids := PackedInt32Array(lan_session.players.keys())
+	ids.sort()
+	if _selected_minigame_id in [&"futbol_rebote", &"bateball_arena", &"balon_eliminacion"]:
+		var home_value: int = int(football_host.score)
+		var away_value: int = int(football_host.opponent_score)
+		if _is_bateball_game():
+			home_value = bateball_host.score
+			away_value = bateball_host.opponent_score
+		elif _is_elimination_ball_game():
+			home_value = elimination_ball_host.get_home_alive()
+			away_value = elimination_ball_host.get_away_alive()
+		if home_value == away_value:
+			return result
+		var winner_team: StringName = &"home" if home_value > away_value else &"away"
+		for peer_id in ids:
+			if map_host.get_team_for_slot(lan_session.get_peer_slot(peer_id)) == winner_team:
+				result.append(peer_id)
+		return result
+	if _is_crown_game():
+		var holder: int = int(crown_host.get_holder_peer_id())
+		if holder > 0:
+			result.append(holder)
+		return result
+	if _is_bomb_game():
+		var loser: int = int(bomb_host.get_holder_peer_id())
+		for peer_id in ids:
+			if peer_id != loser:
+				result.append(peer_id)
+		return result
+	if _is_tornado_game():
+		for peer_id in ids:
+			var character := _get_lan_character(peer_id)
+			if is_instance_valid(character) and character.get_local_health() > 0:
+				result.append(peer_id)
+		return result
+	if _is_shooter_game():
+		var kills: Dictionary = shooter_host.get_kill_scores()
+		var best := -1
+		for peer_id in ids:
+			best = maxi(best, int(kills.get(peer_id, 0)))
+		for peer_id in ids:
+			if int(kills.get(peer_id, 0)) == best:
+				result.append(peer_id)
+	return result
 
 
 func _create_penalty_buttons() -> void:
