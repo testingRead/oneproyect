@@ -207,6 +207,10 @@ func set_trigger_held(enabled: bool) -> void:
 	_trigger_held = enabled
 
 
+func is_trigger_held() -> bool:
+	return _trigger_held
+
+
 func process_network_shot(actor: LocalBaseCharacter, direction: Vector3) -> bool:
 	if (
 		not _session_authority

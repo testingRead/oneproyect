@@ -48,6 +48,44 @@ func _run() -> void:
 		and not lab.hand_button.visible,
 		"Shooter must expose only its first-person combat controls"
 	)
+	# A touch that starts over DISPARAR belongs to both systems: the button
+	# keeps automatic fire active and the global right-half router keeps aiming.
+	var touch_index := 31
+	var shoot_centre: Vector2 = lab.shoot_button.get_global_rect().get_center()
+	var camera_yaw_before := lab.player.camera_pivot.rotation.y
+	var ammo_before_touch: int = lab.shooter_host.get_ammo()
+	var shoot_press := InputEventScreenTouch.new()
+	shoot_press.index = touch_index
+	shoot_press.pressed = true
+	shoot_press.position = shoot_centre
+	lab.look_pad._input(shoot_press)
+	lab.shoot_button._gui_input(shoot_press)
+	var shoot_drag := InputEventScreenDrag.new()
+	shoot_drag.index = touch_index
+	shoot_drag.position = shoot_centre + Vector2(96.0, -18.0)
+	shoot_drag.relative = Vector2(96.0, -18.0)
+	lab.look_pad._input(shoot_drag)
+	await physics_frame
+	_require(
+		lab.look_pad.is_tracking_finger(touch_index)
+		and lab.shooter_host.is_trigger_held()
+		and lab.shooter_host.get_ammo() < ammo_before_touch
+		and absf(lab.player.camera_pivot.rotation.y - camera_yaw_before) > 0.1,
+		"Holding fire must rotate the camera with the same right-side finger"
+	)
+	var shoot_release := InputEventScreenTouch.new()
+	shoot_release.index = touch_index
+	shoot_release.pressed = false
+	shoot_release.position = shoot_drag.position
+	lab.look_pad._input(shoot_release)
+	lab.shoot_button._gui_input(shoot_release)
+	_require(
+		not lab.look_pad.is_tracking_finger(touch_index)
+		and not lab.shooter_host.is_trigger_held(),
+		"Releasing the shared fire/look touch must release both owners"
+	)
+	# Keep the following combat fixture independent of this input contract.
+	lab.shooter_host.set("_cooldown", 0.0)
 	var mounted := lab.map_host.get_node_or_null("MountedMap")
 	_require(
 		mounted != null

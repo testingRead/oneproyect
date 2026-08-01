@@ -11,6 +11,7 @@ var _aim_origin := Vector2.ZERO
 var _aim_current := Vector2.ZERO
 var _aim_value := Vector2.ZERO
 var _input_enabled := true
+var _last_viewport_position := Vector2.ZERO
 
 const AIM_RADIUS := 82.0
 const AIM_DEADZONE := 0.16
@@ -40,19 +41,23 @@ func is_aim_mode() -> bool:
 	return _aim_mode
 
 
-func _gui_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if not _input_enabled:
 		return
 	if event is InputEventScreenTouch:
-		if event.pressed and _finger_id == -1:
+		if (
+			event.pressed
+			and _finger_id == -1
+			and _is_in_activation_zone(event.position)
+		):
 			_finger_id = event.index
+			_last_viewport_position = event.position
 			if _aim_mode:
-				_aim_origin = event.position - global_position
+				_aim_origin = _viewport_to_local(event.position)
 				_aim_current = _aim_origin
 				_aim_value = Vector2.ZERO
 				aim_changed.emit(_aim_value, true)
 				queue_redraw()
-			accept_event()
 		elif not event.pressed and event.index == _finger_id:
 			if _aim_mode:
 				var released_value := _aim_value
@@ -62,16 +67,45 @@ func _gui_input(event: InputEvent) -> void:
 				_aim_value = Vector2.ZERO
 				queue_redraw()
 			_finger_id = -1
-			accept_event()
 	elif event is InputEventScreenDrag and event.index == _finger_id:
 		if _aim_mode:
-			_aim_current = event.position - global_position
+			_aim_current = _viewport_to_local(event.position)
 			_aim_value = ((_aim_current - _aim_origin) / AIM_RADIUS).limit_length(1.0)
 			aim_changed.emit(_aim_value, true)
 			queue_redraw()
 		else:
-			look_delta.emit(event.relative)
+			# ScreenDrag.relative is normally populated, but a few Android input
+			# stacks report zero on the first drag. The position delta keeps the
+			# camera continuous on those devices and when the touch began over a
+			# superimposed action button.
+			var delta: Vector2 = event.relative
+			if delta.length_squared() <= 0.0001:
+				delta = event.position - _last_viewport_position
+			if delta.is_finite() and delta.length_squared() > 0.0001:
+				look_delta.emit(delta)
+		_last_viewport_position = event.position
+
+
+func _gui_input(event: InputEvent) -> void:
+	# Touchscreen input is observed in _input(), before GUI hit testing. This is
+	# deliberate: Shoot/Reload/Jump can consume their own button press while the
+	# very same finger continues rotating the camera. Desktop mouse look remains
+	# owned by LocalBaseCharacter's captured-mouse handler.
+	if event is InputEventMouseButton:
 		accept_event()
+
+
+func _viewport_to_local(viewport_position: Vector2) -> Vector2:
+	return get_global_transform_with_canvas().affine_inverse() * viewport_position
+
+
+func _is_in_activation_zone(viewport_position: Vector2) -> bool:
+	var viewport_size := get_viewport().get_visible_rect().size
+	return viewport_position.x >= viewport_size.x * 0.5
+
+
+func is_tracking_finger(finger_id: int) -> bool:
+	return _finger_id == finger_id
 
 
 func _draw() -> void:

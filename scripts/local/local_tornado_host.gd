@@ -141,7 +141,7 @@ func _affect_loose_objects() -> void:
 		_apply_object_impact_damage(body)
 
 
-func _affect_characters(_delta: float) -> void:
+func _affect_characters(delta: float) -> void:
 	for character in get_tree().get_nodes_in_group(&"local_base_character"):
 		if not character is LocalBaseCharacter:
 			continue
@@ -153,7 +153,16 @@ func _affect_characters(_delta: float) -> void:
 		var closeness := 1.0 - distance / INFLUENCE_RADIUS
 		var tangent := Vector3(-offset.z, 0.0, offset.x).normalized()
 		var launch := (offset.normalized() * 0.7 + tangent * 0.72 + Vector3.UP * 0.36).normalized()
-		target.apply_external_push(launch, lerpf(1.5, 9.2, closeness))
+		# Tornado suction is a continuous force, not a new full impulse every
+		# physics frame. The horizontal cap prevents velocity from accumulating
+		# against a wall and leaving the player apparently stunned afterwards.
+		target.apply_external_force(
+			launch,
+			lerpf(7.0, 24.0, closeness),
+			delta,
+			5.2,
+			2.8
+		)
 		if distance < CAPTURE_RADIUS and _can_damage(
 			"tornado:%d" % target.get_instance_id(),
 			roundi(DAMAGE_INTERVAL * 1000.0)
@@ -163,7 +172,7 @@ func _affect_characters(_delta: float) -> void:
 		_apply_character_impact_damage(target)
 
 
-func _affect_local_motion(_delta: float) -> void:
+func _affect_local_motion(delta: float) -> void:
 	var offset := _tornado.global_position - _player.global_position
 	var distance := offset.length()
 	if distance > INFLUENCE_RADIUS or distance < 0.05:
@@ -173,7 +182,13 @@ func _affect_local_motion(_delta: float) -> void:
 	var launch := (
 		offset.normalized() * 0.7 + tangent * 0.72 + Vector3.UP * 0.36
 	).normalized()
-	_player.apply_external_push(launch, lerpf(1.5, 9.2, closeness))
+	_player.apply_external_force(
+		launch,
+		lerpf(7.0, 24.0, closeness),
+		delta,
+		5.2,
+		2.8
+	)
 
 
 func _apply_object_impact_damage(body: RigidBody3D) -> void:

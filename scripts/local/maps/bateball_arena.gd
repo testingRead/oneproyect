@@ -56,11 +56,15 @@ func _add_ball() -> void:
 	ball.name = "Bateball"
 	ball.position = CENTRE + Vector3(0.0, 0.28, 0.0)
 	ball.mass = 0.34
-	ball.linear_damp = 0.34
+	ball.linear_damp = 0.12
 	ball.continuous_cd = true
 	ball.max_contacts_reported = 8
 	ball.collision_layer = 1
 	ball.collision_mask = 1
+	var ball_physics := PhysicsMaterial.new()
+	ball_physics.bounce = 0.84
+	ball_physics.friction = 0.08
+	ball.physics_material_override = ball_physics
 	ball.add_to_group(&"bateball_ball")
 	ball.add_to_group(&"local_round_object")
 	var collision := CollisionShape3D.new()

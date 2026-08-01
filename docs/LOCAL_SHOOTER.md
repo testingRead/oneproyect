@@ -8,6 +8,8 @@ multijugador antigua ni del servidor VPS.
 - todos contra todos;
 - primera persona;
 - el botón de disparo puede mantenerse pulsado y respeta la cadencia del arma;
+- todo toque iniciado en la mitad derecha controla la cámara, incluso cuando
+  el mismo dedo mantiene pulsado DISPARAR, RECARGAR o SALTAR;
 - cinco eliminaciones para terminar antes del reloj de 60 s;
 - respawn a los 1,6 s;
 - cada jugador conserva vida, cargador, recarga y cadencia propias;
@@ -36,6 +38,10 @@ cadencia ni disponer de munición infinita: el anfitrión mantiene esos dos
 estados compactos por `peer_id`.
 Las posiciones continúan por el canal no fiable ya existente. No se crean
 proyectiles físicos ni se envían texturas, efectos o audio.
+
+La entrada táctil se observa antes del hit testing del HUD: el botón conserva
+su acción y el enrutador derecho conserva el gesto de cámara. No hay una zona
+muerta alrededor de los botones ni se duplica la sensibilidad del `LookPad`.
 
 Los ocho puntos de aparición miran al centro y se encuentran fuera de las
 coberturas. Al reaparecer se restablecen orientación, vida y cargador; durante

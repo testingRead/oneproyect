@@ -77,12 +77,12 @@ func _run() -> void:
 	press.index = 7
 	press.pressed = true
 	press.position = lab.look_pad.global_position + Vector2(130.0, 180.0)
-	lab.look_pad._gui_input(press)
+	lab.look_pad._input(press)
 	var drag := InputEventScreenDrag.new()
 	drag.index = 7
 	drag.position = press.position + Vector2(90.0, 0.0)
 	drag.relative = Vector2(90.0, 0.0)
-	lab.look_pad._gui_input(drag)
+	lab.look_pad._input(drag)
 	await process_frame
 	lab._update_aim_guide()
 	_require(lab.player.get_top_down_aim_direction().dot(Vector3.RIGHT) > 0.95, "Right pad must aim the character")
@@ -91,10 +91,17 @@ func _run() -> void:
 	release.index = 7
 	release.pressed = false
 	release.position = drag.position
-	lab.look_pad._gui_input(release)
+	lab.look_pad._input(release)
 	_require(not lab.bateball_host.is_holder(lab.player), "Releasing aim must shoot the held ball")
 	_require(lab.banner_detail.text.begins_with("BALÓN SUELTO"), "HUD must identify a loose Bateball")
 	var ball: RigidBody3D = lab.bateball_host.get_ball() as RigidBody3D
+	_require(
+		ball.physics_material_override != null
+		and ball.physics_material_override.bounce >= 0.8
+		and ball.physics_material_override.friction <= 0.1
+		and ball.linear_damp <= 0.15,
+		"Bateball must preserve useful speed when rebounding from arena walls"
+	)
 	# A charged hit on the carrier must create a readable contest: the rival is
 	# pushed across the floor and the ball drops nearby instead of being fired.
 	lab.player.reset_to_spawn()
@@ -127,7 +134,11 @@ func _run() -> void:
 		"Charged bat must not launch the rival vertically (y=%.3f vy=%.3f)"
 		% [rival.global_position.y, rival.velocity.y]
 	)
-	_require(ball.linear_velocity.length() < 2.0, "Dislodged ball must drop instead of being launched")
+	_require(
+		ball.linear_velocity.length() < 2.0,
+		"Dislodged ball must drop instead of being launched (velocity=%s)"
+		% [ball.linear_velocity]
+	)
 	# Keep the old carrier over a stationary loose ball to verify that the
 	# personal lockout, rather than incidental distance, prevents instant pickup.
 	lab.player.global_position = Vector3(-6.0, 0.02, -20.0)
@@ -165,9 +176,25 @@ func _run() -> void:
 		"Eliminated Bateball players must respawn at their team spawn"
 	)
 	_require(ball.global_position.distance_to(lab.player.global_position) > 0.6, "Shot must start beyond the player collider")
+	# A real rigid-body rebound must preserve play instead of dying at the wall.
 	lab.bateball_host.apply_authoritative_holder(null)
 	lab.player.global_position = Vector3(-10.0, 0.02, -10.0)
 	rival.global_position = Vector3(10.0, 0.02, -30.0)
+	ball.freeze = false
+	ball.global_position = Vector3(13.7, 0.28, -20.0)
+	ball.linear_velocity = Vector3(7.0, 0.0, 0.0)
+	ball.angular_velocity = Vector3.ZERO
+	var wall_rebound_speed := 0.0
+	for frame in 18:
+		await physics_frame
+		if ball.linear_velocity.x < 0.0:
+			wall_rebound_speed = maxf(wall_rebound_speed, -ball.linear_velocity.x)
+	_require(
+		wall_rebound_speed > 4.5,
+		"Bateball wall rebound must retain useful speed (rebound=%.2f)"
+		% wall_rebound_speed
+	)
+	lab.bateball_host.apply_authoritative_holder(null)
 	ball.global_position = Vector3(20.0, 0.4, -20.0)
 	for frame in 3:
 		await physics_frame

@@ -595,6 +595,36 @@ func apply_external_push(direction: Vector3, force := 5.0) -> void:
 	velocity.y = maxf(velocity.y, maxf(0.0, safe_direction.y * force))
 
 
+func apply_external_force(
+	direction: Vector3,
+	acceleration: float,
+	delta: float,
+	maximum_horizontal_speed := 5.2,
+	maximum_upward_speed := 2.8
+) -> void:
+	if acceleration <= 0.0 or delta <= 0.0 or not direction.is_finite():
+		return
+	var safe_direction := direction.normalized()
+	if safe_direction.length_squared() < 0.001:
+		return
+	var horizontal := Vector3(_external_velocity.x, 0.0, _external_velocity.z)
+	var horizontal_direction := Vector3(safe_direction.x, 0.0, safe_direction.z)
+	if horizontal_direction.length_squared() > 0.001:
+		horizontal += horizontal_direction.normalized() * acceleration * delta
+		horizontal = horizontal.limit_length(maxf(0.0, maximum_horizontal_speed))
+		_external_velocity.x = horizontal.x
+		_external_velocity.z = horizontal.z
+	if safe_direction.y > 0.0:
+		velocity.y = minf(
+			maxf(velocity.y, safe_direction.y * maximum_upward_speed),
+			maximum_upward_speed
+		)
+
+
+func get_external_horizontal_speed() -> float:
+	return Vector2(_external_velocity.x, _external_velocity.z).length()
+
+
 func reset_local_health() -> void:
 	_local_health = 100
 	local_health_changed.emit(_local_health, 100)

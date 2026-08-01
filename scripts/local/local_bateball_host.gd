@@ -17,7 +17,7 @@ const DEFAULT_BALL_BOUNDS := AABB(
 const SHOT_PICKUP_COOLDOWN := 0.32
 const FORCED_DROP_SETTLE_TIME := 0.16
 const FORCED_DROP_HOLDER_LOCKOUT := 0.7
-const FORCED_DROP_IMPULSE := 0.9
+const FORCED_DROP_IMPULSE := 0.28
 
 var score := 0
 var opponent_score := 0
